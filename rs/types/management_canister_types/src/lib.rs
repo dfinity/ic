@@ -7,7 +7,10 @@ mod provisional;
 
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
-use bounded_bytes::{deserialize_bounded_blob, deserialize_bounded_byte_buf};
+use bounded_bytes::{
+    check_fixed_len, deserialize_bounded_blob, deserialize_empty_or_fixed_len_byte_buf,
+    deserialize_fixed_len_blob,
+};
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
@@ -165,10 +168,16 @@ pub enum Method {
 /// from `BoundedVec` or from the deserializers in `bounded_bytes`.
 const BOUND_EXCEEDED_MARKER: &str = "exceeds maximum allowed";
 
-/// Returns true if decoding failed because a value exceeded its bound, as
-/// opposed to the payload not having the expected Candid type.
-fn is_bound_exceeded_error(err: &candid::Error) -> bool {
-    format!("{err:?}").contains(BOUND_EXCEEDED_MARKER)
+/// Every error raised for a blob not having the length it must have contains
+/// this text.
+const LENGTH_MISMATCH_MARKER: &str = "does not match expected";
+
+/// Returns true if decoding failed because a value exceeded its bound or did
+/// not have the length it must have, as opposed to the payload not having the
+/// expected Candid type.
+fn is_bound_violation_error(err: &candid::Error) -> bool {
+    let err = format!("{err:?}");
+    err.contains(BOUND_EXCEEDED_MARKER) || err.contains(LENGTH_MISMATCH_MARKER)
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -2807,7 +2816,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
         match Decode!([decoder_config()]; blob, Self) {
             Err(err) => {
                 // First check if deserialization failed due to exceeding the maximum allowed limit.
-                if is_bound_exceeded_error(&err) {
+                if is_bound_violation_error(&err) {
                     Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Payload deserialization error: {err:?}"),
@@ -3643,7 +3652,7 @@ impl ReshareChainKeyResponse {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct SignWithBip341Aux {
     /// Either empty or a hash of `HASH_LENGTH` bytes.
-    #[serde(deserialize_with = "deserialize_bounded_byte_buf::<_, HASH_LENGTH>")]
+    #[serde(deserialize_with = "deserialize_empty_or_fixed_len_byte_buf::<_, HASH_LENGTH>")]
     pub merkle_root_hash: ByteBuf,
 }
 
@@ -4193,9 +4202,23 @@ impl DataSize for ChunkHash {
 /// module assembled from the chunks.
 pub const MAX_ALLOWED_CHUNK_HASHES_COUNT: usize = 100;
 
-/// Chunk hashes bounded in number and in the length of a single hash.
+/// Chunk hashes bounded in number. The length of a single hash is checked by
+/// `deserialize_chunk_hashes`.
 pub type BoundedChunkHashes =
-    BoundedVec<MAX_ALLOWED_CHUNK_HASHES_COUNT, UNBOUNDED, HASH_LENGTH, ChunkHash>;
+    BoundedVec<MAX_ALLOWED_CHUNK_HASHES_COUNT, UNBOUNDED, UNBOUNDED, ChunkHash>;
+
+/// Deserializes chunk hashes bounded in number, each of exactly `HASH_LENGTH`
+/// bytes.
+fn deserialize_chunk_hashes<'de, D>(deserializer: D) -> Result<BoundedChunkHashes, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let chunk_hashes = BoundedChunkHashes::deserialize(deserializer)?;
+    for chunk_hash in chunk_hashes.get() {
+        check_fixed_len(chunk_hash.hash.len(), HASH_LENGTH)?;
+    }
+    Ok(chunk_hashes)
+}
 
 /// Struct to be returned when uploading a Wasm chunk.
 /// ```text
@@ -4228,8 +4251,9 @@ pub struct InstallChunkedCodeArgs {
     pub mode: CanisterInstallModeV2,
     pub target_canister: PrincipalId,
     pub store_canister: Option<PrincipalId>,
+    #[serde(deserialize_with = "deserialize_chunk_hashes")]
     pub chunk_hashes_list: BoundedChunkHashes,
-    #[serde(deserialize_with = "deserialize_bounded_blob::<_, HASH_LENGTH>")]
+    #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, HASH_LENGTH>")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -4253,7 +4277,7 @@ impl Payload<'_> for InstallChunkedCodeArgs {
             Ok(record) => Ok(record),
             // The payload has the expected type, so do not report that it is
             // not of the legacy type.
-            Err(err) if is_bound_exceeded_error(&err) => Err(candid_error_to_user_error(err)),
+            Err(err) if is_bound_violation_error(&err) => Err(candid_error_to_user_error(err)),
             Err(_) => Ok(InstallChunkedCodeArgsLegacy::decode(blob)?.into()),
         }
     }
@@ -4299,9 +4323,25 @@ impl InstallChunkedCodeArgs {
 }
 
 /// Chunk hashes of the legacy version of `InstallChunkedCodeArgs`, bounded in
-/// number and in the length of a single hash.
+/// number. The length of a single hash is checked by
+/// `deserialize_chunk_hashes_legacy`.
 pub type BoundedChunkHashesLegacy =
-    BoundedVec<MAX_ALLOWED_CHUNK_HASHES_COUNT, UNBOUNDED, HASH_LENGTH, ByteBuf>;
+    BoundedVec<MAX_ALLOWED_CHUNK_HASHES_COUNT, UNBOUNDED, UNBOUNDED, ByteBuf>;
+
+/// Deserializes chunk hashes of the legacy version of `InstallChunkedCodeArgs`
+/// bounded in number, each of exactly `HASH_LENGTH` bytes.
+fn deserialize_chunk_hashes_legacy<'de, D>(
+    deserializer: D,
+) -> Result<BoundedChunkHashesLegacy, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let chunk_hashes = BoundedChunkHashesLegacy::deserialize(deserializer)?;
+    for chunk_hash in chunk_hashes.get() {
+        check_fixed_len(chunk_hash.len(), HASH_LENGTH)?;
+    }
+    Ok(chunk_hashes)
+}
 
 /// Struct used for encoding/decoding of legacy version of `InstallChunkedCodeArgs`,
 /// it is used to preserve backward compatibility.
@@ -4327,8 +4367,9 @@ pub struct InstallChunkedCodeArgsLegacy {
     pub mode: CanisterInstallModeV2,
     pub target_canister: PrincipalId,
     pub store_canister: Option<PrincipalId>,
+    #[serde(deserialize_with = "deserialize_chunk_hashes_legacy")]
     pub chunk_hashes_list: BoundedChunkHashesLegacy,
-    #[serde(deserialize_with = "deserialize_bounded_blob::<_, HASH_LENGTH>")]
+    #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, HASH_LENGTH>")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -5026,7 +5067,7 @@ pub enum CanisterSnapshotDataKind {
     WasmChunk {
         #[serde(
             serialize_with = "serde_bytes::serialize",
-            deserialize_with = "deserialize_bounded_blob::<_, HASH_LENGTH>"
+            deserialize_with = "deserialize_fixed_len_blob::<_, HASH_LENGTH>"
         )]
         hash: Vec<u8>,
     },
@@ -5818,7 +5859,7 @@ mod tests {
     }
 
     /// Asserts that decoding failed because a value exceeds its bound.
-    fn assert_bound_exceeded<T: fmt::Debug>(result: Result<T, UserError>, expected: &str) {
+    fn assert_bound_violated<T: fmt::Debug>(result: Result<T, UserError>, expected: &str) {
         let error = result.unwrap_err();
         assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
         assert!(
@@ -5889,7 +5930,7 @@ mod tests {
         {
             let settings = settings_with(environment_variables(count));
             for (payload, decode) in payloads_with(&settings) {
-                assert_bound_exceeded(
+                assert_bound_violated(
                     decode(&payload),
                     &format!(
                         "The number of elements exceeds maximum allowed {MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT}"
@@ -5931,7 +5972,7 @@ mod tests {
         ] {
             let settings = settings(name_length, value_length);
             for (payload, decode) in payloads_with(&settings) {
-                assert_bound_exceeded(
+                assert_bound_violated(
                     decode(&payload),
                     &format!(
                         "The single element data size exceeds maximum allowed {}",
@@ -5962,7 +6003,7 @@ mod tests {
         }
 
         for count in MAX_ALLOWED_NODES_COUNT + 1..=MAX_ALLOWED_NODES_COUNT + 3 {
-            assert_bound_exceeded(
+            assert_bound_violated(
                 SetupInitialDKGArgs::decode(&args(count).encode()),
                 &format!(
                     "The number of elements exceeds maximum allowed {MAX_ALLOWED_NODES_COUNT}"
@@ -5972,7 +6013,7 @@ mod tests {
     }
 
     #[test]
-    fn verify_max_schnorr_merkle_root_hash_length() {
+    fn verify_schnorr_merkle_root_hash_length() {
         let args = |merkle_root_hash_length| SignWithSchnorrArgs {
             message: vec![1; 64],
             derivation_path: DerivationPath::new(vec![]),
@@ -5985,16 +6026,16 @@ mod tests {
             })),
         };
 
-        for length in [0, 1, HASH_LENGTH] {
+        for length in [0, HASH_LENGTH] {
             let args = args(length);
             assert_eq!(SignWithSchnorrArgs::decode(&args.encode()).unwrap(), args);
         }
 
         // In particular, the optional `aux` must not be decoded as `None`.
-        for length in HASH_LENGTH + 1..=HASH_LENGTH + 3 {
-            assert_bound_exceeded(
+        for length in [1, HASH_LENGTH - 1, HASH_LENGTH + 1, HASH_LENGTH + 2] {
+            assert_bound_violated(
                 SignWithSchnorrArgs::decode(&args(length).encode()),
-                &format!("The blob length {length} exceeds maximum allowed {HASH_LENGTH}"),
+                &format!("The blob length {length} does not match expected 0 or {HASH_LENGTH}"),
             );
         }
     }
@@ -6014,7 +6055,7 @@ mod tests {
         }
 
         let length = MAX_ALLOWED_WASM_CHUNK_LENGTH + 1;
-        assert_bound_exceeded(
+        assert_bound_violated(
             UploadChunkArgs::decode(&args(length).encode()),
             &format!(
                 "The blob length {length} exceeds maximum allowed {MAX_ALLOWED_WASM_CHUNK_LENGTH}"
@@ -6056,8 +6097,7 @@ mod tests {
     #[test]
     fn verify_install_chunked_code_args_within_bounds() {
         for (chunk_hashes_list, wasm_module_hash) in [
-            (vec![], vec![]),
-            (vec![vec![]], vec![1]),
+            (vec![], vec![2; HASH_LENGTH]),
             (
                 vec![vec![1; HASH_LENGTH]; MAX_ALLOWED_CHUNK_HASHES_COUNT],
                 vec![2; HASH_LENGTH],
@@ -6085,45 +6125,41 @@ mod tests {
     }
 
     #[test]
-    fn verify_install_chunked_code_args_exceeding_bounds() {
+    fn verify_install_chunked_code_args_violating_bounds() {
         let hash = vec![1; HASH_LENGTH];
-        let long_hash = vec![1; HASH_LENGTH + 1];
-        for (chunk_hashes_list, wasm_module_hash, expected) in [
-            (
-                vec![hash.clone(); MAX_ALLOWED_CHUNK_HASHES_COUNT + 1],
+        let mut test_cases = vec![(
+            vec![hash.clone(); MAX_ALLOWED_CHUNK_HASHES_COUNT + 1],
+            hash.clone(),
+            format!(
+                "The number of elements exceeds maximum allowed {MAX_ALLOWED_CHUNK_HASHES_COUNT}"
+            ),
+        )];
+        for length in [0, 1, HASH_LENGTH - 1, HASH_LENGTH + 1] {
+            let expected =
+                format!("The blob length {length} does not match expected {HASH_LENGTH}");
+            test_cases.push((
+                vec![hash.clone(), vec![1; length]],
                 hash.clone(),
-                format!(
-                    "The number of elements exceeds maximum allowed {MAX_ALLOWED_CHUNK_HASHES_COUNT}"
-                ),
-            ),
-            (
-                vec![hash.clone(), long_hash.clone()],
-                hash.clone(),
-                format!("The single element data size exceeds maximum allowed {HASH_LENGTH}"),
-            ),
-            (
-                vec![hash.clone()],
-                long_hash.clone(),
-                format!(
-                    "The blob length {} exceeds maximum allowed {HASH_LENGTH}",
-                    HASH_LENGTH + 1
-                ),
-            ),
-        ] {
+                expected.clone(),
+            ));
+            test_cases.push((vec![hash.clone()], vec![1; length], expected));
+        }
+        for (chunk_hashes_list, wasm_module_hash, expected) in test_cases {
             for payload in install_chunked_code_payloads(chunk_hashes_list, wasm_module_hash) {
-                assert_bound_exceeded(InstallChunkedCodeArgs::decode(&payload), &expected);
+                assert_bound_violated(InstallChunkedCodeArgs::decode(&payload), &expected);
             }
         }
     }
 
-    /// `is_bound_exceeded_error` must recognize the error of every bound, be
+    /// `is_bound_violation_error` must recognize the error of every bound, be
     /// it from the deserializers of `bounded_bytes` or from `BoundedVec`, and
     /// only those errors: the decoders of `CreateCanisterArgs` and
-    /// `InstallChunkedCodeArgs` rely on it to report a value exceeding its
+    /// `InstallChunkedCodeArgs` rely on it to report a value violating its
     /// bound instead of falling back, and to still fall back for a payload of
     /// an unexpected type.
     #[test]
-    fn bound_exceeded_errors_are_recognized() {
+    fn bound_violation_errors_are_recognized() {
+        use bounded_bytes::deserialize_bounded_byte_buf;
         use bounded_bytes::deserialize_bounded_option_blob;
         use bounded_bytes::deserialize_bounded_text;
 
@@ -6160,7 +6196,25 @@ mod tests {
             value(0, 0, Some(MAX_LEN + 1), 0),
             value(0, 0, None, MAX_LEN + 1),
         ] {
-            assert!(is_bound_exceeded_error(&decode_error::<Bounded>(
+            assert!(is_bound_violation_error(&decode_error::<Bounded>(
+                &Encode!(&value).unwrap()
+            )));
+        }
+
+        // Each of the fixed-length deserializers of `bounded_bytes`.
+        #[derive(Debug, CandidType, Deserialize)]
+        struct FixedLen {
+            #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, MAX_LEN>")]
+            blob: Vec<u8>,
+            #[serde(deserialize_with = "deserialize_empty_or_fixed_len_byte_buf::<_, MAX_LEN>")]
+            byte_buf: ByteBuf,
+        }
+        let value = |blob, byte_buf| FixedLen {
+            blob: vec![1; blob],
+            byte_buf: ByteBuf::from(vec![2; byte_buf]),
+        };
+        for value in [value(MAX_LEN - 1, 0), value(MAX_LEN, MAX_LEN - 1)] {
+            assert!(is_bound_violation_error(&decode_error::<FixedLen>(
                 &Encode!(&value).unwrap()
             )));
         }
@@ -6168,26 +6222,28 @@ mod tests {
         // Each of the bounds of `BoundedVec`.
         let elements = Encode!(&vec![vec![0_u8; 4]; 4]).unwrap();
         type BoundedLen = BoundedVec<3, UNBOUNDED, UNBOUNDED, Vec<u8>>;
-        assert!(is_bound_exceeded_error(&decode_error::<BoundedLen>(
+        assert!(is_bound_violation_error(&decode_error::<BoundedLen>(
             &elements
         )));
         type BoundedTotalSize = BoundedVec<UNBOUNDED, 100, UNBOUNDED, Vec<u8>>;
-        assert!(is_bound_exceeded_error(&decode_error::<BoundedTotalSize>(
+        assert!(is_bound_violation_error(&decode_error::<BoundedTotalSize>(
             &elements
         )));
         type BoundedElementSize = BoundedVec<UNBOUNDED, UNBOUNDED, 27, Vec<u8>>;
-        assert!(is_bound_exceeded_error(
+        assert!(is_bound_violation_error(
             &decode_error::<BoundedElementSize>(&elements)
         ));
 
         // A payload of an unexpected type.
         let text = Encode!(&"text").unwrap();
-        assert!(!is_bound_exceeded_error(&decode_error::<Bounded>(&text)));
-        assert!(!is_bound_exceeded_error(&decode_error::<BoundedLen>(&text)));
+        assert!(!is_bound_violation_error(&decode_error::<Bounded>(&text)));
+        assert!(!is_bound_violation_error(&decode_error::<BoundedLen>(
+            &text
+        )));
     }
 
     #[test]
-    fn verify_max_read_canister_snapshot_chunk_hash_length() {
+    fn verify_read_canister_snapshot_chunk_hash_length() {
         let args = |hash_length| {
             ReadCanisterSnapshotDataArgs::new(
                 CanisterId::from(1),
@@ -6198,18 +6254,18 @@ mod tests {
             )
         };
 
-        for length in [0, 1, HASH_LENGTH] {
-            let decoded = ReadCanisterSnapshotDataArgs::decode(&args(length).encode()).unwrap();
-            match decoded.kind {
-                CanisterSnapshotDataKind::WasmChunk { hash } => assert_eq!(hash, vec![1; length]),
-                kind => panic!("Unexpected kind: {kind:?}"),
+        let decoded = ReadCanisterSnapshotDataArgs::decode(&args(HASH_LENGTH).encode()).unwrap();
+        match decoded.kind {
+            CanisterSnapshotDataKind::WasmChunk { hash } => {
+                assert_eq!(hash, vec![1; HASH_LENGTH])
             }
+            kind => panic!("Unexpected kind: {kind:?}"),
         }
 
-        for length in HASH_LENGTH + 1..=HASH_LENGTH + 3 {
-            assert_bound_exceeded(
+        for length in [0, 1, HASH_LENGTH - 1, HASH_LENGTH + 1, HASH_LENGTH + 2] {
+            assert_bound_violated(
                 ReadCanisterSnapshotDataArgs::decode(&args(length).encode()),
-                &format!("The blob length {length} exceeds maximum allowed {HASH_LENGTH}"),
+                &format!("The blob length {length} does not match expected {HASH_LENGTH}"),
             );
         }
     }
@@ -6241,14 +6297,14 @@ mod tests {
             assert_eq!(decoded.certified_data, args.certified_data);
         }
 
-        assert_bound_exceeded(
+        assert_bound_violated(
             UploadCanisterSnapshotMetadataArgs::decode(
                 &args(MAX_ALLOWED_GLOBALS_COUNT + 1, 0).encode(),
             ),
             &format!("The number of elements exceeds maximum allowed {MAX_ALLOWED_GLOBALS_COUNT}"),
         );
         let length = MAX_ALLOWED_CERTIFIED_DATA_LENGTH + 1;
-        assert_bound_exceeded(
+        assert_bound_violated(
             UploadCanisterSnapshotMetadataArgs::decode(&args(0, length).encode()),
             &format!(
                 "The blob length {length} exceeds maximum allowed {MAX_ALLOWED_CERTIFIED_DATA_LENGTH}"

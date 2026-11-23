@@ -605,34 +605,21 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
 /// An aux field is rejected if it is invalid for the algorithm of the key: a
 /// BIP-340 key accepts a BIP-341 aux field only if it is empty or 32 bytes
 /// long, and an Ed25519 key accepts no aux field at all. Since no algorithm
-/// accepts an aux field longer than a hash, such a field is rejected already
+/// accepts an aux field of any other length, such a field is rejected already
 /// when decoding the arguments, whatever the algorithm of the key.
 #[test]
 fn test_schnorr_sign_with_invalid_aux_field_rejected() {
-    const DECODING_ERROR: &str = "The blob length 33 exceeds maximum allowed 32";
+    let decoding_error =
+        |aux_len: usize| format!("The blob length {aux_len} does not match expected 0 or 32");
+    let unsupported_aux = "Schnorr algorithm Ed25519 does not support aux input".to_string();
     let test_cases = vec![
-        (
-            make_bip340_key("bip340_key"),
-            8,
-            "Invalid aux field for Bip340Secp256k1",
-        ),
-        (
-            make_bip340_key("bip340_key"),
-            31,
-            "Invalid aux field for Bip340Secp256k1",
-        ),
-        (make_bip340_key("bip340_key"), 33, DECODING_ERROR),
-        (
-            make_ed25519_key("ed25519_key"),
-            0,
-            "Schnorr algorithm Ed25519 does not support aux input",
-        ),
-        (
-            make_ed25519_key("ed25519_key"),
-            32,
-            "Schnorr algorithm Ed25519 does not support aux input",
-        ),
-        (make_ed25519_key("ed25519_key"), 33, DECODING_ERROR),
+        (make_bip340_key("bip340_key"), 8, decoding_error(8)),
+        (make_bip340_key("bip340_key"), 31, decoding_error(31)),
+        (make_bip340_key("bip340_key"), 33, decoding_error(33)),
+        (make_ed25519_key("ed25519_key"), 0, unsupported_aux.clone()),
+        (make_ed25519_key("ed25519_key"), 31, decoding_error(31)),
+        (make_ed25519_key("ed25519_key"), 32, unsupported_aux),
+        (make_ed25519_key("ed25519_key"), 33, decoding_error(33)),
     ];
 
     for (key, aux_len, expected_reason) in test_cases {
@@ -671,7 +658,7 @@ fn test_schnorr_sign_with_invalid_aux_field_rejected() {
 
         match result {
             Ok(WasmResult::Reject(reason)) => assert!(
-                reason.contains(expected_reason),
+                reason.contains(&expected_reason),
                 "Expected: {expected_reason}, actual: {reason}"
             ),
             result => panic!("Unexpected result: {result:?}"),
