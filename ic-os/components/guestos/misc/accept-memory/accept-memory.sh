@@ -36,10 +36,11 @@ fill() {
     done
 }
 
-# Logs to the kernel log, whose timestamps show the boot time this takes.
+# Logs, with the seconds since boot.
 log() {
-    echo "accept-memory: $*"
-    echo "accept-memory: $*" 2>/dev/null >/dev/kmsg || true
+    local uptime rest
+    read -r uptime rest </proc/uptime
+    echo "accept-memory: ${uptime} s after boot: $*"
 }
 
 # Runs $1 fills in parallel, in steps of $2 MiB, until at most $3 MiB more than their last steps stay

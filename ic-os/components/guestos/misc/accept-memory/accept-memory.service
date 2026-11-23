@@ -2,7 +2,8 @@
 Description=Accept all of a TEE guest's memory from all vCPUs
 # Only SEV-SNP guests have memory to accept.
 ConditionKernelCommandLine=dfinity.tee
-DefaultDependencies=no
+# Default dependencies order it after the encrypted storage is set up: accepting memory on all
+# vCPUs at once delays that setup past its devices' timeouts.
 Before=ic-replica.service
 
 [Service]
@@ -11,6 +12,7 @@ RemainAfterExit=true
 # This service's own tmpfs, so that the memory filling it is freed when the service exits.
 TemporaryFileSystem=/run/accept-memory:size=100%,huge=always,mode=0700
 ExecStart=/opt/ic/bin/accept-memory.sh /run/accept-memory
+StandardOutput=journal+console
 
 [Install]
 WantedBy=multi-user.target
