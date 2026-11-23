@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "4ddd9147d7da2920021dacc77220196a24c4b3427c24c6fa60253a0fd41f1c46",
+  "checksum": "2bb399f6c9d1e3d46b62b7d8abdb1999b056a30e9b6ac8e09d388dcb4c123cae",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17891,7 +17891,7 @@
             "target": "ic_agent"
           },
           {
-            "id": "ic-bn-lib 0.9.0",
+            "id": "ic-bn-lib 0.11.0",
             "target": "ic_bn_lib"
           },
           {
@@ -18777,7 +18777,7 @@
             "target": "webpki_roots"
           },
           {
-            "id": "wirm 4.0.4",
+            "id": "wirm 5.2.0",
             "target": "wirm"
           },
           {
@@ -26722,6 +26722,373 @@
       ],
       "version": "0.50.0"
     },
+    "ic-bn-lib 0.11.0": {
+      "common_attrs": {
+        "crate_features": [
+          "acme",
+          "acme-alpn",
+          "acme-dns",
+          "clients-hyper",
+          "default",
+          "pubsub"
+        ],
+        "deps": [
+          {
+            "id": "ahash 0.8.12",
+            "target": "ahash"
+          },
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "arc-swap 1.9.5",
+            "target": "arc_swap"
+          },
+          {
+            "id": "arrayvec 0.7.8",
+            "target": "arrayvec"
+          },
+          {
+            "id": "async-channel 2.5.0",
+            "target": "async_channel"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "axum-extra 0.12.6",
+            "target": "axum_extra"
+          },
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "bytes 1.12.2",
+            "target": "bytes"
+          },
+          {
+            "id": "candid 0.10.40",
+            "target": "candid"
+          },
+          {
+            "id": "chacha20poly1305 0.10.1",
+            "target": "chacha20poly1305"
+          },
+          {
+            "id": "chrono 0.4.45",
+            "target": "chrono"
+          },
+          {
+            "id": "clap 4.6.8",
+            "target": "clap"
+          },
+          {
+            "id": "flate2 1.1.11",
+            "target": "flate2"
+          },
+          {
+            "id": "fqdn 0.5.2",
+            "target": "fqdn"
+          },
+          {
+            "id": "futures 0.3.34",
+            "target": "futures"
+          },
+          {
+            "id": "futures-util 0.3.34",
+            "target": "futures_util"
+          },
+          {
+            "id": "governor 0.10.4",
+            "target": "governor"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "hickory-proto 0.26.3",
+            "target": "hickory_proto"
+          },
+          {
+            "id": "hickory-resolver 0.26.3",
+            "target": "hickory_resolver"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "http-body 1.1.0",
+            "target": "http_body"
+          },
+          {
+            "id": "http-body-util 0.1.5",
+            "target": "http_body_util"
+          },
+          {
+            "id": "humantime 2.4.0",
+            "target": "humantime"
+          },
+          {
+            "id": "hyper 1.12.0",
+            "target": "hyper"
+          },
+          {
+            "id": "hyper-rustls 0.27.10",
+            "target": "hyper_rustls"
+          },
+          {
+            "id": "hyper-util 0.1.21",
+            "target": "hyper_util"
+          },
+          {
+            "id": "ic-agent 0.50.0",
+            "target": "ic_agent"
+          },
+          {
+            "id": "ic-custom-domains-canister-api 0.3.0",
+            "target": "ic_custom_domains_canister_api"
+          },
+          {
+            "id": "ic-transport-types 0.50.0",
+            "target": "ic_transport_types"
+          },
+          {
+            "id": "instant-acme 0.8.5",
+            "target": "instant_acme"
+          },
+          {
+            "id": "ipnet 2.12.2",
+            "target": "ipnet"
+          },
+          {
+            "id": "itertools 0.15.0",
+            "target": "itertools"
+          },
+          {
+            "id": "maxminddb 0.32.0",
+            "target": "maxminddb"
+          },
+          {
+            "id": "moka 0.12.16",
+            "target": "moka"
+          },
+          {
+            "id": "nix 0.31.4",
+            "target": "nix"
+          },
+          {
+            "id": "parse-size 1.1.0",
+            "target": "parse_size"
+          },
+          {
+            "id": "pem 4.0.0",
+            "target": "pem"
+          },
+          {
+            "id": "ppp 2.3.0",
+            "target": "ppp"
+          },
+          {
+            "id": "prometheus 0.14.0",
+            "target": "prometheus"
+          },
+          {
+            "id": "rand 0.8.8",
+            "target": "rand"
+          },
+          {
+            "id": "rcgen 0.14.10",
+            "target": "rcgen"
+          },
+          {
+            "id": "regex 1.13.2",
+            "target": "regex"
+          },
+          {
+            "id": "reqwest 0.13.5",
+            "target": "reqwest"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "rustls-acme 0.15.4",
+            "target": "rustls_acme"
+          },
+          {
+            "id": "rustls-pemfile 2.2.0",
+            "target": "rustls_pemfile"
+          },
+          {
+            "id": "rustls-platform-verifier 0.7.1",
+            "target": "rustls_platform_verifier"
+          },
+          {
+            "id": "scopeguard 1.2.0",
+            "target": "scopeguard"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "serde_with 3.24.0",
+            "target": "serde_with"
+          },
+          {
+            "id": "serde_yaml_ng 0.10.0",
+            "target": "serde_yaml_ng"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          },
+          {
+            "id": "show-option 0.2.0",
+            "target": "show_option"
+          },
+          {
+            "id": "socket2 0.6.5",
+            "target": "socket2"
+          },
+          {
+            "id": "strum 0.28.0",
+            "target": "strum"
+          },
+          {
+            "id": "systemstat 0.2.7",
+            "target": "systemstat"
+          },
+          {
+            "id": "tar 0.4.46",
+            "target": "tar"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-io-timeout 1.2.1",
+            "target": "tokio_io_timeout"
+          },
+          {
+            "id": "tokio-rustls 0.26.6",
+            "target": "tokio_rustls"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          },
+          {
+            "id": "tower-http 0.7.1",
+            "target": "tower_http"
+          },
+          {
+            "id": "tower-service 0.3.3",
+            "target": "tower_service"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
+          },
+          {
+            "id": "url 2.5.8",
+            "target": "url"
+          },
+          {
+            "id": "uuid 1.12.1",
+            "target": "uuid"
+          },
+          {
+            "id": "webpki-root-certs 1.0.12",
+            "target": "webpki_root_certs"
+          },
+          {
+            "id": "x509-parser 0.18.1",
+            "target": "x509_parser"
+          },
+          {
+            "id": "zeroize 1.9.2",
+            "target": "zeroize"
+          },
+          {
+            "id": "zstd 0.14.4",
+            "target": "zstd"
+          }
+        ],
+        "edition": "2024",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          },
+          {
+            "id": "derive-new 0.7.0",
+            "target": "derive_new"
+          },
+          {
+            "id": "indoc 2.0.8",
+            "target": "indoc"
+          },
+          {
+            "id": "strum_macros 0.28.0",
+            "target": "strum_macros"
+          }
+        ]
+      },
+      "library_target_name": "ic_bn_lib",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "ic-bn-lib",
+      "package_url": "https://github.com/dfinity/ic-bn-lib",
+      "repository": {
+        "Http": {
+          "sha256": "25e153cd1f8defd7159ddd64e9a25ca8bc734dd9dc2aa9ac53b06d4b8c9c1e4e",
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.11.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_bn_lib",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.0"
+    },
     "ic-bn-lib 0.9.0": {
       "common_attrs": {
         "crate_features": [
@@ -26733,7 +27100,6 @@
           "custom-domains",
           "default",
           "lb",
-          "pubsub",
           "vector"
         ],
         "deps": [
@@ -36020,6 +36386,61 @@
         }
       ],
       "version": "0.29.0"
+    },
+    "maxminddb 0.32.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "memmap2",
+          "mmap"
+        ],
+        "deps": [
+          {
+            "id": "ipnetwork 0.21.1",
+            "target": "ipnetwork"
+          },
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          },
+          {
+            "id": "memmap2 0.9.12",
+            "target": "memmap2"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "maxminddb",
+      "license": "ISC",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "ISC"
+      ],
+      "name": "maxminddb",
+      "package_url": "https://github.com/oschwald/maxminddb-rust",
+      "repository": {
+        "Http": {
+          "sha256": "9b43d2458d977b610b04a3858e6504f06133663d303a1a0606601b530bfc9bc6",
+          "url": "https://static.crates.io/crates/maxminddb/0.32.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "maxminddb",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.32.0"
     },
     "memchr 2.8.3": {
       "common_attrs": {
@@ -62617,51 +63038,6 @@
       ],
       "version": "0.245.1"
     },
-    "wasm-encoder 0.247.0": {
-      "common_attrs": {
-        "crate_features": [
-          "component-model",
-          "default",
-          "std",
-          "wasmparser"
-        ],
-        "deps": [
-          {
-            "id": "leb128fmt 0.1.0",
-            "target": "leb128fmt"
-          },
-          {
-            "id": "wasmparser 0.247.0",
-            "target": "wasmparser"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "wasm_encoder",
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "wasm-encoder",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-      "repository": {
-        "Http": {
-          "sha256": "30b6733b8b91d010a6ac5b0fb237dc46a19650bc4c67db66857e2e787d437204",
-          "url": "https://static.crates.io/crates/wasm-encoder/0.247.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.247.0"
-    },
     "wasm-encoder 0.254.2": {
       "common_attrs": {
         "crate_features": [
@@ -62706,6 +63082,51 @@
         }
       ],
       "version": "0.254.2"
+    },
+    "wasm-encoder 0.263.0": {
+      "common_attrs": {
+        "crate_features": [
+          "component-model",
+          "default",
+          "std",
+          "wasmparser"
+        ],
+        "deps": [
+          {
+            "id": "leb128fmt 0.1.0",
+            "target": "leb128fmt"
+          },
+          {
+            "id": "wasmparser 0.263.0",
+            "target": "wasmparser"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "wasm_encoder",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "wasm-encoder",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "sha256": "0b883a26aea02eaabe2d2c3fba7eb039ef5cdcb5d5201ae5551e73d5e251a81f",
+          "url": "https://static.crates.io/crates/wasm-encoder/0.263.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.263.0"
     },
     "wasm-smith 0.254.2": {
       "common_attrs": {
@@ -62872,67 +63293,6 @@
       ],
       "version": "0.245.1"
     },
-    "wasmparser 0.247.0": {
-      "common_attrs": {
-        "crate_features": [
-          "component-model",
-          "default",
-          "features",
-          "hash-collections",
-          "serde",
-          "simd",
-          "std",
-          "validate"
-        ],
-        "deps": [
-          {
-            "id": "bitflags 2.13.2",
-            "target": "bitflags"
-          },
-          {
-            "id": "hashbrown 0.17.1",
-            "target": "hashbrown"
-          },
-          {
-            "id": "indexmap 2.14.2",
-            "target": "indexmap"
-          },
-          {
-            "id": "semver 1.0.28",
-            "target": "semver"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "wasmparser",
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "wasmparser",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "sha256": "8e6fb4c2bee46c5ea4d40f8cdb5c131725cd976718ec56f1c8e82fbde5fa2a80",
-          "url": "https://static.crates.io/crates/wasmparser/0.247.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.247.0"
-    },
     "wasmparser 0.253.0": {
       "common_attrs": {
         "crate_features": [
@@ -63054,6 +63414,67 @@
         }
       ],
       "version": "0.254.2"
+    },
+    "wasmparser 0.263.0": {
+      "common_attrs": {
+        "crate_features": [
+          "component-model",
+          "default",
+          "features",
+          "hash-collections",
+          "serde",
+          "simd",
+          "std",
+          "validate"
+        ],
+        "deps": [
+          {
+            "id": "bitflags 2.13.2",
+            "target": "bitflags"
+          },
+          {
+            "id": "hashbrown 0.17.1",
+            "target": "hashbrown"
+          },
+          {
+            "id": "indexmap 2.14.2",
+            "target": "indexmap"
+          },
+          {
+            "id": "semver 1.0.28",
+            "target": "semver"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "wasmparser",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "wasmparser",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "sha256": "4f5fa0a054ae153606df820eb0a84213e28cda41bbe04ba2628e71b6ba100fcb",
+          "url": "https://static.crates.io/crates/wasmparser/0.263.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.263.0"
     },
     "wasmprinter 0.254.2": {
       "common_attrs": {
@@ -66220,7 +66641,7 @@
       ],
       "version": "1.0.5"
     },
-    "wirm 4.0.4": {
+    "wirm 5.2.0": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -66237,11 +66658,11 @@
             "target": "rayon"
           },
           {
-            "id": "wasm-encoder 0.247.0",
+            "id": "wasm-encoder 0.263.0",
             "target": "wasm_encoder"
           },
           {
-            "id": "wasmparser 0.247.0",
+            "id": "wasmparser 0.263.0",
             "target": "wasmparser"
           }
         ],
@@ -66262,8 +66683,8 @@
       "package_url": "https://github.com/composablesys/wirm",
       "repository": {
         "Http": {
-          "sha256": "4b545057c2fa3f2a83aa2d23f9010e372b880aa6973f04c0cb8400a2e813e8f0",
-          "url": "https://static.crates.io/crates/wirm/4.0.4/download"
+          "sha256": "120597258f67c24d250a5124fbfd7955280c35a47c9ea0ba9c3352df84b4e405",
+          "url": "https://static.crates.io/crates/wirm/5.2.0/download"
         }
       },
       "targets": [
@@ -66274,7 +66695,7 @@
           }
         }
       ],
-      "version": "4.0.4"
+      "version": "5.2.0"
     },
     "wit-bindgen 0.57.1": {
       "build_script_attrs": {},
@@ -67883,7 +68304,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.21",
     "ic-agent 0.50.0",
-    "ic-bn-lib 0.9.0",
+    "ic-bn-lib 0.11.0",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.2.3",
@@ -68109,7 +68530,7 @@
     "wast 254.0.2",
     "wat 1.254.2",
     "webpki-roots 1.0.12",
-    "wirm 4.0.4",
+    "wirm 5.2.0",
     "wycheproof 0.7.0",
     "x509-cert 0.3.0",
     "x509-parser 0.18.1",

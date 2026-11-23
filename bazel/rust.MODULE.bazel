@@ -732,7 +732,7 @@ crate.spec(
         "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "^0.9",
+    version = "^0.11",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -1925,7 +1925,7 @@ crate.spec(
 crate.spec(
     features = ["parallel"],
     package = "wirm",
-    version = "4.0.4",
+    version = "5.2.0",
 )
 crate.spec(
     default_features = False,

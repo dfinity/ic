@@ -3978,7 +3978,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "ic-agent 0.50.0",
- "ic-bn-lib",
+ "ic-bn-lib 0.11.0",
  "ic-btc-interface",
  "ic-canister-log",
  "ic-canister-runtime",
@@ -4039,7 +4039,7 @@ dependencies = [
  "lru 0.19.0",
  "macaddr",
  "maplit",
- "maxminddb",
+ "maxminddb 0.29.0",
  "memmap2",
  "minicbor",
  "mockall",
@@ -5981,7 +5981,7 @@ dependencies = [
  "instant-acme",
  "ipnet",
  "itertools 0.15.0",
- "maxminddb",
+ "maxminddb 0.29.0",
  "moka",
  "nix 0.31.4",
  "parse-size",
@@ -6029,6 +6029,96 @@ dependencies = [
  "x509-parser 0.18.1",
  "zeroize",
  "zstd 0.13.5",
+]
+
+[[package]]
+name = "ic-bn-lib"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25e153cd1f8defd7159ddd64e9a25ca8bc734dd9dc2aa9ac53b06d4b8c9c1e4e"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "arc-swap",
+ "arrayvec 0.7.8",
+ "async-channel 2.5.0",
+ "async-trait",
+ "axum",
+ "axum-extra",
+ "base64 0.23.1",
+ "bytes",
+ "candid",
+ "chacha20poly1305",
+ "chrono 0.4.45",
+ "clap",
+ "derive-new",
+ "flate2",
+ "fqdn",
+ "futures",
+ "futures-util",
+ "governor",
+ "hex",
+ "hickory-proto",
+ "hickory-resolver",
+ "http 1.5.0",
+ "http-body",
+ "http-body-util",
+ "humantime",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "ic-agent 0.50.0",
+ "ic-custom-domains-canister-api",
+ "ic-transport-types 0.50.0",
+ "indoc",
+ "instant-acme",
+ "ipnet",
+ "itertools 0.15.0",
+ "maxminddb 0.32.0",
+ "moka",
+ "nix 0.31.4",
+ "parse-size",
+ "pem 4.0.0",
+ "ppp",
+ "prometheus",
+ "rand 0.8.8",
+ "rcgen 0.14.10",
+ "regex",
+ "reqwest",
+ "rustls",
+ "rustls-acme",
+ "rustls-pemfile",
+ "rustls-platform-verifier",
+ "scopeguard",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "serde_yaml_ng",
+ "sha1 0.11.0",
+ "sha2 0.11.1",
+ "show-option",
+ "socket2 0.6.5",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
+ "systemstat",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-io-timeout",
+ "tokio-rustls",
+ "tokio-util",
+ "tower 0.5.3",
+ "tower-http 0.7.1",
+ "tower-service",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "webpki-root-certs",
+ "x509-parser 0.18.1",
+ "zeroize",
+ "zstd 0.14.4",
 ]
 
 [[package]]
@@ -6294,12 +6384,12 @@ dependencies = [
  "http-body",
  "http-body-util",
  "humantime",
- "ic-bn-lib",
+ "ic-bn-lib 0.9.0",
  "ic-http-gateway-protocol",
  "isbot",
  "itertools 0.15.0",
  "lazy_static",
- "maxminddb",
+ "maxminddb 0.29.0",
  "moka",
  "prometheus",
  "rand 0.8.8",
@@ -8038,6 +8128,19 @@ dependencies = [
  "memmap2",
  "serde",
  "simdutf8",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "maxminddb"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b43d2458d977b610b04a3858e6504f06133663d303a1a0606601b530bfc9bc6"
+dependencies = [
+ "ipnetwork",
+ "memchr",
+ "memmap2",
+ "serde",
  "thiserror 2.0.21",
 ]
 
@@ -13804,22 +13907,22 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.247.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30b6733b8b91d010a6ac5b0fb237dc46a19650bc4c67db66857e2e787d437204"
-dependencies = [
- "leb128fmt",
- "wasmparser 0.247.0",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.254.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebaca0b540bdb15d195ff34fb23074255948708b8916a11a339ba4513dc61906"
 dependencies = [
  "leb128fmt",
  "wasmparser 0.254.2",
+]
+
+[[package]]
+name = "wasm-encoder"
+version = "0.263.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b883a26aea02eaabe2d2c3fba7eb039ef5cdcb5d5201ae5551e73d5e251a81f"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.263.0",
 ]
 
 [[package]]
@@ -13863,19 +13966,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.247.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6fb4c2bee46c5ea4d40f8cdb5c131725cd976718ec56f1c8e82fbde5fa2a80"
-dependencies = [
- "bitflags",
- "hashbrown 0.17.1",
- "indexmap 2.14.2",
- "semver 1.0.28",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.253.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19db11f87d2486580e1e8b6f494c54df7e0566b87d0b599db843c24019667339"
@@ -13892,6 +13982,19 @@ name = "wasmparser"
 version = "0.254.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5ff8685b587722894b6f25958fc608d315b93b8d23647bfb567664e7006d757"
+dependencies = [
+ "bitflags",
+ "hashbrown 0.17.1",
+ "indexmap 2.14.2",
+ "semver 1.0.28",
+ "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.263.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f5fa0a054ae153606df820eb0a84213e28cda41bbe04ba2628e71b6ba100fcb"
 dependencies = [
  "bitflags",
  "hashbrown 0.17.1",
@@ -14511,15 +14614,15 @@ dependencies = [
 
 [[package]]
 name = "wirm"
-version = "4.0.4"
+version = "5.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b545057c2fa3f2a83aa2d23f9010e372b880aa6973f04c0cb8400a2e813e8f0"
+checksum = "120597258f67c24d250a5124fbfd7955280c35a47c9ea0ba9c3352df84b4e405"
 dependencies = [
  "log",
  "paste",
  "rayon",
- "wasm-encoder 0.247.0",
- "wasmparser 0.247.0",
+ "wasm-encoder 0.263.0",
+ "wasmparser 0.263.0",
 ]
 
 [[package]]

@@ -722,7 +722,7 @@ ic-certified-map = "0.4.1"
 ic-metrics-encoder = "^1.1.1"
 ic0 = "1.2.0"
 ic-agent = { version = "0.50.0", features = ["pem"] }
-ic-bn-lib = { version = "0.9", features = [
+ic-bn-lib = { version = "0.11", features = [
     "acme-alpn",
     "acme-dns",
     "pubsub",
@@ -1014,7 +1014,7 @@ wasmtime = { version = "48.0.7", default-features = false, features = [
 wast = "254.0.0"
 wat = "~1.254.0"
 webpki-roots = "1.0.6"
-wirm = { version = "4.0.4", features = ["parallel"] }
+wirm = { version = "5.2.0", features = ["parallel"] }
 wycheproof = { version = "0.7", default-features = false }
 x509-cert = { version = "0.3.0", features = ["builder"] }
 x509-parser = { version = "0.18.1" }
