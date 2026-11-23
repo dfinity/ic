@@ -1,12 +1,12 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
-    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
-    Recovery, STATES_METADATA,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, Recovery,
+    STATES_METADATA,
     admin_helper::IcAdmin,
     cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{clear_dir, create_dir, path_exists, read_dir, rsync, rsync_includes},
+    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
     get_available_nodes_heights_from_metrics, get_member_node_ids_and_ips,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -663,22 +663,6 @@ impl Step for ValidateReplayStep {
     }
 }
 
-/// The first of `old_ic_state`, `old_ic_state.1`, `old_ic_state.2`, ... in
-/// `work_dir` that doesn't exist yet.
-///
-/// A state moved there is neither nested in nor mixed with a backup that
-/// `work_dir` already holds, be it from an earlier run of the step, complete or
-/// not, or from an earlier recovery.
-fn unused_backup_path(work_dir: &Path) -> RecoveryResult<PathBuf> {
-    let mut backup_path = work_dir.join(OLD_IC_STATE);
-    let mut suffix = 0;
-    while path_exists(&backup_path)? {
-        suffix += 1;
-        backup_path = work_dir.join(format!("{OLD_IC_STATE}.{suffix}"));
-    }
-    Ok(backup_path)
-}
-
 fn state_upload_includes(has_states_metadata: bool) -> Vec<&'static Path> {
     // Sync the parent so rsync's --delete removes heights left by an earlier upload.
     let mut includes = vec![Path::new(CHECKPOINTS)];
@@ -822,35 +806,25 @@ impl UploadStateAndRestartStep {
             info!(self.logger, "Stopping replica and crypto vault...");
             confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_STOP_REPLICA), log)?;
 
-            // For local recoveries we first move the state found in place to a
-            // backup, and then simply `mv` the new state to the upload
-            // directory.
-            if path_exists(&ic_state_path)? {
-                let backup_path = unused_backup_path(&self.work_dir)?;
-                info!(
-                    self.logger,
-                    "Moving the state found in {} into {}...",
-                    ic_state_path.display(),
-                    backup_path.display()
-                );
-                let mut cmd_backup_state = Command::new("sudo");
-                cmd_backup_state.arg("mv");
-                cmd_backup_state.arg(&ic_state_path);
-                cmd_backup_state.arg(&backup_path);
-                confirm_exec_cmd(&mut cmd_backup_state, log)?;
-            } else {
-                info!(
-                    self.logger,
-                    "No state found in {}, so there is nothing to back up",
-                    ic_state_path.display()
-                );
-            }
+            // As for remote recoveries, the state in place is removed and the
+            // new state is moved there. The state can already be absent on
+            // retry, and `-T` never moves the new state inside it.
+            info!(
+                self.logger,
+                "Removing the state in {}...",
+                ic_state_path.display()
+            );
+            let mut rm_state = Command::new("sudo");
+            rm_state.arg("rm").arg("-rf").arg(&ic_state_path);
+            confirm_exec_cmd(&mut rm_state, log)?;
 
             info!(self.logger, "Moving state locally...");
             let mut mv_to_target = Command::new("sudo");
-            mv_to_target.arg("mv");
-            mv_to_target.arg(&self.data_src);
-            mv_to_target.arg(ic_state_path);
+            mv_to_target
+                .arg("mv")
+                .arg("-T")
+                .arg(&self.data_src)
+                .arg(&ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
         }
         Ok(())
@@ -1647,25 +1621,5 @@ mod tests {
         assert!(run("").success());
         assert_eq!(std::fs::read(live.join("merged")).unwrap(), b"merged");
         assert!(!staged.exists());
-    }
-
-    #[test]
-    fn backup_path_is_the_first_unused_one() {
-        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
-        let work_dir = tmp.path();
-
-        let first = work_dir.join(OLD_IC_STATE);
-        assert_eq!(unused_backup_path(work_dir).unwrap(), first);
-
-        // A backup that exists is left alone, whether it is a directory or not.
-        std::fs::create_dir(&first).unwrap();
-        let second = work_dir.join(format!("{OLD_IC_STATE}.1"));
-        assert_eq!(unused_backup_path(work_dir).unwrap(), second);
-
-        std::fs::write(&second, "").unwrap();
-        assert_eq!(
-            unused_backup_path(work_dir).unwrap(),
-            work_dir.join(format!("{OLD_IC_STATE}.2"))
-        );
     }
 }
