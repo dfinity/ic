@@ -90,8 +90,8 @@ fn wasm_query_method(
 }
 
 /// Executes a single user query along with its outgoing query calls.
-pub(super) struct QueryContext<'a> {
-    log: &'a ReplicaLogger,
+pub(super) struct QueryContext {
+    log: Arc<ReplicaLogger>,
     hypervisor: Arc<Hypervisor>,
     canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
@@ -127,10 +127,10 @@ pub(super) struct QueryContext<'a> {
     instruction_observation: Option<Arc<AtomicU64>>,
 }
 
-impl<'a> QueryContext<'a> {
+impl QueryContext {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        log: &'a ReplicaLogger,
+        log: Arc<ReplicaLogger>,
         hypervisor: Arc<Hypervisor>,
         canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
@@ -278,7 +278,6 @@ impl<'a> QueryContext<'a> {
                         canister,
                         call_origin,
                         requests,
-                        self.max_query_call_graph_depth,
                         &measurement_scope,
                     ),
                 };
@@ -589,14 +588,14 @@ impl<'a> QueryContext<'a> {
         let callback = common::unregister_callback(
             &mut canister,
             &response,
-            self.log,
+            &self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
         let (call_context, call_context_id) = common::get_call_context(
             &canister,
             &callback,
-            self.log,
+            &self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
@@ -1217,6 +1216,11 @@ impl<'a> QueryContext<'a> {
     /// made in this query context.
     pub fn ic00_calls(&self) -> usize {
         self.ic00_calls
+    }
+
+    /// Returns the maximum number of nested query calls.
+    pub(super) fn max_query_call_graph_depth(&self) -> usize {
+        self.max_query_call_graph_depth
     }
 
     fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
