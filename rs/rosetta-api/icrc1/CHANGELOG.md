@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
 ### Fixed
 - `/account/balance` no longer answers above the highest block for which account balances have been
   computed. Previously the response was labelled with the highest *stored* block while the balance
