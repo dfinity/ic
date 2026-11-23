@@ -24,9 +24,10 @@ mod filters {
             .map_err(|e| askama::Error::Custom(Box::new(e)))?;
         let dt_offset = time::OffsetDateTime::from_unix_timestamp_nanos(ts).unwrap();
         // 2020-12-09T17:25:40+00:00
-        let format =
-            time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
-                .unwrap();
+        let format = time::format_description::parse_borrowed::<1>(
+            "[year]-[month]-[day]T[hour]:[minute]:[second]+00:00",
+        )
+        .unwrap();
         Ok(dt_offset.format(&format).unwrap())
     }
 

@@ -6,15 +6,17 @@ rust_library(
     name = "testing",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
+    aliases = {
+        "@crate_index//:rand_0_10": "rand_0_10",
+    },
     crate_name = "attestation_testing",
     deps = [
         "//rs/ic_os/sev/attestation",
-        "@crate_index//:der",
         "@crate_index//:p384",
         "@crate_index//:rand",
+        "@crate_index//:rand_0_10",
         "@crate_index//:rsa",
         "@crate_index//:sev",
-        "@crate_index//:sha2",
         "@crate_index//:x509-cert",
     ],
 )

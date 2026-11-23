@@ -2,6 +2,7 @@ use ic_base_types::{EnvironmentVariables, PrincipalId};
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
+use ic_limits::MAX_CANISTER_HISTORY_CHANGES;
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
@@ -10,7 +11,6 @@ use ic_management_canister_types_private::{
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
 use ic_types::{CanisterId, ingress::WasmResult};

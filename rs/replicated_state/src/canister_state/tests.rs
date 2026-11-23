@@ -9,11 +9,12 @@ use crate::canister_state::execution_state::{CustomSection, CustomSectionType, W
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LruConnectionMetrics,
-    MAX_CANISTER_HISTORY_CHANGES, MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
+    MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
+use ic_limits::MAX_CANISTER_HISTORY_CHANGES;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{

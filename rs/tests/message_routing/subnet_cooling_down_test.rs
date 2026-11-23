@@ -54,7 +54,7 @@ Runbook::
 5. Start the endless loops, each of which calls the management canister's
    `canister_status` method for the looping canister over and over until the
    global data of that canister is set to `LOOP_BREAK_TRIGGER`, which this test
-   only does after the merge (step 26):
+   only does after the merge (step 27):
    a. execute an update call on `U3` (on `S`) with the loop as its payload;
    b. execute an update call on `U4` (on `D`) that calls `U5` (on `S`) with the
       loop as its payload, so that `S` holds a canister looping in a call from
@@ -158,28 +158,29 @@ Runbook::
    Recovering a subnet that was instructed to halt at its next CUP replaces
    that instruction with a plain halt, so also check that `D` is halted: it
    stays halted until `UnhaltDestinationSubnet`.
-21. The following step of the tool is executed:
-   `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
-   node, replacing the state directory holding the checkpoint it halted at, and
-   starts its replica back up. Deleting that checkpoint is what makes the
-   recovery unambiguous: it does not hold the canisters of `S`, so a replica
-   coming up on it would serve a state that silently lost them.
-22. After `UploadStateToDestinationSubnet`: check that the checkpoints directory
+21. Execute `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
+   node, replacing the state directory holding the checkpoint it halted at.
+   Deleting that checkpoint is what makes the recovery unambiguous: it does not
+   hold the canisters of `S`, so a replica coming up on it would serve a state
+   that silently lost them.
+22. Execute `RestartDestinationReplica` to set permissions on the installed
+   state and start the vault and replica on that node.
+23. After `RestartDestinationReplica`: check that the checkpoints directory
    of `D`'s node holds exactly the merged checkpoint, and that the replica on
    that node is running again and started from it.
-23. The following steps of the tool are executed:
+24. The following steps of the tool are executed:
    `WaitForCupOnDestinationSubnet`, which waits until `D`'s node reports the
    recovery CUP, i.e. it came up on the merged state, and
    `UnhaltDestinationSubnet`, which submits a proposal unhalting `D`.
-24. After `UnhaltDestinationSubnet`: wait until `D` is healthy, then check that
+25. After `UnhaltDestinationSubnet`: wait until `D` is healthy, then check that
    `U12`, now served by `D`, kept the stable memory, the snapshot and (up to
    what an idle canister burns) the cycles balance of step 4, and that `U7`,
    which `D` hosted all along, can call `U12` now that both are on the same
    subnet.
-25. Check that `U2a` and `U2b`, also served by `D` now, have been installed,
+26. Check that `U2a` and `U2b`, also served by `D` now, have been installed,
    i.e. that the `install_code` calls of step 6 ran to completion while `S` was
    cooling down rather than being lost or rejected.
-26. Set the global data of `U3`, `U5`, `U7`, `U9`, `U11` and `U14` to
+27. Set the global data of `U3`, `U5`, `U7`, `U9`, `U11` and `U14` to
    `LOOP_BREAK_TRIGGER`, ending the endless loops, and check that every ingress
    message that was in progress across the merge completed. The canisters of
    `S` are reached through `D`, which serves them after the merge. Then stop
@@ -202,6 +203,8 @@ merge completes, and the call context of the best effort call whose deadline
 passed before the merge is closed.
 
 end::catalog[] */
+
+mod subnet_merging_checks;
 
 use anyhow::{Result, anyhow, bail};
 use candid::{Decode, Encode, Principal};
@@ -237,8 +240,8 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-    NnsInstallationBuilder, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession, SubnetSnapshot,
-    TopologySnapshot, get_guestos_img_version,
+    NnsInstallationBuilder, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, TopologySnapshot,
+    get_guestos_img_version,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
@@ -332,7 +335,7 @@ const MERGED_CALL_REPLY: &[u8] = b"hello from the merged subnet";
 const MAX_BURNED_CYCLES_FRACTION: u128 = 1_000;
 
 /// The global data value that ends the endless loops of `U3`, `U5`, `U7`, `U9`,
-/// `U11` and `U14`. The test only sets it after the merge (step 26), so those
+/// `U11` and `U14`. The test only sets it after the merge (step 27), so those
 /// loops run across it.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
@@ -368,13 +371,6 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 /// the test environment.
 const MERGING_DIR: &str = "subnet_merging";
 
-/// The checkpoints directory of the replica on a node.
-const NODE_CHECKPOINTS_DIR: &str = "/var/lib/ic/data/ic_state/checkpoints";
-
-/// The height of the latest state the state manager of a replica holds, which
-/// it sets to the height of the checkpoint it starts from.
-const METRIC_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
-
 /// The duration of a round that the timeouts counted in rounds assume. Every
 /// subnet is `Subnet::fast`, i.e. aims at rounds of a fraction of this; the
 /// rest is slack for slow testnets.
@@ -402,10 +398,6 @@ const MERGE_READY_TIMEOUT: Duration = Duration::from_millis(5 * 60 * 1000 + 400 
 /// `D`: the NNS subnet runs that DKG in its data blocks, i.e. within a few
 /// rounds of the proposal's execution.
 const REGISTRY_TIMEOUT: Duration = Duration::from_secs(120);
-/// Timeout for the replica on the node of `D` the merged state is uploaded to
-/// to start from the merged checkpoint (step 22). Starting from a checkpoint of
-/// the size of this scenario's takes seconds.
-const REPLICA_RESTART_TIMEOUT: Duration = Duration::from_secs(300);
 /// How long the merging tool waits between two evaluations of a condition it
 /// waits for. Longer than a driver retry because every evaluation scrapes the
 /// metrics of all subnets.
@@ -433,8 +425,8 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 /// Timeouts of the test itself.
 ///
 /// The timeout of the test is above the sum of the timeouts of the waits that
-/// dominate it (`MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, `REPLICA_RESTART_TIMEOUT`
-/// and `INGRESS_COMPLETION_TIMEOUT`, about 2200s together) plus ten minutes for
+/// dominate it (`MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart
+/// timeout and `INGRESS_COMPLETION_TIMEOUT`, about 2200s together) plus ten minutes for
 /// everything else, so that a stuck step fails with its own error.
 /// `HALT_TIMEOUT` is counted once although it applies to each of the two
 /// subnets: both are scheduled to halt before either is waited for, so the two
@@ -751,7 +743,7 @@ async fn prepare(env: &TestEnv) -> Context {
     // Step 5: Start the endless loops.
     info!(logger, "Step 5: Starting the endless loops");
     // The ingress messages that stay in progress across the merge, so that step
-    // 23 can check that all of them eventually completed, each with the agent
+    // 27 can check that all of them eventually completed, each with the agent
     // it has to be read through after the merge: the canisters of `S` are
     // served by `D` by then.
     let mut pending_ingress_messages = Vec::new();
@@ -859,7 +851,7 @@ async fn prepare(env: &TestEnv) -> Context {
     }
 }
 
-/// Steps 8 to 26: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 27: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -980,13 +972,27 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
                     logger,
                     "Step 21 done: the merged state is uploaded to the node of subnet D"
                 );
-                runtime.block_on(check_merged_state_uploaded(env, context));
+            }
+            StepType::RestartDestinationReplica => {
+                let node = merge_node_snapshot(&context.d_subnet);
+                let (merged_path, _) = merged_checkpoint(env);
+                let checkpoint = merged_path.file_name().unwrap().to_string_lossy();
+                runtime.block_on(subnet_merging_checks::check_merged_state_running(
+                    logger,
+                    &node,
+                    &checkpoint,
+                ));
+                info!(
+                    logger,
+                    "Step 23 done: the replica on {} started from the merged checkpoint {checkpoint}",
+                    node.get_ip_addr()
+                );
             }
             StepType::WaitForCupOnDestinationSubnet => {}
             StepType::UnhaltDestinationSubnet => {
                 info!(
                     logger,
-                    "Step 23 done: subnet D came up on the merged state and is unhalted"
+                    "Step 24 done: subnet D came up on the merged state and is unhalted"
                 );
                 runtime.block_on(verify_after_merge(context));
             }
@@ -1270,71 +1276,6 @@ fn merged_checkpoint(env: &TestEnv) -> (PathBuf, u64) {
     (merged_checkpoint.clone(), merged_height)
 }
 
-/// Step 22: check that `UploadStateToDestinationSubnet` put the merged state in
-/// place on `D`'s node and that the replica on that node started from it:
-/// * the checkpoints directory of the node holds exactly the merged checkpoint,
-///   i.e. the checkpoint `D` halted at was replaced;
-/// * the replica reports `METRIC_MAX_RESIDENT_HEIGHT` at the height of the
-///   merged checkpoint. The state manager sets it to the height of the
-///   checkpoint it starts from, and no other node holds a checkpoint at that
-///   height, so the replica runs again and started from the uploaded one.
-async fn check_merged_state_uploaded(env: &TestEnv, context: &Context) {
-    let logger = &context.logger;
-    let node = merge_node_snapshot(&context.d_subnet);
-    let node_ip = node.get_ip_addr();
-    let (merged_checkpoint, merged_height) = merged_checkpoint(env);
-    let merged_checkpoint_name = merged_checkpoint
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    info!(
-        logger,
-        "Step 22: Checking that node {node_ip} of subnet D runs on the merged checkpoint \
-         {merged_checkpoint_name}"
-    );
-
-    let checkpoints = node
-        .block_on_bash_script(&format!("sudo ls {NODE_CHECKPOINTS_DIR}"))
-        .unwrap_or_else(|e| panic!("failed to list {NODE_CHECKPOINTS_DIR} on node {node_ip}: {e}"));
-    let checkpoints: Vec<&str> = checkpoints.split_whitespace().collect();
-    assert_eq!(
-        checkpoints,
-        [merged_checkpoint_name.as_str()],
-        "{NODE_CHECKPOINTS_DIR} on node {node_ip} does not hold exactly the merged checkpoint",
-    );
-
-    retry_with_msg_async!(
-        format!("node {node_ip} reporting {METRIC_MAX_RESIDENT_HEIGHT} {merged_height}"),
-        logger,
-        REPLICA_RESTART_TIMEOUT,
-        RETRY_BACKOFF,
-        || async {
-            let metrics = fetch_metrics(&[node_ip], &[METRIC_MAX_RESIDENT_HEIGHT]).await?;
-            let heights: Vec<f64> = metrics
-                .get(&node_ip)
-                .map(|metrics| {
-                    replica_values(metrics, METRIC_MAX_RESIDENT_HEIGHT, |_| true).collect()
-                })
-                .unwrap_or_default();
-            if heights != [merged_height as f64] {
-                bail!("node {node_ip} reports {METRIC_MAX_RESIDENT_HEIGHT} {heights:?}");
-            }
-            Ok(())
-        }
-    )
-    .await
-    .unwrap_or_else(|e| {
-        panic!("the replica on node {node_ip} did not start from the merged checkpoint: {e}")
-    });
-
-    info!(
-        logger,
-        "Step 22 done: node {node_ip} of subnet D holds only the merged checkpoint \
-         {merged_checkpoint_name} and its replica started from it"
-    );
-}
-
 /// Step 16: check that the merged state the tool assembled is a single
 /// checkpoint holding exactly the canisters of the checkpoints downloaded from
 /// `S` and `D`.
@@ -1420,12 +1361,12 @@ async fn check_subnets_halted(context: &Context) {
 
     for subnet in subnets {
         let subnet_id = subnet.subnet_id;
-        // The tool has checked that the download node serves the CUP the subnet
-        // halts at, and no CUP follows that one.
-        let download_node = merge_node(subnet);
-        let halting_height = get_node_metrics(logger, &download_node)
+        // The tool has checked that this node serves the CUP the subnet halts
+        // at, and no CUP follows that one.
+        let node_ip = merge_node(subnet);
+        let halting_height = get_node_metrics(logger, &node_ip)
             .await
-            .unwrap_or_else(|| panic!("failed to get the metrics of node {download_node}"))
+            .unwrap_or_else(|| panic!("failed to get the metrics of node {node_ip}"))
             .catch_up_package_height;
         info!(
             logger,
@@ -1712,7 +1653,7 @@ fn term(terms: &[Term], condition: Condition) -> &Term {
         .unwrap_or_else(|| panic!("the readiness condition has no term for {condition:?}"))
 }
 
-/// Steps 24 to 26: check that the merge carried the state of `S`'s canisters
+/// Steps 25 to 27: check that the merge carried the state of `S`'s canisters
 /// over, that `S`'s `install_code` calls completed, and that every ingress
 /// message that was in progress across the merge completes.
 async fn verify_after_merge(context: &Context) {
@@ -1728,10 +1669,10 @@ async fn verify_after_merge(context: &Context) {
         .await_status_is_healthy_async()
         .await
         .expect("subnet D did not become healthy after the merge");
-    info!(logger, "Step 24: subnet D is healthy");
+    info!(logger, "Step 25: subnet D is healthy");
 
-    // Step 24: `U12` was hosted by `S` and is served by `D` now.
-    info!(logger, "Step 24: Checking the state of U12 after the merge");
+    // Step 25: `U12` was hosted by `S` and is served by `D` now.
+    info!(logger, "Step 25: Checking the state of U12 after the merge");
     let u12 = UniversalCanister::from_canister_id(&context.d_agent, context.u12);
     // `D` now hosts the canister ID ranges of `S`, but the NNS delegation it
     // serves responses with only lists them once it has fetched a new one; until
@@ -1794,17 +1735,17 @@ async fn verify_after_merge(context: &Context) {
     );
     info!(
         logger,
-        "Step 24 done: U12 kept its stable memory, snapshot and cycles, and U7 can call it"
+        "Step 25 done: U12 kept its stable memory, snapshot and cycles, and U7 can call it"
     );
 
-    // Step 25: `U1`'s `install_code` calls ran while `S` was cooling down, and
+    // Step 26: `U1`'s `install_code` calls ran while `S` was cooling down, and
     // whether they installed the universal canister module shows in a query: a
     // canister that has no module rejects every query. `D` has to be the one
     // asked, as `S` answered no query from the moment it started cooling down
     // until it was halted for the merge.
     info!(
         logger,
-        "Step 25: Checking that {} have been installed",
+        "Step 26: Checking that {} have been installed",
         INSTALL_CODE_TARGETS.join(", "),
     );
     for (&target, name) in context.targets.iter().zip(INSTALL_CODE_TARGETS) {
@@ -1823,11 +1764,11 @@ async fn verify_after_merge(context: &Context) {
     }
     info!(
         logger,
-        "Step 25 done: {} have been installed",
+        "Step 26 done: {} have been installed",
         INSTALL_CODE_TARGETS.join(", "),
     );
 
-    // Step 26: Let the endless loops finish and check that every ingress message
+    // Step 27: Let the endless loops finish and check that every ingress message
     // that was still in progress when the merge happened completed.
     //
     // The canisters of `S` now live on `D`, which serves them under the same
@@ -1835,7 +1776,7 @@ async fn verify_after_merge(context: &Context) {
     // move: it is on `O`.
     info!(
         logger,
-        "Step 26: Breaking the endless loops and waiting for the pending ingress messages"
+        "Step 27: Breaking the endless loops and waiting for the pending ingress messages"
     );
     for (agent, canister_id, name) in [
         (&context.d_agent, context.u3, "U3"),
@@ -1861,7 +1802,7 @@ async fn verify_after_merge(context: &Context) {
         )
         .await
         .unwrap_or_else(|e| panic!("could not break {name}'s endless loop: {e}"));
-        info!(logger, "Step 26: broke {name}'s endless loop");
+        info!(logger, "Step 27: broke {name}'s endless loop");
     }
 
     await_ingress_messages_replied(&context.pending_ingress_messages, logger).await;
@@ -1872,7 +1813,7 @@ async fn verify_after_merge(context: &Context) {
     stop_canister(&context.d_agent, context.u14).await;
     info!(
         logger,
-        "Step 26 done: all the ingress messages that were pending across the merge completed, \
+        "Step 27 done: all the ingress messages that were pending across the merge completed, \
          and U14 closed the call context of U13's best effort call"
     );
 }
@@ -1923,7 +1864,7 @@ async fn check_best_effort_call_timed_out(context: &Context) {
     );
 }
 
-/// Step 26: waits until every one of `messages` is replied, i.e. until the
+/// Step 27: waits until every one of `messages` is replied, i.e. until the
 /// update call each carries completed successfully.
 ///
 /// The ingress history only keeps the status of a replied message for
@@ -1955,7 +1896,7 @@ async fn await_ingress_messages_replied(
                 match status {
                     RequestStatusResponse::Replied(_) => {
                         replied_names.lock().unwrap().insert(name);
-                        info!(logger, "Step 26: {name}'s ingress message completed");
+                        info!(logger, "Step 27: {name}'s ingress message completed");
                     }
                     RequestStatusResponse::Rejected(reject) => {
                         panic!("{name}'s ingress message was rejected: {reject:?}")

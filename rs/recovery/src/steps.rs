@@ -654,20 +654,30 @@ pub struct UploadStateAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
-impl Step for UploadStateAndRestartStep {
-    fn descr(&self) -> String {
-        let replica = match self.upload_method {
-            DataLocation::Remote(ip) => &format!("replica {ip}"),
-            DataLocation::Local => "local replica",
-        };
+impl UploadStateAndRestartStep {
+    fn node(&self) -> ExecutionMode {
+        match self.upload_method {
+            DataLocation::Remote(ip) => ExecutionMode::Remote(SshHelper::new(
+                self.logger.clone(),
+                self.ssh_user.clone(),
+                ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            )),
+            DataLocation::Local => ExecutionMode::Local,
+        }
+    }
+
+    pub fn upload_description(&self) -> String {
         format!(
-            "Stopping {replica} and its crypto vault, uploading and replacing state from {}, \
-            set access rights, restart crypto vault and replica.",
+            "Stop the replica and its crypto vault on {} and replace the state with the one from {}.",
+            self.node(),
             self.data_src.display()
         )
     }
 
-    fn exec(&self) -> RecoveryResult<()> {
+    /// Install the state and leave the replica stopped.
+    pub fn upload_state(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -693,15 +703,7 @@ impl Step for UploadStateAndRestartStep {
         let ic_state_path = PathBuf::from(IC_DATA_PATH).join(IC_STATE);
 
         // Decide: remote or local recovery
-        if let DataLocation::Remote(node_ip) = self.upload_method {
-            let ssh_helper = SshHelper::new(
-                self.logger.clone(),
-                self.ssh_user.clone(),
-                node_ip,
-                self.require_confirmation,
-                self.key_file.clone(),
-            );
-
+        if let ExecutionMode::Remote(ssh_helper) = self.node() {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
@@ -763,16 +765,17 @@ impl Step for UploadStateAndRestartStep {
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
+            // With `-T`, the move fails if the state in place could not be
+            // removed, instead of moving the uploaded state inside it.
             let cmd_replace_state = format!(
-                "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};",
+                "sudo rm -r {ic_state_path}; sudo mv -T {upload_dir} {ic_state_path};",
                 ic_state_path = ic_state_path.display(),
                 upload_dir = upload_dir.display()
             );
 
-            info!(self.logger, "Restarting replica...");
+            info!(self.logger, "Stopping replica and crypto vault...");
             ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
             ssh_helper.ssh(cmd_replace_state)?;
-            ssh_helper.ssh(CMD_RESTART_REPLICA.to_string())?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
             info!(self.logger, "Stopping replica and crypto vault...");
@@ -787,22 +790,42 @@ impl Step for UploadStateAndRestartStep {
                 "Moving original state into {}...",
                 backup_path.display()
             );
+            // With `-T`, the move fails if the backup already holds a state,
+            // e.g. from an earlier run, instead of moving the original state
+            // inside it.
             let mut cmd_backup_state = Command::new("sudo");
-            cmd_backup_state.arg("mv");
+            cmd_backup_state.arg("mv").arg("-T");
             cmd_backup_state.arg(&ic_state_path);
             cmd_backup_state.arg(backup_path);
             confirm_exec_cmd(&mut cmd_backup_state, log)?;
 
             info!(self.logger, "Moving state locally...");
+            // `-T` never moves the new state inside a state in place.
             let mut mv_to_target = Command::new("sudo");
-            mv_to_target.arg("mv");
+            mv_to_target.arg("mv").arg("-T");
             mv_to_target.arg(&self.data_src);
             mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
-
-            info!(self.logger, "Restarting replica...");
-            confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_RESTART_REPLICA), log)?;
         }
+        Ok(())
+    }
+}
+
+impl Step for UploadStateAndRestartStep {
+    fn descr(&self) -> String {
+        format!(
+            "{} Set access rights and restart the crypto vault and replica.",
+            self.upload_description()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        self.upload_state()?;
+        info!(self.logger, "Restarting replica...");
+        self.node().execute(
+            CMD_RESTART_REPLICA.to_string(),
+            self.require_confirmation.then_some(&self.logger),
+        )?;
         Ok(())
     }
 }

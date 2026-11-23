@@ -42,9 +42,27 @@ pub fn crypt_name(partition: Partition) -> &'static str {
     }
 }
 
+/// Returns the flags to activate the given partition's encrypted device with.
+///
+/// The store decrypts each read where it completes (`NO_READ_WORKQUEUE`), rather than queueing it
+/// to dm-crypt's workers, which also encrypt the writes: during heavy writes, such as a checkpoint's,
+/// queued reads wait behind that encryption, and with them execution's page faults.
 pub(crate) fn activate_flags(partition: Partition) -> CryptActivate {
     match partition {
         Partition::Var => CryptActivate::empty(),
-        Partition::Store => CryptActivate::ALLOW_DISCARDS,
+        Partition::Store => CryptActivate::ALLOW_DISCARDS | CryptActivate::NO_READ_WORKQUEUE,
+    }
+}
+
+/// Returns the encryption sector size to format the given partition with, in bytes, or 0 to leave
+/// it to libcryptsetup (which follows the virtual disk's 512 B blocks).
+///
+/// The store holds the replica's state, where 4 KiB sectors take an eighth of the cipher calls of
+/// 512 B ones. A store keeps the sector size it was formatted with: only a newly formatted one
+/// gets 4 KiB sectors, with its volume group and filesystems created afresh on top.
+pub fn encryption_sector_size(partition: Partition) -> u32 {
+    match partition {
+        Partition::Var => 0,
+        Partition::Store => 4096,
     }
 }

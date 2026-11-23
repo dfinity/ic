@@ -328,26 +328,30 @@ Store proposal IDs as `NNS_PROPOSAL_IDS` and `SNS_PROPOSAL_IDS`.
 
 ## Step 6: Create Forum Post
 
+Pass each proposal as `<PROPOSAL_FILE>:<PROPOSAL_ID>`.
+
 For NNS proposals, run:
 ```
-./rs/nervous_system/tools/release/cmd.sh generate_forum_post_nns_upgrades $NNS_PROPOSAL_PATHS
+./rs/nervous_system/tools/release/cmd.sh generate_forum_post_nns_upgrades \
+    $NNS_PROPOSAL_PATH_1:$NNS_PROPOSAL_ID_1 \
+    $NNS_PROPOSAL_PATH_2:$NNS_PROPOSAL_ID_2
 ```
 
 For SNS proposals, run:
 ```
-./rs/nervous_system/tools/release/cmd.sh generate_forum_post_sns_wasm_publish $SNS_PROPOSAL_PATHS
+./rs/nervous_system/tools/release/cmd.sh generate_forum_post_sns_wasm_publish \
+    $SNS_PROPOSAL_PATH_1:$SNS_PROPOSAL_ID_1 \
+    $SNS_PROPOSAL_PATH_2:$SNS_PROPOSAL_ID_2
 ```
 
-The generated post has two TODOs. Resolve them automatically:
-1. Replace "TODO proposal links" with links to each proposal:
-   `[Proposal NNNNN](https://dashboard.internetcomputer.org/proposal/NNNNN)`
-2. Delete the "TODO - delete if nothing relevant" line under Additional Notes
-   (or replace with actual notes if the user mentioned breaking changes).
+If the user mentioned breaking changes (or anything else readers should know),
+add a `## Additional Notes / Breaking Changes` section right after the first
+paragraph.
 
 The generated post includes the vote date (3 calendar days from today),
 computed by the script. Verify it looks correct.
 
-After resolving TODOs, write the final forum post to a file
+Write the final forum post to a file
 (e.g. `/tmp/forum-post-nns.md`) and copy it to the clipboard:
 ```
 pbcopy < /tmp/forum-post-nns.md

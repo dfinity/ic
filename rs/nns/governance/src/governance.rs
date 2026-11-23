@@ -139,6 +139,7 @@ use ic_types::Time;
 use icp_ledger::{AccountIdentifier, Subaccount, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use itertools::Itertools;
 use maplit::hashmap;
+use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -184,7 +185,9 @@ pub use tla::{
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
-const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
+//
+// `MAX_SELF_DESCRIBING_VALUE_ENCODED_LEN_BYTES` uses this to set its value.
+pub(crate) const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70_000;
 
 // When wait for quiet is used, a proposal does not need to reach absolute
 // majority to be accepted. However there is a minimum amount of votes needed
@@ -253,6 +256,13 @@ pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
 
 /// The max number of open manage neuron proposals.
 pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 10_000;
+
+/// The max size of the action of a ManageNeuron proposal (i.e. of its ManageNeuron), measured as
+/// the length of its protobuf encoding. ManageNeuron proposals are cheap, and many of them can be
+/// open at the same time, so each of them must be small. Every command other than MakeProposal
+/// is much smaller than this. With MakeProposal, this limits the size of the proposal that is
+/// made (e.g. its summary).
+pub const MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX: usize = 10_000;
 
 /// Max number of hot key for each neuron.
 pub const MAX_NUM_HOT_KEYS_PER_NEURON: usize = 10;
@@ -4627,18 +4637,10 @@ impl Governance {
             return Self::merge_maturity_removed_error();
         }
 
-        // Below we make sure the manage neuron proposal is not too large. Otherwise they can occupy
-        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (100K).
-        //
         // TODO: consolidate the validation logic with the `manage_neuron` implementation.
         match command {
-            // We could implement more complicated logic to check its encoded size, or treat each
-            // type of proposal differently, but in the hotfix we simply disable it.
-            Command::MakeProposal(_) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Cannot issue a make proposal command through a proposal",
-                ));
+            Command::MakeProposal(nested_proposal) => {
+                self.validate_nested_make_proposal(nested_proposal)?;
             }
             // DisburseMaturity contains a subaccount which can be unbounded without checking. This
             // command is not implemented yet, and before we implement it we should also validate
@@ -4688,6 +4690,20 @@ impl Governance {
             _ => {}
         };
 
+        // Make sure the manage neuron proposal is not too large. Otherwise they can occupy
+        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (10K).
+        let encoded_bytes = manage_neuron.encoded_len();
+        if encoded_bytes > MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "The action of a ManageNeuron proposal can be at most {} bytes \
+                     (protobuf encoded), but it is {} bytes.",
+                    MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX, encoded_bytes,
+                ),
+            ));
+        }
+
         let is_managed_neuron_not_for_profit = self
             .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
                 managed_neuron.not_for_profit
@@ -4712,6 +4728,45 @@ impl Governance {
                 _ => {}
             }
         }
+
+        Ok(())
+    }
+
+    /// Validates the proposal in the MakeProposal command of a ManageNeuron proposal (the "nested"
+    /// proposal). Enforces the following:
+    ///
+    ///     1. The nested proposal is a ManageNeuron proposal.
+    ///     2. Its command is not MakeProposal (i.e. making a third proposal is not allowed).
+    ///     3. It is valid on its own (see validate_proposal).
+    ///
+    /// (The size of the nested proposal is limited by MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
+    /// which is checked by the caller. That bounds memory usage only because the commands of a
+    /// ManageNeuron proposal cannot expand much when decoded; other proposal types can, e.g. a
+    /// long list of empty elements.)
+    fn validate_nested_make_proposal(
+        &self,
+        nested_proposal: &Proposal,
+    ) -> Result<(), GovernanceError> {
+        let invalid_proposal_error =
+            |message: &str| GovernanceError::new_with_message(ErrorType::InvalidProposal, message);
+
+        let Some(Action::ManageNeuron(nested_manage_neuron)) = &nested_proposal.action else {
+            return Err(invalid_proposal_error(
+                "When a ManageNeuron proposal is to make (another) proposal, \
+                 the second proposal must be (another) ManageNeuron proposal.",
+            ));
+        };
+
+        if let Some(Command::MakeProposal(_)) = &nested_manage_neuron.command {
+            return Err(invalid_proposal_error(
+                "A proposal made through a ManageNeuron proposal cannot itself \
+                 make a third proposal.",
+            ));
+        }
+
+        // Reject an invalid nested proposal now, rather than only after the enclosing proposal
+        // has been adopted.
+        self.validate_proposal(nested_proposal)?;
 
         Ok(())
     }
@@ -5179,16 +5234,7 @@ impl Governance {
 
         let self_describing_action =
             if cfg!(target_arch = "wasm32") && !cfg!(feature = "canbench-rs") {
-                match action.to_self_describing(self.env.clone()).await {
-                    Ok(self_describing_action) => Some(self_describing_action),
-                    Err(e) => {
-                        println!(
-                            "{}Failed to get self_describing_action for proposal: {:?}",
-                            LOG_PREFIX, e
-                        );
-                        None
-                    }
-                }
+                Some(action.to_self_describing(self.env.clone()).await)
             } else {
                 None
             };

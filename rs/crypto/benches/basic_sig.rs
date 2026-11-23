@@ -363,24 +363,25 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
 ) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha2::Sha256;
+    use rand_0_10::SeedableRng as _;
     use rsa::traits::PublicKeyParts;
-    use rsa::{Pkcs1v15Sign, RsaPrivateKey};
+    use rsa::{Pkcs1v15Sign, PrivateKey};
 
     let bitlength = 2048; // minimum allowed
 
-    let priv_key = RsaPrivateKey::new(rng, bitlength).expect("failed to generate RSA key");
+    // `rsa` takes a rand 0.10 RNG.
+    let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
+    let priv_key = PrivateKey::new(&mut rsa_rng, bitlength).expect("failed to generate RSA key");
 
-    let pub_key_bytes = basic_sig_rsa::RsaPublicKey::from_components(
-        &priv_key.to_public_key().e().to_bytes_be(),
-        &priv_key.to_public_key().n().to_bytes_be(),
-    )
-    .expect("failed to convert RSA key to internal type for serialization")
-    .as_der()
-    .to_vec();
+    let pub_key_bytes =
+        basic_sig_rsa::RsaPublicKey::from_components(&priv_key.e_bytes(), &priv_key.n_bytes())
+            .expect("failed to convert RSA key to internal type for serialization")
+            .as_der()
+            .to_vec();
 
     let signature = priv_key
         .sign(
-            Pkcs1v15Sign::new::<sha2::Sha256>(),
+            Pkcs1v15Sign::new::<rsa::sha2::Sha256>(),
             &Sha256::hash(bytes_to_sign),
         )
         .expect("failed signing with RSA key");

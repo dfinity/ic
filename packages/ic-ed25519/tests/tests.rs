@@ -358,6 +358,12 @@ fn can_pass_old_basic_sig_utils_parsing_tests() {
     }
 }
 
+/// Wycheproof Ed25519 test cases that are invalid under RFC 8032 but valid
+/// under ZIP215, which `verify_signature` follows. Test case 151 encodes R as
+/// y = 1 with the sign bit of x set, a non-canonical encoding of the point
+/// (0, 1) that ZIP215 accepts.
+const WYCHEPROOF_ED25519_VALID_UNDER_ZIP215: [usize; 1] = [151];
+
 #[test]
 fn should_pass_wycheproof_test_vectors() {
     let test_set = wycheproof::eddsa::TestSet::load(wycheproof::eddsa::TestName::Ed25519)
@@ -369,10 +375,12 @@ fn should_pass_wycheproof_test_vectors() {
         for test in test_group.tests {
             let accept = pk.verify_signature(&test.msg, &test.sig).is_ok();
 
-            if test.result == wycheproof::TestResult::Valid {
-                assert!(accept);
+            if test.result == wycheproof::TestResult::Valid
+                || WYCHEPROOF_ED25519_VALID_UNDER_ZIP215.contains(&test.tc_id)
+            {
+                assert!(accept, "test case {} was rejected", test.tc_id);
             } else {
-                assert!(!accept);
+                assert!(!accept, "test case {} was accepted", test.tc_id);
             }
         }
     }
