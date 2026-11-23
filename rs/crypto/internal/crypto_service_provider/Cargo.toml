@@ -87,6 +87,7 @@ ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
+rand_0_10 = { workspace = true }
 rsa = { workspace = true }
 slog-async = { workspace = true }
 tracing = { workspace = true }

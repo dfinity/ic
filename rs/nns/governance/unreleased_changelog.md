@@ -9,6 +9,14 @@ on the process that this file is part of, see
 
 ## Added
 
+* A ManageNeuron proposal can now have the `MakeProposal` command again, but
+  only to make another ManageNeuron proposal, whose command is not
+  `MakeProposal`.
+
+* The action of a ManageNeuron proposal can be at most 10,000 bytes (protobuf
+  encoded). With the `MakeProposal` command, this limits the size of the
+  nested proposal.
+
 ## Changed
 
 * Limit decoded `payload` of `ExecuteNnsFunction` proposals. If the result is

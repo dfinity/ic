@@ -19,14 +19,16 @@
 
 {% macro btc_address(addr) -%}
     {% match addr %}
-        {%- when Some(addr) -%}
+        {%- when InputAddress::Address(addr) -%}
             {% if crate::is_blocked(addr) %}
                 <code style="color: red">{{addr}}</code>
             {% else %}
                 <code style="color: green">{{addr}}</code>
             {% endif %}
-        {%- when None -%}
+        {%- when InputAddress::NotFetched -%}
         <code>N/A</code>
+        {%- when InputAddress::NoAddress -%}
+        <code>No address</code>
     {% endmatch %}
 {%- endmacro %}
 

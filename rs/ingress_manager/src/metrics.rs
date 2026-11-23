@@ -84,7 +84,7 @@ impl IngressManagerMetrics {
                 .as_secs_f64(),
         );
 
-        let signed_ingress = &ingress.message.signed_ingress;
+        let signed_ingress = ingress.message.signed_ingress();
         self.validated_ingress_message_size
             .observe(signed_ingress.count_bytes() as f64);
 

@@ -4,7 +4,7 @@ edition.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-der = { workspace = true, features = ["alloc", "derive", "std"] }
+der = { workspace = true, features = ["alloc", "derive", "pem", "std"] }
 hex = { workspace = true }
 ic-utils = { path = "../../../utils" }
 prost = { workspace = true }
