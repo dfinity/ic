@@ -287,15 +287,6 @@ impl RosettaMetrics {
         }
     }
 
-    /// Gets a display name for a canister ID from the global registry.
-    /// Returns the canister ID itself if no mapping exists.
-    pub fn get_display_name_from_canister_id(canister_id: &str) -> String {
-        let map = CANISTER_DISPLAY_NAMES.lock().unwrap();
-        map.get(canister_id)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| canister_id.to_string())
-    }
-
     /// Registers a mapping between canister ID and display name in the global registry.
     /// This can be used to associate readable names with canister IDs for metrics.
     pub fn register_canister_display_name(canister_id: String, display_name: String) {
