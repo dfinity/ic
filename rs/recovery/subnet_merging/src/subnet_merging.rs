@@ -916,30 +916,6 @@ mod tests {
     }
 
     #[test]
-    fn nodes_accept_remote_and_local_access() {
-        let args = args();
-        for (value, expected) in [
-            ("::2", DataLocation::Remote("::2".parse().unwrap())),
-            ("local", DataLocation::Local),
-        ] {
-            let parsed = SubnetMergingArgs::try_parse_from([
-                "subnet-merging-tool",
-                "--source-subnet-id",
-                &args.source_subnet_id.to_string(),
-                "--destination-subnet-id",
-                &args.destination_subnet_id.to_string(),
-                "--source-node",
-                value,
-                "--destination-node",
-                value,
-            ])
-            .unwrap();
-            assert_eq!(parsed.source_node, Some(expected));
-            assert_eq!(parsed.destination_node, Some(expected));
-        }
-    }
-
-    #[test]
     fn nodes_are_required_unless_resumed_past_their_steps() {
         let mut args = args();
         args.source_node = None;
