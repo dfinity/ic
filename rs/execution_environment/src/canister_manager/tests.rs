@@ -6635,7 +6635,17 @@ fn wasm_mode_canister_wat(is_wasm64_mode: bool) -> String {
 fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
     let canister_wat = wasm_mode_canister_wat(is_wasm64_mode);
 
-    let mut test = ExecutionTestBuilder::new().build();
+    // Instrument both modules without the heap page limit checks: their
+    // injected helper functions differ between Wasm32 and Wasm64, which would
+    // make the two modules differ in size and thus in compilation cost.
+    let mut config = ic_config::execution_environment::Config::default();
+    config
+        .embedders_config
+        .feature_flags
+        .wasm_memory_accessed_page_limit = ic_config::flag_status::FlagStatus::Disabled;
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(config)
+        .build();
     let canister_id = test
         .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
         .unwrap();
