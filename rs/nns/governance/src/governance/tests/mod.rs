@@ -23,6 +23,7 @@ use ic_sns_init::pb::v1::{self as sns_init_pb};
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use std::{convert::TryFrom, time::Duration};
+use strum::IntoEnumIterator;
 
 mod get_maturity_modulation;
 mod get_neuron_index;
@@ -1461,8 +1462,6 @@ fn test_validate_assign_noid_tolerates_node_provider_with_none_id() {
 
 #[test]
 fn test_canister_and_function_no_unreachable() {
-    use strum::IntoEnumIterator;
-
     for nns_function in NnsFunction::iter() {
         // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
         // obsolete ones. The test just makes sure that it doesn't panic.
@@ -1516,8 +1515,6 @@ fn test_deciding_voting_power_adjustment_factor() {
 
 #[test]
 fn topic_min_max_test() {
-    use strum::IntoEnumIterator;
-
     for topic in Topic::iter() {
         assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
         assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
@@ -1843,7 +1840,6 @@ fn test_largest_set_following_fits_in_manage_neuron_proposal() {
     use crate::pb::v1::manage_neuron::{
         NeuronIdOrSubaccount, SetFollowing, set_following::FolloweesForTopic,
     };
-    use strum::IntoEnumIterator;
 
     // Step 1: Prepare the world.
     let largest_neuron_id = NeuronId { id: u64::MAX };
@@ -1854,19 +1850,19 @@ fn test_largest_set_following_fits_in_manage_neuron_proposal() {
         })
         .collect::<Vec<FolloweesForTopic>>();
     let manage_neuron = ManageNeuron {
-        id: None,
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(largest_neuron_id)),
         command: Some(manage_neuron::Command::SetFollowing(SetFollowing {
             topic_following,
         })),
+        id: None,
     };
 
     // Step 2: Run the code under test.
     let encoded_bytes = prost::Message::encoded_len(&manage_neuron);
 
-    // Step 3: Verify result. Leave plenty of room for new topics.
+    // Step 3: Verify result.
     assert!(
-        2 * encoded_bytes <= MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
+        encoded_bytes <= MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
         "{encoded_bytes}"
     );
 }

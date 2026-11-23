@@ -2932,37 +2932,30 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
 }
 
 /// Neurons 1, 2, and 3 (the "members") manage neuron 4 (the "intermediate" neuron), which in turn
-/// manages neurons 5 and 6. Neuron 7 is managed by neuron 1 only. Neuron i is controlled by
-/// principal(i). The members are public (so that other neurons can follow them on topics other
-/// than NeuronManagement), and the other neurons are private.
+/// manages neurons 5 and 6. Neuron 7 is managed by neuron 1 only. Neuron 42 is public, so that
+/// the other neurons can follow it on topics other than NeuronManagement. Neuron i is controlled
+/// by principal(i).
 fn fixture_for_nested_manage_neuron() -> api::Governance {
     let mut driver = fake::FakeDriver::default();
 
-    let mut new_neuron = move |id: u64, manager_ids: Vec<u64>| {
-        let is_member = id <= 3;
-        let visibility = if is_member {
-            Visibility::Public
-        } else {
-            Visibility::Private
-        };
-        let manager_ids = manager_ids
+    let mut new_neuron = move |id: u64, manager_neuron_ids: Vec<u64>| {
+        let manager_neuron_ids = manager_neuron_ids
             .into_iter()
             .map(|id| NeuronId { id })
             .collect::<Vec<NeuronId>>();
         api::Neuron {
             id: Some(NeuronId { id }),
             controller: Some(principal(id)),
-            cached_neuron_stake_e8s: 1_000_000_000, // 10 ICP
+            cached_neuron_stake_e8s: 10 * E8,
             account: driver
                 .random_byte_array()
                 .expect("Could not get random byte array")
                 .to_vec(),
             dissolve_state: Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
             aging_since_timestamp_seconds: u64::MAX,
-            visibility: Some(visibility as i32),
             followees: hashmap! {
                 Topic::NeuronManagement as i32 => api::neuron::Followees {
-                    followees: manager_ids,
+                    followees: manager_neuron_ids,
                 },
             },
             ..Default::default()
@@ -2977,6 +2970,10 @@ fn fixture_for_nested_manage_neuron() -> api::Governance {
         new_neuron(5, vec![4]),
         new_neuron(6, vec![4]),
         new_neuron(7, vec![1]),
+        api::Neuron {
+            visibility: Some(Visibility::Public as i32),
+            ..new_neuron(42, vec![])
+        },
     ];
 
     GovernanceProtoBuilder::new()
@@ -2985,24 +2982,24 @@ fn fixture_for_nested_manage_neuron() -> api::Governance {
         .with_neurons(neurons)
         .with_short_voting_period(1)
         .with_neuron_management_voting_period(1)
-        .with_wait_for_quiet_threshold(10)
         .build()
 }
 
-/// A ManageNeuron proposal that makes neuron `managed_id` follow neuron 1 on the Governance topic.
+/// A ManageNeuron proposal that makes neuron `managed_id` follow neuron 42 on the Governance
+/// topic.
 fn new_follow_manage_neuron_proposal(managed_id: u64) -> Proposal {
     Proposal {
-        title: Some(format!("Make neuron {managed_id} follow neuron 1")),
-        summary: "Follow neuron 1 on the Governance topic.".to_string(),
+        title: Some(format!("Make neuron {managed_id} follow neuron 42")),
+        summary: "Follow neuron 42 on the Governance topic.".to_string(),
         action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                 id: managed_id,
             })),
-            id: None,
             command: Some(Command::Follow(Follow {
                 topic: Topic::Governance as i32,
-                followees: vec![NeuronId { id: 1 }],
+                followees: vec![NeuronId { id: 42 }],
             })),
+            id: None,
         }))),
         ..Default::default()
     }
@@ -3016,8 +3013,8 @@ fn new_nested_manage_neuron_proposal(nested_proposal: Proposal) -> Proposal {
         summary: "Make neuron 4 make a proposal.".to_string(),
         action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 4 })),
-            id: None,
             command: Some(Command::MakeProposal(Box::new(nested_proposal))),
+            id: None,
         }))),
         ..Default::default()
     }
@@ -3038,27 +3035,15 @@ fn new_governance_for_nested_manage_neuron() -> Governance {
 async fn test_nested_manage_neuron_proposal() {
     // Step 1: Prepare the world.
     let mut gov = new_governance_for_nested_manage_neuron();
-    let neuron_management_fee_e8s = gov
-        .heap_data
-        .economics
-        .as_ref()
-        .unwrap()
-        .neuron_management_fee_per_proposal_e8s;
-    let governance_followees_of = |gov: &Governance, id: u64| {
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |neuron| {
-                neuron.followees.get(&(Topic::Governance as i32)).cloned()
-            })
-            .expect("Neuron not found.")
-    };
 
     // Step 2: Run the code under test. Member neuron 1 proposes that the intermediate neuron 4
     // makes a proposal for neuron 5, and member neuron 2 votes to adopt it.
+    let nested_proposal = new_follow_manage_neuron_proposal(5);
     let outer_proposal_id = gov
         .make_proposal(
             &NeuronId { id: 1 },
             &principal(1),
-            &new_nested_manage_neuron_proposal(new_follow_manage_neuron_proposal(5)),
+            &new_nested_manage_neuron_proposal(nested_proposal),
         )
         .await
         .unwrap();
@@ -3083,29 +3068,51 @@ async fn test_nested_manage_neuron_proposal() {
         ProposalStatus::Executed
     );
     let nested_proposal_id = ProposalId {
+        // Here, we make use of the fact that proposal IDs are sequential
+        // (and there have been no other proposals).
         id: outer_proposal_id.id + 1,
     };
-    let nested_proposal = gov.get_proposal_data(nested_proposal_id).unwrap();
-    assert_eq!(nested_proposal.proposer, Some(NeuronId { id: 4 }));
+    let nested_proposal_data = gov.get_proposal_data(nested_proposal_id).unwrap();
+    assert_eq!(nested_proposal_data.proposer, Some(NeuronId { id: 4 }));
     assert_eq!(
-        nested_proposal.proposal.as_ref().unwrap().managed_neuron(),
+        nested_proposal_data
+            .proposal
+            .as_ref()
+            .unwrap()
+            .managed_neuron(),
         Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 }))
     );
 
     // Step 3.2: Neuron 4 is the only manager of neuron 5, and voted to adopt the nested proposal
     // when making it. Therefore, the nested proposal is executed right away.
-    assert_eq!(nested_proposal.status(), ProposalStatus::Executed);
-    assert_eq!(
-        governance_followees_of(&gov, 5),
-        Some(Followees {
-            followees: vec![NeuronId { id: 1 }],
-        })
-    );
+    let governance_followees_of = |gov: &Governance, id: u64| -> Vec<u64> {
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |neuron| {
+                neuron.followees.get(&(Topic::Governance as i32)).cloned()
+            })
+            .expect("Neuron not found.")
+            .map(|followees| {
+                followees
+                    .followees
+                    .iter()
+                    .map(|followee| followee.id)
+                    .collect::<Vec<u64>>()
+            })
+            .unwrap_or_default()
+    };
+    assert_eq!(nested_proposal_data.status(), ProposalStatus::Executed);
+    assert_eq!(governance_followees_of(&gov, 5), vec![42]);
     // Neuron 6 is not affected.
-    assert_eq!(governance_followees_of(&gov, 6), None);
+    assert_eq!(governance_followees_of(&gov, 6), Vec::<u64>::new());
 
     // Step 3.3: Both the proposer of the outer proposal and the intermediate neuron (the proposer
     // of the nested proposal) pay the fee for a ManageNeuron proposal.
+    let neuron_management_fee_e8s = gov
+        .heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .neuron_management_fee_per_proposal_e8s;
     for (neuron_id, expected_fees_e8s) in [
         (1, neuron_management_fee_e8s),
         (2, 0),
@@ -3167,8 +3174,8 @@ async fn test_invalid_nested_manage_neuron_proposals() {
     let nested_manage_neuron_proposal = |command: Command| Proposal {
         action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 })),
-            id: None,
             command: Some(command),
+            id: None,
         }))),
         ..valid_nested_proposal.clone()
     };
@@ -3177,11 +3184,10 @@ async fn test_invalid_nested_manage_neuron_proposals() {
             "nested Motion proposal",
             Proposal {
                 action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Hello".to_string(),
+                    motion_text: "This proposal is doomed.".to_string(),
                 })),
                 ..valid_nested_proposal.clone()
             },
-            ErrorType::InvalidProposal,
             "must be (another) ManageNeuron proposal",
         ),
         (
@@ -3189,7 +3195,6 @@ async fn test_invalid_nested_manage_neuron_proposals() {
             nested_manage_neuron_proposal(Command::MakeProposal(Box::new(
                 valid_nested_proposal.clone(),
             ))),
-            ErrorType::InvalidProposal,
             "cannot itself make a third proposal",
         ),
         (
@@ -3198,12 +3203,11 @@ async fn test_invalid_nested_manage_neuron_proposals() {
                 summary: "x".repeat(MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX),
                 ..valid_nested_proposal.clone()
             },
-            ErrorType::InvalidProposal,
-            "protobuf encoded",
+            "at most",
         ),
     ];
 
-    for (label, nested_proposal, expected_error_type, expected_message_fragment) in test_cases {
+    for (label, nested_proposal, expected_message_fragment) in test_cases {
         // Step 2: Run the code under test.
         let result = gov
             .make_proposal(
@@ -3219,7 +3223,8 @@ async fn test_invalid_nested_manage_neuron_proposals() {
             error_message,
         } = result.expect_err(label);
         assert_eq!(
-            error_type, expected_error_type as i32,
+            error_type,
+            ErrorType::InvalidProposal as i32,
             "{label}: {error_message}"
         );
         assert!(
@@ -3228,14 +3233,17 @@ async fn test_invalid_nested_manage_neuron_proposals() {
         );
     }
 
-    // Sanity check: the valid nested proposal is accepted.
-    gov.make_proposal(
-        &NeuronId { id: 1 },
-        &principal(1),
-        &new_nested_manage_neuron_proposal(valid_nested_proposal),
-    )
-    .await
-    .unwrap();
+    // Sanity check: the valid nested proposal is accepted. Since it gets the first proposal ID, no
+    // proposal was created above.
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &new_nested_manage_neuron_proposal(valid_nested_proposal),
+        )
+        .await
+        .unwrap();
+    assert_eq!(proposal_id, ProposalId { id: 1 });
 }
 
 /// Whether the intermediate neuron manages the target of the nested proposal is not checked when
@@ -3244,7 +3252,8 @@ async fn test_invalid_nested_manage_neuron_proposals() {
 #[tokio::test]
 async fn test_nested_manage_neuron_proposal_for_neuron_not_managed_by_intermediate_neuron() {
     // Step 1: Prepare the world. Neuron 7 is managed by neuron 1, not by the intermediate
-    // neuron 4.
+    // neuron 4. (Neuron 7 needs some manager. Otherwise, making the nested proposal would fail for
+    // a different reason: that neuron 7 has no followees on the NeuronManagement topic.)
     let mut gov = new_governance_for_nested_manage_neuron();
 
     // Step 2: Run the code under test.
@@ -3264,8 +3273,7 @@ async fn test_nested_manage_neuron_proposal_for_neuron_not_managed_by_intermedia
         Vote::Yes,
     );
 
-    // Step 3: Verify results. The enclosing proposal was adopted, but failed to execute, and no
-    // nested proposal was made.
+    // Step 3: Verify results. The enclosing proposal was adopted, but failed to execute.
     let outer_proposal = gov.get_proposal_data(outer_proposal_id).unwrap();
     assert_eq!(outer_proposal.status(), ProposalStatus::Failed);
     let failure_reason = outer_proposal.failure_reason.as_ref().unwrap();
@@ -3275,12 +3283,17 @@ async fn test_nested_manage_neuron_proposal_for_neuron_not_managed_by_intermedia
             .contains("Proposer not among the followees"),
         "{failure_reason:?}"
     );
+
+    // No second proposal was created.
     assert_eq!(
         gov.get_proposal_data(ProposalId {
             id: outer_proposal_id.id + 1
         }),
         None
     );
+
+    // The effect of the second proposal did not take place:
+    // Neuron 7 does NOT follow anyone (on the Governance topic).
     assert_eq!(
         gov.neuron_store
             .with_neuron(&NeuronId { id: 7 }, |neuron| {
