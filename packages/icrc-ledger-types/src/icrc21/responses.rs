@@ -288,28 +288,32 @@ impl ConsentMessage {
 
     pub fn add_memo(&mut self, memo: GenericMemo) {
         match memo {
-            GenericMemo::Icrc1Memo(memo) => match self {
-                ConsentMessage::GenericDisplayMessage(message) => {
-                    // The memo is chosen by the caller, so it is shown as text only if
-                    // it cannot alter the surrounding Markdown.
-                    let memo_str = if is_markdown_safe_memo(memo.as_slice()) {
-                        memo.iter().copied().map(char::from).collect()
+            GenericMemo::Icrc1Memo(memo) => {
+                // The memo is chosen by the caller, so it is shown as text only if it
+                // cannot alter how the rest of the consent message is displayed.
+                // Otherwise it is shown as hex, labeled as such so that it cannot be
+                // confused with a text memo that looks like hex.
+                let is_markdown = matches!(self, ConsentMessage::GenericDisplayMessage(_));
+                let text = std::str::from_utf8(memo.as_slice()).ok().filter(|text| {
+                    if is_markdown {
+                        is_markdown_safe_memo(text)
                     } else {
-                        hex::encode(memo.as_slice())
-                    };
-                    message.push_str(&format!("\n\n**Memo:**\n`{memo_str}`"));
-                }
-                ConsentMessage::FieldsDisplayMessage(fields_display) => {
-                    // Field values are plain text, so any valid UTF-8 is shown as such.
-                    let memo_str = match std::str::from_utf8(memo.as_slice()) {
-                        Ok(valid_str) => valid_str.to_string(),
-                        Err(_) => hex::encode(memo.as_slice()),
-                    };
-                    fields_display
+                        is_plain_text_safe_memo(text)
+                    }
+                });
+                let (label, content) = match text {
+                    Some(text) => ("Memo", text.to_string()),
+                    None => ("Memo (hex)", hex::encode(memo.as_slice())),
+                };
+                match self {
+                    ConsentMessage::GenericDisplayMessage(message) => {
+                        message.push_str(&format!("\n\n**{label}:**\n`{content}`"));
+                    }
+                    ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
                         .fields
-                        .push(("Memo".to_string(), Value::Text { content: memo_str }))
+                        .push((label.to_string(), Value::Text { content })),
                 }
-            },
+            }
             GenericMemo::IntMemo(memo) => match self {
                 ConsentMessage::GenericDisplayMessage(message) => {
                     message.push_str(&format!("\n\n**Memo:**\n`{memo}`"));
@@ -330,9 +334,29 @@ impl ConsentMessage {
 /// Whether `memo` can be shown verbatim inside a Markdown code span: printable
 /// ASCII without backticks, so it can neither end the code span nor start a new
 /// block.
-fn is_markdown_safe_memo(memo: &[u8]) -> bool {
-    memo.iter()
-        .all(|&b| (b' '..=b'~').contains(&b) && b != b'`')
+fn is_markdown_safe_memo(memo: &str) -> bool {
+    memo.bytes()
+        .all(|b| (b' '..=b'~').contains(&b) && b != b'`')
+}
+
+/// Whether `memo` can be shown verbatim as a plain-text field value: no control
+/// characters or line and paragraph separators, which could make the memo look
+/// like several fields, and no bidirectional formatting characters, which could
+/// reorder how the text is displayed.
+fn is_plain_text_safe_memo(memo: &str) -> bool {
+    !memo.chars().any(|c| {
+        c.is_control()
+            || matches!(
+                c,
+                '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{061C}'
+                    | '\u{200E}'
+                    | '\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2066}'..='\u{2069}'
+            )
+    })
 }
 
 fn convert_tokens_to_string_representation(
