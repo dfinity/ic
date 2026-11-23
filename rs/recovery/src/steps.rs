@@ -1,7 +1,7 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
-    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, Recovery,
-    STATES_METADATA,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
+    Recovery, STATES_METADATA,
     admin_helper::IcAdmin,
     cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
@@ -801,25 +801,30 @@ impl UploadStateAndRestartStep {
             info!(self.logger, "Stopping replica and crypto vault...");
             confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_STOP_REPLICA), log)?;
 
-            // As for remote recoveries, the state in place is removed and the
-            // new state is moved there. The state can already be absent on
-            // retry, and `-T` never moves the new state inside it.
+            // For local recoveries we first backup the original state, and
+            // then simply `mv` the new state to the upload directory. No
+            // rsync is needed, and thus no checkpoint copying.
+            let backup_path = self.work_dir.join(OLD_IC_STATE);
             info!(
                 self.logger,
-                "Removing the state in {}...",
-                ic_state_path.display()
+                "Moving original state into {}...",
+                backup_path.display()
             );
-            let mut rm_state = Command::new("sudo");
-            rm_state.arg("rm").arg("-rf").arg(&ic_state_path);
-            confirm_exec_cmd(&mut rm_state, log)?;
+            // With `-T`, the move fails if the backup already holds a state,
+            // e.g. from an earlier run, instead of moving the original state
+            // inside it.
+            let mut cmd_backup_state = Command::new("sudo");
+            cmd_backup_state.arg("mv").arg("-T");
+            cmd_backup_state.arg(&ic_state_path);
+            cmd_backup_state.arg(backup_path);
+            confirm_exec_cmd(&mut cmd_backup_state, log)?;
 
             info!(self.logger, "Moving state locally...");
+            // `-T` never moves the new state inside a state in place.
             let mut mv_to_target = Command::new("sudo");
-            mv_to_target
-                .arg("mv")
-                .arg("-T")
-                .arg(&self.data_src)
-                .arg(&ic_state_path);
+            mv_to_target.arg("mv").arg("-T");
+            mv_to_target.arg(&self.data_src);
+            mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
         }
         Ok(())

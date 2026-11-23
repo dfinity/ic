@@ -70,6 +70,7 @@ struct RecordedRegistryVersion {
 /// |  |   |   |   |-- ${recovery_height}/
 /// |  |   |-- upload/
 /// |  |   |   |-- ic_state/         (a copy of the merged state)
+/// |  |   |-- old_ic_state/         (the state a local upload found on the node)
 pub(crate) struct Layout {
     root: PathBuf,
 }

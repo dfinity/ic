@@ -73,6 +73,7 @@ pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const STATES_METADATA: &str = "states_metadata.pbuf";
 pub const CHECKPOINTS: &str = "checkpoints";
