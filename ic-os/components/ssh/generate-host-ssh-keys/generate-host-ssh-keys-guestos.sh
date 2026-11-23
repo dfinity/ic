@@ -49,7 +49,7 @@ if [ "${TEE_ENABLED}" = 0 ]; then
     fi
     for FILE in "${KEY_FILES[@]}"; do
         if [ -f "${KEY_DIR}/${FILE}" ]; then
-            cp "${KEY_DIR}/${FILE}" /run/ic-node/etc/ssh/
+            cp --remove-destination "${KEY_DIR}/${FILE}" /run/ic-node/etc/ssh/
         fi
     done
 else

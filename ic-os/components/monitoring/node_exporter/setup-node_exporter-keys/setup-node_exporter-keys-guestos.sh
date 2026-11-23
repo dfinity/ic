@@ -35,8 +35,10 @@ if [ "${TEE_ENABLED}" = 0 ]; then
         create_key_dir "${KEY_DIR}" generate_keys
     fi
     # Only install the key pair, nothing else from the key directory.
+    # --remove-destination: create new files with the source's mode, rather
+    # than writing into the world-readable placeholders copied above.
     for FILE in "${KEY_FILES[@]}"; do
-        cp "${KEY_DIR}/${FILE}" /run/ic-node/etc/node_exporter/
+        cp --remove-destination "${KEY_DIR}/${FILE}" /run/ic-node/etc/node_exporter/
     done
 else
     if mountpoint -q /var/lib/ic/data; then

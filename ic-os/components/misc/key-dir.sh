@@ -12,6 +12,13 @@
 # filesystem check rules out root-owned private directories elsewhere, e.g.
 # ones that sudo-able root scripts create in /tmp.)
 #
+# Some root-run scripts chown fixed paths under /var/lib/ic/data recursively to
+# ic-replica (bootstrap-ic-node, and setup-permissions.sh for e.g.
+# "orchestrator"). So ic-replica can get a key directory chowned to itself, by
+# renaming it to such a path, and then read the keys in it. Such a directory
+# fails the checks below, and only root could make it pass them again. Its keys
+# are thus replaced, and never used again.
+#
 # The checks and the use of a directory are done from inside it (cd -P), so
 # that it cannot be swapped for another one in between.
 
@@ -43,7 +50,9 @@ copy_from_trusted_key_dir() {
                 exit 1
             fi
         done
-        cp "$@" "${DEST_DIR}/"
+        # --remove-destination: create new files with the source's mode, rather
+        # than writing into existing ones (e.g. world-readable placeholders).
+        cp --remove-destination "$@" "${DEST_DIR}/"
     )
 }
 
@@ -72,4 +81,6 @@ create_key_dir() {
     rm -rf "${KEY_DIR}"
     # -T: fail, rather than move into a directory created at KEY_DIR meanwhile.
     mv -T "${NEW_DIR}" "${KEY_DIR}"
+    # Make the rename durable, so that the keys survive a power loss.
+    sync "$(dirname "${KEY_DIR}")"
 }
