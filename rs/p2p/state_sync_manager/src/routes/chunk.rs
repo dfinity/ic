@@ -10,7 +10,7 @@ use axum::{
 use bytes::BytesMut;
 use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, StateSyncArtifactId, StateSyncClient};
 use ic_logger::ReplicaLogger;
-use ic_protobuf::p2p::v1 as pb;
+use ic_protobuf::{p2p::v1 as pb, proxy::try_from_option_field};
 use prost::Message;
 
 pub const STATE_SYNC_CHUNK_PATH: &str = "/state-sync/chunk";
@@ -45,8 +45,8 @@ pub(crate) async fn state_sync_chunk_handler<T: 'static>(
     // Parse payload
     let pb::StateSyncChunkRequest { id, chunk_id } =
         pb::StateSyncChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let artifact_id = StateSyncArtifactId::try_from(id.ok_or(StatusCode::BAD_REQUEST)?)
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let artifact_id: StateSyncArtifactId =
+        try_from_option_field(id, "id").map_err(|_| StatusCode::BAD_REQUEST)?;
     let chunk_id = ChunkId::from(chunk_id);
 
     let jh =

@@ -1,5 +1,8 @@
 use ic_interfaces::p2p::state_sync::StateSyncArtifactId;
-use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
+use ic_protobuf::{
+    p2p::v1 as pb,
+    proxy::{ProxyDecodeError, try_from_option_field},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Advert {
@@ -19,9 +22,7 @@ impl TryFrom<pb::Advert> for Advert {
 
     fn try_from(advert: pb::Advert) -> Result<Self, Self::Error> {
         Ok(Advert {
-            id: StateSyncArtifactId::try_from(
-                advert.id.ok_or(ProxyDecodeError::MissingField("id"))?,
-            )?,
+            id: try_from_option_field(advert.id, "id")?,
         })
     }
 }
