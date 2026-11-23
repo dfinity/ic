@@ -93,7 +93,13 @@ fn should_not_deserialize_a_transcript_with_repeated_entries() {
     let rng = &mut reproducible_rng();
     let transcript = IDkgTranscript::exhaustive_set(rng)
         .into_iter()
-        .find(|transcript| !transcript.verified_dealings.is_empty())
+        .find(|transcript| {
+            transcript
+                .verified_dealings
+                .values()
+                .next()
+                .is_some_and(|dealing| !dealing.signature.signatures_map.is_empty())
+        })
         .unwrap();
     crate::tests::assert_repeated_entries_fail_to_decode(
         &IDkgTranscriptProto::from(&transcript),
@@ -104,6 +110,11 @@ fn should_not_deserialize_a_transcript_with_repeated_entries() {
                 proto
                     .verified_dealings
                     .push(proto.verified_dealings[0].clone())
+            },
+            |proto| {
+                let dealing = &mut proto.verified_dealings[0];
+                let support = dealing.support_tuples[0].clone();
+                dealing.support_tuples.push(support);
             },
         ],
     );

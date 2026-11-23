@@ -537,19 +537,10 @@ fn verified_dealings_map(
 fn basic_signature_batch_struct(
     signature_batch: Vec<SignatureTuple>,
 ) -> Result<BasicSignatureBatch<SignedIDkgDealing>, ProxyDecodeError> {
-    let mut signatures_map = BTreeMap::new();
-    for tuple in signature_batch {
+    let signatures_map = crate::try_collect_map(signature_batch, |tuple| {
         let signer = node_id_try_from_option(tuple.signer)?;
-        let signature = BasicSigOf::new(BasicSig(tuple.signature));
-        if signatures_map.insert(signer, signature).is_some() {
-            return Err(
-                InitialIDkgDealingsValidationError::MultipleSupportSharesFromSameReceiver {
-                    node_id: signer,
-                }
-                .into(),
-            );
-        };
-    }
+        Ok((signer, BasicSigOf::new(BasicSig(tuple.signature))))
+    })?;
     Ok(BasicSignatureBatch { signatures_map })
 }
 

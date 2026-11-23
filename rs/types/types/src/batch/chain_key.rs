@@ -124,19 +124,11 @@ pub fn chain_key_payload_to_bytes(payload: ChainKeyPayload, max_size: NumBytes) 
 pub fn bytes_to_chain_key_payload(data: &[u8]) -> Result<ChainKeyPayload, ProxyDecodeError> {
     let messages: Vec<ChainKeyAgreementProto> =
         slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
-    let mut payload = ChainKeyPayload::default();
-
-    for message in messages {
-        let callback_id = CallbackId::from(message.callback_id);
-        let response = try_from_option_field(message.agreement, "ChainKeyAgreement::agreement")?;
-        if payload.agreements.insert(callback_id, response).is_some() {
-            return Err(ProxyDecodeError::Other(format!(
-                "Duplicate callback id {callback_id} found in ChainKeyPayload"
-            )));
-        };
-    }
-
-    Ok(payload)
+    let agreements = crate::try_collect_map(messages, |message| {
+        let agreement = try_from_option_field(message.agreement, "ChainKeyAgreement::agreement")?;
+        Ok((CallbackId::from(message.callback_id), agreement))
+    })?;
+    Ok(ChainKeyPayload { agreements })
 }
 
 #[cfg(test)]
@@ -247,8 +239,8 @@ mod tests {
 
         assert_matches!(
             err,
-            ProxyDecodeError::Other(ref message)
-            if message.contains(format!("Duplicate callback id {callback_id}").as_str())
+            ProxyDecodeError::DuplicateEntry { ref key, .. }
+            if *key == format!("{:?}", CallbackId::from(callback_id))
         );
     }
 }
