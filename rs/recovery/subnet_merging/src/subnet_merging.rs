@@ -4,8 +4,8 @@ use crate::{
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
         ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        ProposeRecoveryCupStep, StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep,
-        ValidateCupStep, WaitForHaltingCupStep,
+        ProposeRecoveryCupStep, RestartDestinationReplicaStep, StopReplicaAtHaltingCheckpointStep,
+        UploadMergedStateStep, ValidateCupStep, WaitForHaltingCupStep,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -103,9 +103,10 @@ pub enum StepType {
     /// Submit a proposal for a recovery CUP of the destination subnet at the
     /// merged state.
     ProposeCupForDestinationSubnet,
-    /// Upload the merged state to a node of the destination subnet and restart
-    /// its replica.
+    /// Upload the merged state to a node of the destination subnet.
     UploadStateToDestinationSubnet,
+    /// Set permissions on the installed state and restart the destination node's replica.
+    RestartDestinationReplica,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -279,6 +280,7 @@ impl SubnetMerging {
                     StepType::StopDestinationReplica,
                     StepType::DownloadStateFromDestinationSubnet,
                     StepType::UploadStateToDestinationSubnet,
+                    StepType::RestartDestinationReplica,
                 ][..],
                 args.destination_node,
                 "--destination-node",
@@ -592,7 +594,7 @@ impl SubnetMerging {
 
     /// The node used for every step that accesses a subnet: waiting for CUPs,
     /// stopping its replica, downloading its state and, for the destination
-    /// subnet, uploading the merged state to it.
+    /// subnet, uploading the merged state and restarting its replica.
     ///
     /// Every step that needs the node prompts for it, and it is checked upfront
     /// when prompts are skipped, so it is only missing if something went wrong.
@@ -688,7 +690,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::WaitForHaltingCupOnDestinationSubnet
             | StepType::StopDestinationReplica
             | StepType::DownloadStateFromDestinationSubnet
-            | StepType::UploadStateToDestinationSubnet => {
+            | StepType::UploadStateToDestinationSubnet
+            | StepType::RestartDestinationReplica => {
                 if self.params.destination_node.is_none() {
                     self.params.destination_node = Some(read_data_location(
                         &self.logger,
@@ -819,6 +822,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             }
             .into(),
             StepType::UploadStateToDestinationSubnet => self.upload_merged_state_step()?.into(),
+            StepType::RestartDestinationReplica => RestartDestinationReplicaStep {
+                node: self.node_access(TargetSubnet::Destination)?,
+                require_confirmation: self.recovery.ssh_confirmation,
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
         };
 
         Ok(step)
@@ -896,6 +905,7 @@ mod tests {
             StepType::StopDestinationReplica,
             StepType::DownloadStateFromDestinationSubnet,
             StepType::UploadStateToDestinationSubnet,
+            StepType::RestartDestinationReplica,
         ] {
             let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
             assert!(err.contains("--destination-node"), "{err}");
@@ -972,12 +982,13 @@ mod tests {
         assert!(SubnetMerging::check_nodes(&args).is_ok());
         args.destination_node = None;
 
-        // Resumed at that step, no node is needed if the step is skipped.
-        args.next_step = Some(StepType::UploadStateToDestinationSubnet);
+        // Resuming after upload still needs the destination node for the restart.
+        args.next_step = Some(StepType::RestartDestinationReplica);
         let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
         assert!(err.contains("--destination-node"), "{err}");
+        assert!(err.contains("RestartDestinationReplica"), "{err}");
 
-        args.skip = Some(vec![StepType::UploadStateToDestinationSubnet]);
+        args.skip = Some(vec![StepType::RestartDestinationReplica]);
         assert!(SubnetMerging::check_nodes(&args).is_ok());
         args.skip = None;
 

@@ -149,9 +149,10 @@ Runbook::
    Recovering a subnet that was instructed to halt at its next CUP replaces
    that instruction with a plain halt, so also check that `D` is halted.
 21. Execute `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
-   node, replacing the state directory holding the checkpoint it halted at, and
-   starts its replica back up.
-22. After `UploadStateToDestinationSubnet`: check that the checkpoints directory
+   node, replacing the state directory holding the checkpoint it halted at.
+22. Execute `RestartDestinationReplica` to set permissions on the installed
+   state and start the vault and replica on that node.
+23. After `RestartDestinationReplica`: check that the checkpoints directory
    of `D`'s node holds exactly the merged checkpoint, and that the replica on
    that node is running again and started from it.
 
@@ -663,7 +664,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 22: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 23: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -780,6 +781,8 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                     logger,
                     "Step 21 done: the merged state is uploaded to the node of subnet D"
                 );
+            }
+            StepType::RestartDestinationReplica => {
                 let node = merge_node_snapshot(&context.d_subnet);
                 let (merged_path, _) = merged_checkpoint(env);
                 let checkpoint = merged_path.file_name().unwrap().to_string_lossy();
@@ -790,7 +793,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                 ));
                 info!(
                     logger,
-                    "Step 22 done: the replica on {} started from the merged checkpoint {checkpoint}",
+                    "Step 23 done: the replica on {} started from the merged checkpoint {checkpoint}",
                     node.get_ip_addr()
                 );
             }

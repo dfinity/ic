@@ -48,13 +48,33 @@ pub const CMD_STOP_REPLICA: &str = "\
 ///
 /// `setup-permissions` aborts if a file disappears while it walks `/var/lib/ic`, leaving the
 /// directories it hasn't reached yet, such as a replaced `ic_state`, with the wrong owner. So,
-/// as at boot, it must not run while the crypto vault is running. The commands are joined by `;`
-/// so that the vault and ic-replica are started even if `setup-permissions` fails.
-pub const CMD_RESTART_REPLICA: &str = "\
-    sudo systemctl restart setup-permissions;\n\
-    sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service;\n\
-    sudo systemctl start ic-replica;\n\
-    sudo systemctl status ic-replica;";
+/// as at boot, it must not run while the crypto vault is running. Always attempt to start
+/// the vault and ic-replica even if `setup-permissions` fails.
+///
+/// The final status check determines the command's exit status. A separately retryable restart
+/// can return `first_restart_error` instead, after all commands have run.
+pub const CMD_RESTART_REPLICA: &str = r#"
+first_restart_error=0
+run_systemctl() {
+    sudo systemctl "$@" && return 0
+    status=$?
+    printf 'sudo systemctl %s failed with exit status %s\n' "$*" "$status" >&2
+    if [ "$first_restart_error" -eq 0 ]; then first_restart_error=$status; fi
+    return "$status"
+}
+run_systemctl restart setup-permissions
+run_systemctl start ic-crypto-csp.socket ic-crypto-csp.service
+run_systemctl start ic-replica
+run_systemctl status ic-replica
+"#;
+
+/// Stop the replica and vault before each restart attempt. A previous attempt may have
+/// started them even if setting permissions failed. Report the first failure to the caller.
+pub fn stop_and_restart_replica_command() -> String {
+    format!(
+        "(set -x; {CMD_STOP_REPLICA}) || exit $?\n{CMD_RESTART_REPLICA}\nexit \"$first_restart_error\""
+    )
+}
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -679,20 +699,30 @@ pub struct UploadStateAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
-impl Step for UploadStateAndRestartStep {
-    fn descr(&self) -> String {
-        let replica = match self.upload_method {
-            DataLocation::Remote(ip) => &format!("replica {ip}"),
-            DataLocation::Local => "local replica",
-        };
+impl UploadStateAndRestartStep {
+    fn node(&self) -> ExecutionMode {
+        match self.upload_method {
+            DataLocation::Remote(ip) => ExecutionMode::Remote(SshHelper::new(
+                self.logger.clone(),
+                self.ssh_user.clone(),
+                ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            )),
+            DataLocation::Local => ExecutionMode::Local,
+        }
+    }
+
+    pub fn upload_description(&self) -> String {
         format!(
-            "Stopping {replica} and its crypto vault, uploading and replacing state from {}, \
-            set access rights, restart crypto vault and replica.",
+            "Stop the replica and its crypto vault on {} and replace the state with the one from {}.",
+            self.node(),
             self.data_src.display()
         )
     }
 
-    fn exec(&self) -> RecoveryResult<()> {
+    /// Install the state and leave the replica stopped.
+    pub fn upload_state(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -718,15 +748,7 @@ impl Step for UploadStateAndRestartStep {
         let ic_state_path = PathBuf::from(IC_DATA_PATH).join(IC_STATE);
 
         // Decide: remote or local recovery
-        if let DataLocation::Remote(node_ip) = self.upload_method {
-            let ssh_helper = SshHelper::new(
-                self.logger.clone(),
-                self.ssh_user.clone(),
-                node_ip,
-                self.require_confirmation,
-                self.key_file.clone(),
-            );
-
+        if let ExecutionMode::Remote(ssh_helper) = self.node() {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
@@ -789,10 +811,9 @@ impl Step for UploadStateAndRestartStep {
                 upload_dir = upload_dir.display()
             );
 
-            info!(self.logger, "Restarting replica...");
+            info!(self.logger, "Stopping replica and crypto vault...");
             ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
             ssh_helper.ssh(cmd_replace_state)?;
-            ssh_helper.ssh(CMD_RESTART_REPLICA.to_string())?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
             info!(self.logger, "Stopping replica and crypto vault...");
@@ -828,10 +849,26 @@ impl Step for UploadStateAndRestartStep {
             mv_to_target.arg(&self.data_src);
             mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
-
-            info!(self.logger, "Restarting replica...");
-            confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_RESTART_REPLICA), log)?;
         }
+        Ok(())
+    }
+}
+
+impl Step for UploadStateAndRestartStep {
+    fn descr(&self) -> String {
+        format!(
+            "{} Set access rights and restart the crypto vault and replica.",
+            self.upload_description()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        self.upload_state()?;
+        info!(self.logger, "Restarting replica...");
+        self.node().execute(
+            CMD_RESTART_REPLICA.to_string(),
+            self.require_confirmation.then_some(&self.logger),
+        )?;
         Ok(())
     }
 }
@@ -1295,6 +1332,46 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn restart_reports_the_first_failure_and_retries_only_the_service_commands() {
+        for (setup, status, expected) in [(42, 0, 42), (0, 0, 0), (42, 17, 42), (0, 17, 17)] {
+            let script = format!(
+                r#"sudo() {{
+    echo "$*"
+    case "$2" in
+        restart) return {setup} ;;
+        status) return {status} ;;
+    esac
+}}
+{}"#,
+                stop_and_restart_replica_command()
+            );
+            let output = Command::new("sh").arg("-c").arg(script).output().unwrap();
+            assert_eq!(output.status.code(), Some(expected));
+            assert_eq!(
+                String::from_utf8(output.stdout)
+                    .unwrap()
+                    .lines()
+                    .collect::<Vec<_>>(),
+                [
+                    "systemctl stop ic-replica",
+                    "systemctl stop ic-crypto-csp.socket ic-crypto-csp.service",
+                    "systemctl restart setup-permissions",
+                    "systemctl start ic-crypto-csp.socket ic-crypto-csp.service",
+                    "systemctl start ic-replica",
+                    "systemctl status ic-replica",
+                ]
+            );
+            if setup != 0 {
+                let errors = String::from_utf8(output.stderr).unwrap();
+                assert!(
+                    errors.contains("restart setup-permissions failed with exit status 42"),
+                    "{errors}"
+                );
+            }
+        }
+    }
 
     fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {

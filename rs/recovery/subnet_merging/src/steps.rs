@@ -20,7 +20,7 @@ use ic_recovery::{
     registry_helper::RegistryHelper,
     steps::{
         AdminStep, CMD_STOP_REPLICA, CopyLocalIcStateStep, DownloadIcDataStep, Step,
-        UploadStateAndRestartStep,
+        UploadStateAndRestartStep, stop_and_restart_replica_command,
     },
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
@@ -836,8 +836,7 @@ impl Step for ProposeRecoveryCupStep {
 }
 
 /// Replaces the state of the node of the destination subnet, whose replica was
-/// stopped before its state was downloaded, with the merged state, and starts
-/// the replica back up on it.
+/// stopped before its state was downloaded, with the merged state.
 ///
 /// If the tool runs on that node, a copy of the merged state is moved into
 /// place, because the merged checkpoint's files are hard links into the tool's
@@ -886,7 +885,7 @@ impl UploadMergedStateStep {
 
 impl Step for UploadMergedStateStep {
     fn descr(&self) -> String {
-        let upload = self.upload_step().descr();
+        let upload = self.upload_step().upload_description();
         match self.node {
             DataLocation::Local => format!(
                 "Copy the merged state {} to {}, so that it shares no files with the downloaded \
@@ -903,6 +902,31 @@ impl Step for UploadMergedStateStep {
             info!(self.logger, "Copying the merged state...");
             self.copy_merged_state()?;
         }
-        self.upload_step().exec()
+        self.upload_step().upload_state()
+    }
+}
+
+/// Restart the destination replica on the installed merged state.
+pub(crate) struct RestartDestinationReplicaStep {
+    pub(crate) node: ExecutionMode,
+    pub(crate) require_confirmation: bool,
+    pub(crate) logger: Logger,
+}
+
+impl Step for RestartDestinationReplicaStep {
+    fn descr(&self) -> String {
+        format!(
+            "Stop the replica and crypto vault on {}, run setup-permissions, then start the \
+             vault and replica and check the replica's status.",
+            self.node
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        self.node.execute(
+            stop_and_restart_replica_command(),
+            self.require_confirmation.then_some(&self.logger),
+        )?;
+        Ok(())
     }
 }
