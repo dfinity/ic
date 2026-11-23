@@ -1016,7 +1016,7 @@ wasmtime = { version = "48.0.7", default-features = false, features = [
 wast = "254.0.0"
 wat = "~1.254.0"
 webpki-roots = "1.0.6"
-wirm = { version = "4.0.4", features = ["parallel"] }
+wirm = { version = "5.2.0", features = ["parallel"] }
 wycheproof = { version = "0.7", default-features = false }
 x509-cert = { version = "0.3.0", features = ["builder"] }
 x509-parser = { version = "0.18.1" }

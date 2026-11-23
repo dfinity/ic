@@ -23,7 +23,7 @@ pub const MAX_GLOBALS: usize = 1000;
 // NOTE. The following constant is contained in the public Interface Specification.
 // Please update the corresponding section (https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/)
 // if you change its value.
-pub(crate) const MAX_FUNCTIONS: usize = 50000;
+pub const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.
 // NOTE. The following constant is contained in the public Interface Specification.
 // Please update the corresponding section (https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/)
