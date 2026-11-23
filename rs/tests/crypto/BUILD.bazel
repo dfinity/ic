@@ -304,6 +304,9 @@ system_test(
 
 system_test(
     name = "ingress_verification_test",
+    aliases = {
+        "@crate_index//:rand_0_10": "rand_0_10",
+    },
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",
@@ -336,6 +339,7 @@ system_test(
         "@crate_index//:leb128",
         "@crate_index//:p256",
         "@crate_index//:rand",
+        "@crate_index//:rand_0_10",
         "@crate_index//:reqwest",
         "@crate_index//:rsa",
         "@crate_index//:serde",

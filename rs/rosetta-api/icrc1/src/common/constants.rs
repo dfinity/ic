@@ -39,5 +39,9 @@ pub const MAX_SIGNATURE_BYTES: usize = 64;
 /// Maximum size of a public key in `/construction/combine`, which is copied into every envelope
 /// like the signature. This is the size of an uncompressed secp256k1 public key.
 pub const MAX_PUBLIC_KEY_BYTES: usize = 65;
+/// Candid skipping quota for decoding the ledger method arguments of client-supplied envelopes.
+/// The size limit alone does not bound the decoding work, so this applies the same quota as the
+/// `ic_cdk` endpoint macros of the ledger methods being called.
+pub const CANISTER_METHOD_ARGS_SKIPPING_QUOTA: usize = 10_000;
 pub const STATUS_COMPLETED: &str = "COMPLETED";
 pub const MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST: u64 = 10000;

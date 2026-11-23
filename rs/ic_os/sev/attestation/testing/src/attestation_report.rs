@@ -2,7 +2,8 @@ use attestation::LAUNCH_MEASUREMENT_LEN;
 use p384::ecdsa::Signature;
 use p384::ecdsa::signature::Signer;
 use p384::pkcs8::EncodePublicKey;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
+use rand_0_10::SeedableRng as _;
 use rsa::PrivateKey;
 use rsa::sha2::Sha384;
 use sev::Generation;
@@ -114,15 +115,17 @@ impl FakeAttestationReportSigner {
 
     pub fn new(seed: [u8; 32]) -> Self {
         let mut rng = rand::rngs::StdRng::from_seed(seed);
+        // `rsa` and x509-cert take a rand 0.10 RNG.
+        let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
 
         // ARK - RSA with RSASSA-PSS (root cert)
-        let ark_key = PrivateKey::new(&mut RandCore10(&mut rng), 1024).unwrap();
+        let ark_key = PrivateKey::new(&mut rsa_rng, 1024).unwrap();
         let ark_cert = create_certificate(
             "ARK",
             SubjectPublicKeyInfo::from_key(&ark_key.to_public_key()).unwrap(),
             ark_key.clone(),
             None,
-            &mut rng,
+            &mut rsa_rng,
         )
         .unwrap();
 
@@ -133,7 +136,7 @@ impl FakeAttestationReportSigner {
             SubjectPublicKeyInfo::from_key(&ask_key.to_public_key()).unwrap(),
             ark_key,
             Some(&ark_cert),
-            &mut rng,
+            &mut rsa_rng,
         )
         .unwrap();
 
@@ -147,7 +150,7 @@ impl FakeAttestationReportSigner {
             SubjectPublicKeyInfo::try_from(vcek_public_key_der.as_bytes()).unwrap(),
             ask_key,
             Some(&ask_cert),
-            &mut rng,
+            &mut rsa_rng,
         )
         .unwrap();
 
@@ -206,7 +209,7 @@ impl Default for FakeAttestationReportSigner {
     }
 }
 
-fn create_certificate<R: rand::RngCore + rand::CryptoRng>(
+fn create_certificate<R: rand_0_10::CryptoRng>(
     subject: &str,
     subject_public_key_info: SubjectPublicKeyInfo,
     issuer_key: PrivateKey,
@@ -226,7 +229,7 @@ fn create_certificate<R: rand::RngCore + rand::CryptoRng>(
     )?
     .build_with_rng::<_, rsa::pss::Signature, _>(
         &rsa::pss::SigningKey::<Sha384>::new(issuer_key),
-        &mut RandCore10(rng),
+        rng,
     )?;
 
     Ok(cert)
@@ -278,29 +281,6 @@ impl BuilderProfile for CaProfile {
         Ok(extensions)
     }
 }
-
-/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` and x509-cert's
-/// `Builder::build_with_rng` take.
-struct RandCore10<'a, R>(&'a mut R);
-
-impl<R: rand::RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
-    type Error = std::convert::Infallible;
-
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.0.next_u32())
-    }
-
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        Ok(self.0.next_u64())
-    }
-
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        self.0.fill_bytes(dst);
-        Ok(())
-    }
-}
-
-impl<R: rand::RngCore + rand::CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 fn convert_signature(signature: &Signature) -> AttestationReportSignature {
     let mut r_source = signature.r().to_bytes();

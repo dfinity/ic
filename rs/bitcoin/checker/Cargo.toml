@@ -27,7 +27,6 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-cdk = { workspace = true }
 ic-cdk-management-canister = { workspace = true }
-ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = { workspace = true }
 ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
@@ -36,6 +35,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
 url = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
