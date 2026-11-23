@@ -688,6 +688,15 @@ fn state_upload_includes(has_states_metadata: bool) -> Vec<&'static Path> {
     includes
 }
 
+fn replace_remote_state_command(upload_dir: &Path, ic_state_path: &Path) -> String {
+    // The live state can already be absent on retry. Never move the staged state inside it.
+    format!(
+        "sudo rm -rf {ic_state_path} && sudo mv -T {upload_dir} {ic_state_path}",
+        ic_state_path = ic_state_path.display(),
+        upload_dir = upload_dir.display(),
+    )
+}
+
 pub struct UploadStateAndRestartStep {
     pub logger: Logger,
     pub ssh_user: SshUser,
@@ -805,15 +814,9 @@ impl UploadStateAndRestartStep {
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
-            let cmd_replace_state = format!(
-                "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};",
-                ic_state_path = ic_state_path.display(),
-                upload_dir = upload_dir.display()
-            );
-
             info!(self.logger, "Stopping replica and crypto vault...");
             ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
-            ssh_helper.ssh(cmd_replace_state)?;
+            ssh_helper.ssh(replace_remote_state_command(&upload_dir, &ic_state_path))?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
             info!(self.logger, "Stopping replica and crypto vault...");
@@ -1608,6 +1611,42 @@ mod tests {
                 has_states_metadata
             );
         }
+    }
+
+    #[cfg(target_os = "linux")] // The command runs on GuestOS and uses GNU mv.
+    #[test]
+    fn remote_state_replacement_propagates_failures_and_retries_after_removal() {
+        let node = TempDir::new().unwrap();
+        let live = node.path().join(IC_STATE);
+        let staged = node.path().join(NEW_IC_STATE);
+        std::fs::create_dir(&live).unwrap();
+        std::fs::write(live.join("old"), b"old").unwrap();
+        std::fs::create_dir(&staged).unwrap();
+        std::fs::write(staged.join("merged"), b"merged").unwrap();
+
+        let replace = replace_remote_state_command(Path::new(NEW_IC_STATE), Path::new(IC_STATE));
+        let run = |rm_override: &str| {
+            let script = format!("sudo() {{ \"$@\"; }}\n{rm_override}\n{replace}");
+            Command::new("sh")
+                .args(["-c", &script])
+                .current_dir(node.path())
+                .output()
+                .unwrap()
+                .status
+        };
+
+        assert_eq!(run("rm() { return 42; }").code(), Some(42));
+        // Model a nonempty destination appearing between a successful rm and the mv.
+        assert!(!run("rm() { return 0; }").success());
+        assert!(live.join("old").exists());
+        assert!(staged.join("merged").exists());
+        assert!(!live.join(NEW_IC_STATE).exists());
+
+        // Retry after an interruption between rm and mv.
+        std::fs::remove_dir_all(&live).unwrap();
+        assert!(run("").success());
+        assert_eq!(std::fs::read(live.join("merged")).unwrap(), b"merged");
+        assert!(!staged.exists());
     }
 
     #[test]
