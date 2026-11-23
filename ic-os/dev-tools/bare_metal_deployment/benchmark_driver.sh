@@ -51,7 +51,7 @@ ssh "${O[@]}" "admin@${HOSTOS_IP}" sudo bash -s <<'EOF'
 cd /var/log/libvirt/qemu && ls -la
 for f in *serial*; do
     echo "== ${f}"
-    grep -a -E 'Linux version|Command line|Memory:|SEV|[Uu]naccepted|accept|deferred pages|Freeing unused kernel|Run /|Startup finished' "${f}" | tail -40
+    grep -a -E 'Linux version|Command line|Memory:|SEV|[Uu]naccepted|accept|deferred pages|Freeing unused kernel|Run /|Startup finished|Finished|BOOT FAILURE' "${f}" | grep -a -v 'Job accept-memory' | tail -60
 done
 for f in *.log; do
     case "${f}" in *serial*) continue ;; esac
