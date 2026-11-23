@@ -1907,35 +1907,41 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
 impl TryFrom<pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
     fn try_from(payload: pb::IDkgPayload) -> Result<Self, Self::Error> {
-        let mut key_transcripts = BTreeMap::new();
-
-        for key_transcript_proto in payload.key_transcripts {
-            let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
-
-            key_transcripts.insert(key_transcript.key_id(), key_transcript);
-        }
+        let key_transcripts =
+            crate::try_collect_map(payload.key_transcripts.into_iter().map(|proto| {
+                let key_transcript = MasterKeyTranscript::try_from(proto)?;
+                Ok((key_transcript.key_id(), key_transcript))
+            }))?;
 
         // available_pre_signatures
-        let mut available_pre_signatures = BTreeMap::new();
-        for available_pre_signature in payload.available_pre_signatures {
-            let pre_signature_id = PreSigId(available_pre_signature.pre_signature_id);
-            let pre_signature: PreSignatureRef = try_from_option_field(
-                available_pre_signature.pre_signature,
-                "IDkgPayload::available_pre_signature::pre_signature",
-            )?;
-            available_pre_signatures.insert(pre_signature_id, pre_signature);
-        }
+        let available_pre_signatures =
+            crate::try_collect_map(payload.available_pre_signatures.into_iter().map(
+                |available_pre_signature| {
+                    let pre_signature: PreSignatureRef = try_from_option_field(
+                        available_pre_signature.pre_signature,
+                        "IDkgPayload::available_pre_signature::pre_signature",
+                    )?;
+                    Ok((
+                        PreSigId(available_pre_signature.pre_signature_id),
+                        pre_signature,
+                    ))
+                },
+            ))?;
 
         // pre_signatures_in_creation
-        let mut pre_signatures_in_creation = BTreeMap::new();
-        for pre_signature_in_creation in payload.pre_signatures_in_creation {
-            let pre_signature_id = PreSigId(pre_signature_in_creation.pre_signature_id);
-            let pre_signature: PreSignatureInCreation = try_from_option_field(
-                pre_signature_in_creation.pre_signature,
-                "IDkgPayload::pre_signature_in_creation::pre_signature",
-            )?;
-            pre_signatures_in_creation.insert(pre_signature_id, pre_signature);
-        }
+        let pre_signatures_in_creation =
+            crate::try_collect_map(payload.pre_signatures_in_creation.into_iter().map(
+                |pre_signature_in_creation| {
+                    let pre_signature: PreSignatureInCreation = try_from_option_field(
+                        pre_signature_in_creation.pre_signature,
+                        "IDkgPayload::pre_signature_in_creation::pre_signature",
+                    )?;
+                    Ok((
+                        PreSigId(pre_signature_in_creation.pre_signature_id),
+                        pre_signature,
+                    ))
+                },
+            ))?;
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
             payload.next_unused_transcript_id,
@@ -1948,53 +1954,51 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         };
 
         // idkg_transcripts
-        let mut idkg_transcripts = BTreeMap::new();
-        for proto in payload.idkg_transcripts {
-            let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "IDkgPayload:: Failed to convert transcript: {err:?}"
-                ))
-            })?;
-            let transcript_id = transcript.transcript_id;
-            if idkg_transcripts.insert(transcript_id, transcript).is_some() {
-                return Err(ProxyDecodeError::DuplicateEntry {
-                    key: format!("{transcript_id:?}"),
-                    v1: String::new(),
-                    v2: String::new(),
-                });
-            }
-        }
+        let idkg_transcripts =
+            crate::try_collect_map(payload.idkg_transcripts.into_iter().map(|proto| {
+                let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
+                    ProxyDecodeError::Other(format!(
+                        "IDkgPayload:: Failed to convert transcript: {err:?}"
+                    ))
+                })?;
+                Ok((transcript.transcript_id, transcript))
+            }))?;
 
         // ongoing_xnet_reshares
-        let mut ongoing_xnet_reshares = BTreeMap::new();
-        for reshare in payload.ongoing_xnet_reshares {
-            let request: IDkgReshareRequest =
-                try_from_option_field(reshare.request, "IDkgPayload::reshare::request")?;
-
-            let transcript: ReshareOfUnmaskedParams =
-                try_from_option_field(reshare.transcript, "IDkgPayload::reshare::transcript")?;
-            ongoing_xnet_reshares.insert(request, transcript);
-        }
+        let ongoing_xnet_reshares =
+            crate::try_collect_map(payload.ongoing_xnet_reshares.into_iter().map(|reshare| {
+                let request: IDkgReshareRequest =
+                    try_from_option_field(reshare.request, "IDkgPayload::reshare::request")?;
+                let transcript: ReshareOfUnmaskedParams =
+                    try_from_option_field(reshare.transcript, "IDkgPayload::reshare::transcript")?;
+                Ok((request, transcript))
+            }))?;
 
         // xnet_reshare_agreements
-        let mut xnet_reshare_agreements = BTreeMap::new();
-        for agreement in payload.xnet_reshare_agreements {
-            let request: IDkgReshareRequest =
-                try_from_option_field(agreement.request, "IDkgPayload::agreement::request")?;
+        let xnet_reshare_agreements = crate::try_collect_map(
+            payload
+                .xnet_reshare_agreements
+                .into_iter()
+                .map(|agreement| {
+                    let request: IDkgReshareRequest = try_from_option_field(
+                        agreement.request,
+                        "IDkgPayload::agreement::request",
+                    )?;
 
-            let completed = match agreement.initial_dealings {
-                Some(response) => {
-                    let unreported = response.try_into().map_err(|err| {
-                        ProxyDecodeError::Other(format!(
-                            "IDkgPayload:: failed to convert initial dealing: {err:?}"
-                        ))
-                    })?;
-                    CompletedReshareRequest::Unreported(unreported)
-                }
-                None => CompletedReshareRequest::ReportedToExecution,
-            };
-            xnet_reshare_agreements.insert(request, completed);
-        }
+                    let completed = match agreement.initial_dealings {
+                        Some(response) => {
+                            let unreported = response.try_into().map_err(|err| {
+                                ProxyDecodeError::Other(format!(
+                                    "IDkgPayload:: failed to convert initial dealing: {err:?}"
+                                ))
+                            })?;
+                            CompletedReshareRequest::Unreported(unreported)
+                        }
+                        None => CompletedReshareRequest::ReportedToExecution,
+                    };
+                    Ok((request, completed))
+                }),
+        )?;
 
         Ok(Self {
             available_pre_signatures,
@@ -2275,6 +2279,65 @@ mod tests {
         assert_eq!(pre_sig_id_0.id(), 0);
         assert_eq!(pre_sig_id_1.id(), 1);
         assert_eq!(pre_sig_id_2.id(), 2);
+    }
+
+    #[test]
+    fn idkg_payload_entries_are_distinct() {
+        use crate::exhaustive::ExhaustiveSet;
+        use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+        use ic_types_test_utils::ids::SUBNET_0;
+
+        let rng = &mut ReproducibleRng::new();
+        let mut payload = IDkgPayload::empty(
+            Height::new(100),
+            SUBNET_0,
+            MasterKeyTranscript::exhaustive_set(rng)
+                .into_iter()
+                .take(1)
+                .collect(),
+        );
+        payload
+            .available_pre_signatures
+            .insert(PreSigId(0), PreSignatureRef::exhaustive_set(rng).remove(0));
+        payload.pre_signatures_in_creation.insert(
+            PreSigId(1),
+            PreSignatureInCreation::exhaustive_set(rng).remove(0),
+        );
+        payload.ongoing_xnet_reshares.insert(
+            IDkgReshareRequest::exhaustive_set(rng).remove(0),
+            ReshareOfUnmaskedParams::exhaustive_set(rng).remove(0),
+        );
+        payload.xnet_reshare_agreements.insert(
+            IDkgReshareRequest::exhaustive_set(rng).remove(0),
+            CompletedReshareRequest::exhaustive_set(rng).remove(0),
+        );
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &pb::IDkgPayload::from(&payload),
+            IDkgPayload::try_from,
+            &[
+                |proto| proto.key_transcripts.push(proto.key_transcripts[0].clone()),
+                |proto| {
+                    proto
+                        .available_pre_signatures
+                        .push(proto.available_pre_signatures[0].clone())
+                },
+                |proto| {
+                    proto
+                        .pre_signatures_in_creation
+                        .push(proto.pre_signatures_in_creation[0].clone())
+                },
+                |proto| {
+                    proto
+                        .ongoing_xnet_reshares
+                        .push(proto.ongoing_xnet_reshares[0].clone())
+                },
+                |proto| {
+                    proto
+                        .xnet_reshare_agreements
+                        .push(proto.xnet_reshare_agreements[0].clone())
+                },
+            ],
+        );
     }
 
     #[test]

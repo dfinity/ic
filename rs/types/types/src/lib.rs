@@ -108,6 +108,7 @@ use ic_utils_thousands::separate_with_underscores;
 use more_asserts::debug_assert_gt;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
@@ -179,6 +180,44 @@ pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecod
     let principal_id: PrincipalId =
         try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))
+}
+
+/// Collects decoded protobuf entries into a map, rejecting a key that repeats an earlier one.
+pub(crate) fn try_collect_map<K: Ord + fmt::Debug, V>(
+    entries: impl IntoIterator<Item = Result<(K, V), ProxyDecodeError>>,
+) -> Result<BTreeMap<K, V>, ProxyDecodeError> {
+    let mut map = BTreeMap::new();
+    for entry in entries {
+        let (key, value) = entry?;
+        match map.entry(key) {
+            btree_map::Entry::Vacant(entry) => {
+                entry.insert(value);
+            }
+            btree_map::Entry::Occupied(entry) => return Err(duplicate_entry(entry.key())),
+        }
+    }
+    Ok(map)
+}
+
+/// Collects decoded protobuf items into a set, rejecting an item that repeats an earlier one.
+pub(crate) fn try_collect_set<T: Ord + fmt::Debug>(
+    items: impl IntoIterator<Item = Result<T, ProxyDecodeError>>,
+) -> Result<BTreeSet<T>, ProxyDecodeError> {
+    let mut set = BTreeSet::new();
+    for item in items {
+        if let Some(item) = set.replace(item?) {
+            return Err(duplicate_entry(&item));
+        }
+    }
+    Ok(set)
+}
+
+fn duplicate_entry(key: &impl fmt::Debug) -> ProxyDecodeError {
+    ProxyDecodeError::DuplicateEntry {
+        key: format!("{key:?}"),
+        v1: String::new(),
+        v2: String::new(),
+    }
 }
 
 pub struct NumInstructionsTag;
@@ -538,5 +577,61 @@ impl<T: DiskBytes, E: DiskBytes> DiskBytes for Result<T, E> {
 impl<T: DiskBytes> DiskBytes for Arc<T> {
     fn disk_bytes(&self) -> usize {
         self.as_ref().disk_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+
+    /// Checks that `proto` decodes, but no longer does once any of `repeats` repeats one of
+    /// its entries.
+    pub(crate) fn assert_repeated_entries_fail_to_decode<P: Clone, T: fmt::Debug>(
+        proto: &P,
+        decode: impl Fn(P) -> Result<T, ProxyDecodeError>,
+        repeats: &[fn(&mut P)],
+    ) {
+        decode(proto.clone()).expect("Failed to decode the original proto");
+        for repeat in repeats {
+            let mut repeated = proto.clone();
+            repeat(&mut repeated);
+            assert_matches!(
+                decode(repeated),
+                Err(ProxyDecodeError::DuplicateEntry { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn try_collect_map_requires_distinct_keys() {
+        assert_eq!(
+            try_collect_map([Ok((1, 'a')), Ok((2, 'b'))]).unwrap(),
+            BTreeMap::from([(1, 'a'), (2, 'b')])
+        );
+        assert_matches!(
+            try_collect_map([Ok((1, 'a')), Ok((2, 'b')), Ok((1, 'c'))]),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
+        );
+        assert_matches!(
+            try_collect_map([Ok((1, 'a')), Err(ProxyDecodeError::MissingField("value"))]),
+            Err(ProxyDecodeError::MissingField("value"))
+        );
+    }
+
+    #[test]
+    fn try_collect_set_requires_distinct_items() {
+        assert_eq!(
+            try_collect_set([Ok(1), Ok(2)]).unwrap(),
+            BTreeSet::from([1, 2])
+        );
+        assert_matches!(
+            try_collect_set([Ok(1), Ok(2), Ok(1)]),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
+        );
+        assert_matches!(
+            try_collect_set([Ok(1), Err(ProxyDecodeError::MissingField("item"))]),
+            Err(ProxyDecodeError::MissingField("item"))
+        );
     }
 }

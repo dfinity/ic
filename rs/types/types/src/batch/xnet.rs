@@ -40,10 +40,8 @@ impl TryFrom<pb::XNetPayload> for XNetPayload {
 
     fn try_from(payload: pb::XNetPayload) -> Result<Self, Self::Error> {
         Ok(Self {
-            stream_slices: payload
-                .stream_slices
-                .into_iter()
-                .map(|subnet_stream_slice| {
+            stream_slices: crate::try_collect_map(payload.stream_slices.into_iter().map(
+                |subnet_stream_slice| {
                     Ok((
                         subnet_id_try_from_option(
                             subnet_stream_slice.subnet_id,
@@ -54,8 +52,8 @@ impl TryFrom<pb::XNetPayload> for XNetPayload {
                             "XNetPayload::subnet_stream_slices::stream_slice",
                         )?,
                     ))
-                })
-                .collect::<Result<BTreeMap<SubnetId, CertifiedStreamSlice>, Self::Error>>()?,
+                },
+            ))?,
         })
     }
 }
@@ -80,5 +78,26 @@ impl XNetPayload {
     pub fn is_empty(&self) -> bool {
         let XNetPayload { stream_slices } = &self;
         stream_slices.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+    #[test]
+    fn xnet_payload_stream_slices_are_distinct() {
+        let rng = &mut ReproducibleRng::new();
+        let payload = XNetPayload::exhaustive_set(rng)
+            .into_iter()
+            .find(|payload| !payload.is_empty())
+            .unwrap();
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &pb::XNetPayload::from(&payload),
+            XNetPayload::try_from,
+            &[|proto| proto.stream_slices.push(proto.stream_slices[0].clone())],
+        );
     }
 }

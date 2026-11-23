@@ -469,13 +469,10 @@ impl From<&DkgSummary> for pb::Summary {
 fn build_tagged_transcripts_map(
     transcripts: &[pb::NiDkgTranscript],
 ) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
-    transcripts
-        .iter()
-        .map(|transcript_pb| {
-            let transcript = NiDkgTranscript::try_from(transcript_pb)?;
-            Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
-        })
-        .collect::<Result<BTreeMap<_, _>, _>>()
+    crate::try_collect_map(transcripts.iter().map(|transcript_pb| {
+        let transcript = NiDkgTranscript::try_from(transcript_pb)?;
+        Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
+    }))
 }
 
 fn build_transcripts_vec_from_pb(
@@ -505,22 +502,20 @@ fn build_transcripts_vec_from_pb(
 
 fn build_remote_dkg_attempts_map(
     vec: &[pb::RemoteDkgAttemptCount],
-) -> BTreeMap<NiDkgTargetId, RemoteDkgAttempts> {
-    vec.iter()
-        .map(|item| {
-            let mut id = [0_u8; NiDkgTargetId::SIZE];
-            // Safely convert the received slice to a fixed-size slice.
-            let mut v = Vec::<u8>::new();
-            v.extend_from_slice(&item.target_id);
-            v.resize(NiDkgTargetId::SIZE, 0_u8);
-            id.copy_from_slice(&v);
-            // Return the key-value pair.
-            (
-                NiDkgTargetId::new(id),
-                RemoteDkgAttempts::from(item.attempt_no),
-            )
-        })
-        .collect()
+) -> Result<BTreeMap<NiDkgTargetId, RemoteDkgAttempts>, ProxyDecodeError> {
+    crate::try_collect_map(vec.iter().map(|item| {
+        let mut id = [0_u8; NiDkgTargetId::SIZE];
+        // Safely convert the received slice to a fixed-size slice.
+        let mut v = Vec::<u8>::new();
+        v.extend_from_slice(&item.target_id);
+        v.resize(NiDkgTargetId::SIZE, 0_u8);
+        id.copy_from_slice(&v);
+        // Return the key-value pair.
+        Ok((
+            NiDkgTargetId::new(id),
+            RemoteDkgAttempts::from(item.attempt_no),
+        ))
+    }))
 }
 
 fn build_transcript_result(
@@ -605,17 +600,18 @@ impl TryFrom<pb::Summary> for DkgSummary {
     fn try_from(summary: pb::Summary) -> Result<Self, Self::Error> {
         Ok(Self {
             registry_version: RegistryVersion::from(summary.registry_version),
-            configs: summary
-                .configs
-                .into_iter()
-                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
-                .collect::<Result<BTreeMap<_, _>, _>>()?,
+            configs: crate::try_collect_map(
+                summary
+                    .configs
+                    .into_iter()
+                    .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c))),
+            )?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
             next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
+            remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts)?,
             subnet_splitting_status: try_from_option_field(
                 summary.subnet_splitting_status,
                 "Summary::subnet_splitting_status",
@@ -827,6 +823,62 @@ mod tests {
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use strum::EnumCount;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn dkg_summary_entries_are_distinct() {
+        use crate::exhaustive::ExhaustiveSet;
+        use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+        let rng = &mut ReproducibleRng::new();
+        let proto = DkgSummary::exhaustive_set(rng)
+            .iter()
+            .map(pb::Summary::from)
+            .find(|proto| {
+                proto.configs.first().is_some_and(|config| {
+                    !config.dealers.is_empty() && !config.receivers.is_empty()
+                }) && proto
+                    .current_transcripts
+                    .first()
+                    .is_some_and(|transcript| !transcript.committee.is_empty())
+                    && !proto.next_transcripts.is_empty()
+                    && !proto.remote_dkg_attempts.is_empty()
+            })
+            .unwrap();
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &proto,
+            DkgSummary::try_from,
+            &[
+                |proto| proto.configs.push(proto.configs[0].clone()),
+                |proto| {
+                    let dealer = proto.configs[0].dealers[0].clone();
+                    proto.configs[0].dealers.push(dealer);
+                },
+                |proto| {
+                    let receiver = proto.configs[0].receivers[0].clone();
+                    proto.configs[0].receivers.push(receiver);
+                },
+                |proto| {
+                    proto
+                        .current_transcripts
+                        .push(proto.current_transcripts[0].clone())
+                },
+                |proto| {
+                    let member = proto.current_transcripts[0].committee[0].clone();
+                    proto.current_transcripts[0].committee.push(member);
+                },
+                |proto| {
+                    proto
+                        .next_transcripts
+                        .push(proto.next_transcripts[0].clone())
+                },
+                |proto| {
+                    proto
+                        .remote_dkg_attempts
+                        .push(proto.remote_dkg_attempts[0].clone())
+                },
+            ],
+        );
+    }
 
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_low_threshold() {
