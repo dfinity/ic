@@ -119,9 +119,17 @@ execute_command() {
             ;;
         "guestos-console-logs")
             echo "=== GuestOS Serial Console Logs ==="
-            local count=$(get_guest_vm_count)
-            local slot="${2:-1}"
-            if [[ ! "$slot" =~ ^[0-9]+$ ]] || ((slot < 1 || slot > count)); then
+            local count slot
+            if ! count=$(get_guest_vm_count); then
+                echo "Could not determine the GuestOS VM count."
+                return
+            fi
+            slot="${2:-1}"
+            # 10#, or bash reads a zero-padded slot as octal.
+            if [[ "$slot" =~ ^[0-9]{1,3}$ ]]; then
+                slot=$((10#$slot))
+            fi
+            if [[ ! "$slot" =~ ^[0-9]{1,3}$ ]] || ((slot < 1 || slot > count)); then
                 echo "Usage: guestos-console-logs [slot] (1-${count})"
             else
                 run_hardened /usr/bin/less -f "/var/log/libvirt/qemu/guestos-serial$(get_guest_vm_suffix "$slot" "$count").log"

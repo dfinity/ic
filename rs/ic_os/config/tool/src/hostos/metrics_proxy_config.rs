@@ -3,7 +3,7 @@ use askama::Template;
 use config_types::{HostOSConfig, Ipv6Config, VmSlot, guest_vm_count};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
-use std::fs::{Permissions, create_dir_all, set_permissions, write};
+use std::fs::{Permissions, set_permissions, write};
 use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -33,14 +33,6 @@ pub fn generate_metrics_proxy_config(config: &HostOSConfig, output_path: &Path) 
     };
 
     let output_content = render_metrics_proxy_config(template)?;
-
-    // A bare filename has `Some("")` as its parent, which chmod rejects.
-    if let Some(parent) = output_path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-        set_permissions(parent, Permissions::from_mode(0o755))
-            .with_context(|| format!("Failed to chmod directory: {}", parent.display()))?;
-    }
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;

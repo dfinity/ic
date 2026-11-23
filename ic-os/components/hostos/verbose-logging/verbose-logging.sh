@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 source /opt/ic/bin/config.sh
 source /opt/ic/bin/logging.sh
 

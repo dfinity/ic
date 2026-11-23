@@ -13,7 +13,7 @@ CONFIG_LIB_RS="$4"
 GENERATOR_UNIT="generate-metrics-proxy-config.service"
 
 fail() {
-    echo "  FAIL: $*"
+    printf '  FAIL: %b\n' "$*"
     exit 1
 }
 
@@ -81,6 +81,28 @@ function test_units_parse() {
     done
 }
 
+# Verifying the unit files alone never parses the drop-in. systemd only reads
+# it from a <unit>.d directory beside its unit, so stage one.
+function test_dropin_parses() {
+    if ! command -v systemd-analyze >/dev/null; then
+        fail "systemd-analyze not found"
+    fi
+
+    local staged unit_name output
+    staged=$(mktemp -d)
+    unit_name=$(basename "${BASE_UNIT}")
+    cp "${BASE_UNIT}" "${staged}/${unit_name}"
+    mkdir -p "${staged}/${unit_name}.d"
+    cp "${OVERRIDE}" "${staged}/${unit_name}.d/override.conf"
+
+    output=$(systemd-analyze verify "${staged}/${unit_name}" 2>&1 || true)
+    output=$(grep -v 'is not executable: No such file or directory' <<<"${output}" || true)
+    rm -rf "${staged}"
+
+    [[ -z "${output}" ]] || fail "systemd-analyze rejected the drop-in:\n${output}"
+    pass "systemd-analyze accepts ${unit_name} with the drop-in applied"
+}
+
 echo
 echo "Running HostOS metrics-proxy unit tests..."
 test_config_path_agrees_with_generator
@@ -88,6 +110,7 @@ test_execstart_is_reset
 test_ordering_without_requires
 test_generator_requires_config_mount
 test_units_parse
+test_dropin_parses
 echo
 echo "PASSED HostOS metrics-proxy unit tests"
 echo

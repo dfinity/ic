@@ -148,12 +148,11 @@ pub fn generate_vm_config(
         vm_memory >= UPGRADE_VM_MEMORY_GIB,
         "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
-    // Multi-VM nodes run no upgrade VM, so nothing has to be held back for one.
-    let vm_memory_gib = match (guest_vm_type, &config.icos_settings.node_reward_type) {
-        (GuestVMType::Default, Some(val)) if is_multi_vm_node(val) => vm_memory,
-        (GuestVMType::Default, _) => vm_memory - UPGRADE_VM_MEMORY_GIB,
-        (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
-    };
+    let vm_memory_gib = vm_memory_gib(
+        guest_vm_type,
+        config.icos_settings.node_reward_type.as_deref(),
+        vm_memory,
+    );
 
     // Enable hugepages if enough are available for this VM and TEE is disabled (hugepages are not
     // supported by the kernel for confidential VMs)
@@ -204,6 +203,17 @@ pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
 #[cfg(not(feature = "dev"))]
 pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
     ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
+}
+
+/// Multi-VM nodes run no upgrade VM, so nothing has to be held back for one.
+/// `type4`/`type4.5` are cloud engine types that still run the single-VM flow,
+/// so they do hold it back.
+fn vm_memory_gib(guest_vm_type: GuestVMType, reward_type: Option<&str>, vm_memory: u32) -> u32 {
+    match (guest_vm_type, reward_type) {
+        (GuestVMType::Default, Some(val)) if is_multi_vm_node(val) => vm_memory,
+        (GuestVMType::Default, _) => vm_memory - UPGRADE_VM_MEMORY_GIB,
+        (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
+    }
 }
 
 fn split_resources_for_type_4(
@@ -570,6 +580,34 @@ mod tests {
         assert!(
             media_path.metadata().unwrap().size() > 0,
             "Config media file is empty"
+        );
+    }
+
+    #[test]
+    fn test_vm_memory_gib() {
+        const TOTAL: u32 = 480;
+
+        // One guest, so an upgrade VM is provisioned and its memory held back.
+        for reward_type in [None, Some("type0"), Some("type4"), Some("type4.5")] {
+            assert_eq!(
+                vm_memory_gib(GuestVMType::Default, reward_type, TOTAL),
+                TOTAL - UPGRADE_VM_MEMORY_GIB,
+                "{reward_type:?}"
+            );
+        }
+
+        // Many guests, no upgrade VM: the slot gets its whole share.
+        for reward_type in ["type4.1", "type4.2", "type4.3", "type4.4"] {
+            assert_eq!(
+                vm_memory_gib(GuestVMType::Default, Some(reward_type), TOTAL),
+                TOTAL,
+                "{reward_type}"
+            );
+        }
+
+        assert_eq!(
+            vm_memory_gib(GuestVMType::Upgrade, Some("type0"), TOTAL),
+            UPGRADE_VM_MEMORY_GIB
         );
     }
 

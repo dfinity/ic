@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate libnss;
 
-use config_types::{GuestOSConfig, HostOSConfig, ICOSSettings};
+use config_types::{GuestOSConfig, HostOSConfig, ICOSSettings, is_multi_vm_node};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{DeploymentEnvironment, MacAddr6Ext, VmSlot, calculate_deterministic_mac};
 use libnss::host::{AddressFamily, Addresses, Host, HostHooks};
@@ -79,6 +79,12 @@ fn ipv6_prefix(addr: Ipv6Addr) -> String {
     format!("{:x}:{:x}:{:x}:{:x}::", s[0], s[1], s[2], s[3])
 }
 
+// Follows the guest count, not the `type4` prefix: type4 and type4.5 run one
+// guest, in the plain slot.
+fn multi_vm(node_reward_type: Option<&str>) -> bool {
+    node_reward_type.is_some_and(is_multi_vm_node)
+}
+
 fn read_icos_config() -> Option<Config> {
     // Only one of these will ever exist at a time.
     if let Ok(contents) = std::fs::read_to_string(GUESTOS_CONFIG_PATH) {
@@ -96,7 +102,7 @@ fn read_icos_config() -> Option<Config> {
         return Some(Config {
             mgmt_mac,
             deployment_environment,
-            multi_vm: node_reward_type.is_some_and(|v| v.starts_with("type4")),
+            multi_vm: multi_vm(node_reward_type.as_deref()),
         });
     }
 
@@ -115,7 +121,7 @@ fn read_icos_config() -> Option<Config> {
         return Some(Config {
             mgmt_mac,
             deployment_environment,
-            multi_vm: node_reward_type.is_some_and(|v| v.starts_with("type4")),
+            multi_vm: multi_vm(node_reward_type.as_deref()),
         });
     }
 
@@ -237,5 +243,31 @@ mod tests {
             guestos_address(&config(false), &prefix()),
             guestos_address(&config(true), &prefix())
         );
+    }
+
+    #[test]
+    fn multi_vm_follows_the_guest_count_not_the_type4_prefix() {
+        for reward_type in ["type4", "type4.5", "type0", "type3.1", ""] {
+            assert!(!multi_vm(Some(reward_type)), "{reward_type}");
+        }
+        for reward_type in ["type4.1", "type4.2", "type4.3", "type4.4"] {
+            assert!(multi_vm(Some(reward_type)), "{reward_type}");
+        }
+        assert!(!multi_vm(None));
+    }
+
+    /// A `type4`/`type4.5` node runs one guest, so `guestos` must resolve to
+    /// the plain slot there, not slot 1.
+    #[test]
+    fn single_vm_cloud_engine_types_resolve_to_the_plain_slot() {
+        let plain = guestos_address(&config(false), &prefix());
+
+        for reward_type in ["type4", "type4.5"] {
+            let cfg = Config {
+                multi_vm: multi_vm(Some(reward_type)),
+                ..config(false)
+            };
+            assert_eq!(guestos_address(&cfg, &prefix()), plain, "{reward_type}");
+        }
     }
 }
