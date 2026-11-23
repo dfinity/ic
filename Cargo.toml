@@ -722,7 +722,7 @@ ic-certified-map = "0.4.1"
 ic-metrics-encoder = "^1.1.1"
 ic0 = "1.2.0"
 ic-agent = { version = "0.50.0", features = ["pem"] }
-ic-bn-lib = { version = "0.9", features = [
+ic-bn-lib = { version = "0.11", features = [
     "acme-alpn",
     "acme-dns",
     "pubsub",
