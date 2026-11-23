@@ -1,37 +1,28 @@
 //! Verification that the request metadata Rosetta displays for a transaction is
 //! bound to the bytes the caller actually signs.
 //!
-//! `UnsignedTransaction` and `SignedTransaction` pair a [`RequestType`] — plain
-//! CBOR metadata, covered by no signature — with an [`HttpCanisterUpdate`],
+//! `UnsignedTransaction` and `SignedTransaction` pair a [`RequestType`] -- plain
+//! CBOR metadata that no signature covers -- with an [`HttpCanisterUpdate`],
 //! whose `canister_id`, `method_name`, `arg`, `nonce` and `sender` are all
-//! covered by `update.id()` and therefore by the caller's signature.
+//! covered by `update.id()` and therefore by the caller's signature. Every field
+//! Rosetta displays must therefore be derivable from, and consistent with, the
+//! signed update:
 //!
-//! `/construction/payloads` always emits the two consistently, and every neuron
-//! management payload it builds carries the neuron index twice over: once in the
-//! signed `nonce`, and once in the neuron subaccount inside the signed `arg`
-//! (as `H(controller, neuron_index)`). Nothing downstream used to require the
-//! two representations to agree, so an actor able to rewrite the wrapper could
-//! make `/construction/parse` describe one neuron while the signed update
-//! targeted another — and for a full-stake `DISBURSE` or a 100%
-//! `DISBURSE_MATURITY` the neuron index is the only field indicating how much
-//! value moves.
+//! * A neuron management request names its neuron twice in signed data: in the
+//!   `nonce`, and in the neuron subaccount `H(controller, neuron_index)` inside
+//!   the `arg`. Both must match the displayed neuron index and controller, and
+//!   the signed command must be the displayed operation.
+//! * A transfer must be addressed to the ledger this instance serves, since its
+//!   amount is displayed in that ledger's token, and must debit the sender's
+//!   default account, which is the account displayed.
+//! * Each signed update travels with a separately signed read-state call, which
+//!   must read that update's own result.
 //!
-//! A transfer has the same problem in a smaller way. It is reported in the
-//! token of the ledger this Rosetta instance serves, so a `send_pb` update
-//! addressed to some other ledger would be described in the wrong currency;
-//! and it is reported as debiting the sender's default account, so one that
-//! draws on a subaccount would be described as coming from somewhere it does
-//! not.
-//!
-//! Alongside each signed update travels the signed read-state call that reads
-//! its result. The two are signed separately, so they can be paired up wrongly,
-//! and the submit path then reports a call as having failed while it executes.
-//!
-//! [`verify_signed_target`] closes that gap. It is shared by
-//! `/construction/parse`, `/construction/hash` and the submit path's `Request`
-//! reconstruction, so the operations shown before signing, the operations shown
-//! after signing, the hash the caller is told to expect, and the operations
-//! reported back after submission cannot diverge.
+//! [`verify_signed_target`] and [`verify_signed_envelopes`] enforce this. They
+//! are shared by `/construction/parse`, `/construction/hash` and the submit
+//! path's `Request` reconstruction, so the operations shown before and after
+//! signing, the expected transaction hash, and the operations reported after
+//! submission all describe the signed update.
 
 use crate::{
     convert,
@@ -533,6 +524,15 @@ mod tests {
         CanisterId::from_u64(2)
     }
 
+    #[track_caller]
+    fn assert_rejected(result: Result<(), ApiError>, expected: &str) {
+        let err = result.expect_err("expected the request to be rejected");
+        assert!(
+            format!("{err:?}").contains(expected),
+            "expected an error containing {expected:?}, got {err:?}"
+        );
+    }
+
     fn verify(request_type: &RequestType, update: &HttpCanisterUpdate) -> Result<(), ApiError> {
         verify_signed_target(request_type, update, &ledger(), &governance())
     }
@@ -585,7 +585,10 @@ mod tests {
         let update = manage_neuron_update(controller(), NEURON_INDEX);
         // The wrapper claims a different, less valuable neuron than the one the
         // signed subaccount and nonce identify.
-        verify(&disburse(0), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(0), &update),
+            "neuron_index 0, but the signed nonce says 7",
+        );
     }
 
     #[test]
@@ -594,7 +597,7 @@ mod tests {
         update.nonce = None;
         // Fail closed: an absent nonce leaves the displayed index unverifiable
         // rather than verified.
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(verify(&disburse(NEURON_INDEX), &update), "carries no nonce");
     }
 
     #[test]
@@ -619,7 +622,10 @@ mod tests {
             )),
         };
         update.arg = Blob(Encode!(&manage).unwrap());
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(NEURON_INDEX), &update),
+            "signed neuron subaccount does not belong",
+        );
     }
 
     #[test]
@@ -639,7 +645,10 @@ mod tests {
             )),
         };
         update.arg = Blob(Encode!(&manage).unwrap());
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(NEURON_INDEX), &update),
+            "legacy `id` field",
+        );
     }
 
     #[test]
@@ -658,14 +667,20 @@ mod tests {
             )),
         };
         update.arg = Blob(Encode!(&manage).unwrap());
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(NEURON_INDEX), &update),
+            "identifies the neuron by id",
+        );
     }
 
     #[test]
     fn foreign_canister_is_rejected() {
         let mut update = manage_neuron_update(controller(), NEURON_INDEX);
         update.canister_id = Blob(PrincipalId::new_user_test_id(3).to_vec());
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(NEURON_INDEX), &update),
+            "must be addressed to canister",
+        );
 
         // Including the mainnet governance canister, when that is not the one
         // this instance was configured with. `/construction/derive` names
@@ -673,14 +688,20 @@ mod tests {
         // other one describes a neuron this instance does not serve.
         let mut update = manage_neuron_update(controller(), NEURON_INDEX);
         update.canister_id = Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec());
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(NEURON_INDEX), &update),
+            "must be addressed to canister",
+        );
     }
 
     #[test]
     fn unexpected_method_name_is_rejected() {
         let mut update = manage_neuron_update(controller(), NEURON_INDEX);
         update.method_name = "some_other_method".to_string();
-        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+        assert_rejected(
+            verify(&disburse(NEURON_INDEX), &update),
+            "Expected the signed update to call 'manage_neuron'",
+        );
     }
 
     #[test]
@@ -715,7 +736,10 @@ mod tests {
                 PrincipalId::new_user_test_id(4),
             )),
         };
-        verify(&substituted, &update).unwrap_err();
+        assert_rejected(
+            verify(&substituted, &update),
+            "signed neuron subaccount does not belong",
+        );
     }
 
     #[test]
@@ -742,7 +766,10 @@ mod tests {
             &update,
         )
         .unwrap();
-        verify(&RequestType::Stake { neuron_index: 0 }, &update).unwrap_err();
+        assert_rejected(
+            verify(&RequestType::Stake { neuron_index: 0 }, &update),
+            "neuron_index 0, but the signed nonce says 7",
+        );
     }
 
     #[test]
@@ -767,7 +794,10 @@ mod tests {
         };
 
         verify(&RequestType::ListNeurons { page_number: 3 }, &update).unwrap();
-        verify(&RequestType::ListNeurons { page_number: 0 }, &update).unwrap_err();
+        assert_rejected(
+            verify(&RequestType::ListNeurons { page_number: 0 }, &update),
+            "page_number 0, but the signed list_neurons argument says 3",
+        );
     }
 
     #[test]
@@ -794,14 +824,16 @@ mod tests {
             &update,
         )
         .unwrap();
-        verify(
-            &RequestType::NeuronInfo {
-                neuron_index: 0,
-                controller: None,
-            },
-            &update,
-        )
-        .unwrap_err();
+        assert_rejected(
+            verify(
+                &RequestType::NeuronInfo {
+                    neuron_index: 0,
+                    controller: None,
+                },
+                &update,
+            ),
+            "signed neuron subaccount does not belong",
+        );
     }
 
     #[test]
@@ -810,13 +842,15 @@ mod tests {
         // different operation on the same neuron, so nonce, subaccount,
         // canister and method all still agree.
         let update = manage_neuron_update(controller(), NEURON_INDEX);
-        verify(
-            &RequestType::StartDissolve {
-                neuron_index: NEURON_INDEX,
-            },
-            &update,
-        )
-        .unwrap_err();
+        assert_rejected(
+            verify(
+                &RequestType::StartDissolve {
+                    neuron_index: NEURON_INDEX,
+                },
+                &update,
+            ),
+            "The signed manage_neuron command is not the",
+        );
     }
 
     #[test]
@@ -842,7 +876,10 @@ mod tests {
         verify(&RequestType::Send, &send(ledger())).unwrap();
         // The amount and the recipient are signed, but the token they are
         // denominated in follows from the ledger being called.
-        verify(&RequestType::Send, &send(CanisterId::from_u64(99))).unwrap_err();
+        assert_rejected(
+            verify(&RequestType::Send, &send(CanisterId::from_u64(99))),
+            "A transfer must be addressed to canister",
+        );
     }
 
     #[test]
@@ -867,11 +904,13 @@ mod tests {
         verify(&RequestType::Send, &send(None)).unwrap();
         // The ledger would debit a subaccount of the sender, but the operations
         // name the sender's default account.
-        verify(
-            &RequestType::Send,
-            &send(Some(icp_ledger::Subaccount([1; 32]))),
-        )
-        .unwrap_err();
+        assert_rejected(
+            verify(
+                &RequestType::Send,
+                &send(Some(icp_ledger::Subaccount([1; 32]))),
+            ),
+            "draws on a subaccount of the sender",
+        );
     }
 
     #[test]
@@ -900,11 +939,160 @@ mod tests {
         verify(&stake, &signed_stake(None)).unwrap();
         verify(&stake, &signed_stake(Some(sender))).unwrap();
         // Naming someone else claims `H(other, memo)`, not the signer's neuron.
-        verify(
-            &stake,
-            &signed_stake(Some(PrincipalId::new_user_test_id(77))),
-        )
-        .unwrap_err();
+        assert_rejected(
+            verify(
+                &stake,
+                &signed_stake(Some(PrincipalId::new_user_test_id(77))),
+            ),
+            "names controller",
+        );
+    }
+
+    /// Every `manage_neuron` request type, paired with the command
+    /// `/construction/payloads` signs for it.
+    fn manage_neuron_requests(neuron_index: u64) -> Vec<(RequestType, ManageNeuronCommandRequest)> {
+        use ManageNeuronCommandRequest as Cmd;
+        use manage_neuron::configure::Operation as Op;
+        let configure = |operation| {
+            Cmd::Configure(manage_neuron::Configure {
+                operation: Some(operation),
+            })
+        };
+        let hot_key = Some(PrincipalId::new_user_test_id(5));
+        vec![
+            (
+                RequestType::Disburse { neuron_index },
+                Cmd::Disburse(manage_neuron::Disburse {
+                    amount: None,
+                    to_account: None,
+                }),
+            ),
+            (
+                RequestType::DisburseMaturity { neuron_index },
+                Cmd::DisburseMaturity(manage_neuron::DisburseMaturity {
+                    percentage_to_disburse: 100,
+                    to_account_identifier: None,
+                    to_account: None,
+                }),
+            ),
+            (
+                RequestType::SetDissolveTimestamp { neuron_index },
+                configure(Op::SetDissolveTimestamp(
+                    manage_neuron::SetDissolveTimestamp {
+                        dissolve_timestamp_seconds: 1_000,
+                    },
+                )),
+            ),
+            (
+                RequestType::ChangeAutoStakeMaturity { neuron_index },
+                configure(Op::ChangeAutoStakeMaturity(
+                    manage_neuron::ChangeAutoStakeMaturity {
+                        requested_setting_for_auto_stake_maturity: true,
+                    },
+                )),
+            ),
+            (
+                RequestType::StartDissolve { neuron_index },
+                configure(Op::StartDissolving(manage_neuron::StartDissolving {})),
+            ),
+            (
+                RequestType::StopDissolve { neuron_index },
+                configure(Op::StopDissolving(manage_neuron::StopDissolving {})),
+            ),
+            (
+                RequestType::AddHotKey { neuron_index },
+                configure(Op::AddHotKey(manage_neuron::AddHotKey {
+                    new_hot_key: hot_key,
+                })),
+            ),
+            (
+                RequestType::RemoveHotKey { neuron_index },
+                configure(Op::RemoveHotKey(manage_neuron::RemoveHotKey {
+                    hot_key_to_remove: hot_key,
+                })),
+            ),
+            (
+                RequestType::Spawn { neuron_index },
+                Cmd::Spawn(manage_neuron::Spawn {
+                    new_controller: None,
+                    percentage_to_spawn: None,
+                    nonce: Some(neuron_index + 1),
+                }),
+            ),
+            (
+                RequestType::StakeMaturity { neuron_index },
+                Cmd::StakeMaturity(manage_neuron::StakeMaturity {
+                    percentage_to_stake: None,
+                }),
+            ),
+            (
+                RequestType::RegisterVote { neuron_index },
+                Cmd::RegisterVote(manage_neuron::RegisterVote {
+                    proposal: Some(ic_nns_common::pb::v1::ProposalId { id: 1 }),
+                    vote: 1,
+                }),
+            ),
+            (
+                RequestType::Follow {
+                    neuron_index,
+                    controller: None,
+                },
+                Cmd::Follow(manage_neuron::Follow {
+                    topic: 0,
+                    followees: vec![ic_nns_common::pb::v1::NeuronId { id: 1 }],
+                }),
+            ),
+            (
+                RequestType::RefreshVotingPower {
+                    neuron_index,
+                    controller: None,
+                },
+                Cmd::RefreshVotingPower(manage_neuron::RefreshVotingPower {}),
+            ),
+        ]
+    }
+
+    /// Builds the update `add_neuron_management_payload` builds for `command`
+    /// on the signer's own neuron `neuron_index`.
+    fn manage_neuron_update_with(
+        sender: PrincipalId,
+        neuron_index: u64,
+        command: ManageNeuronCommandRequest,
+    ) -> HttpCanisterUpdate {
+        let manage = ManageNeuronRequest {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
+                convert::neuron_subaccount_bytes_from_principal(&sender, neuron_index).to_vec(),
+            )),
+            command: Some(command),
+        };
+        HttpCanisterUpdate {
+            arg: Blob(Encode!(&manage).unwrap()),
+            ..manage_neuron_update(sender, neuron_index)
+        }
+    }
+
+    #[test]
+    fn every_manage_neuron_request_is_bound_to_the_signed_neuron() {
+        for (request_type, command) in manage_neuron_requests(NEURON_INDEX) {
+            let update = manage_neuron_update_with(controller(), NEURON_INDEX, command);
+            let name = request_type.clone().into_str();
+
+            if let Err(err) = verify(&request_type, &update) {
+                panic!("{name}: the genuine update was rejected: {err:?}");
+            }
+
+            // The same signed update, displayed as acting on another neuron.
+            let (rewritten, _) = manage_neuron_requests(0)
+                .into_iter()
+                .find(|(other, _)| other.clone().into_str() == name)
+                .unwrap();
+            let err = verify(&rewritten, &update).expect_err(name);
+            assert!(
+                format!("{err:?}").contains("neuron_index 0, but the signed nonce says 7"),
+                "{name}: unexpected error {err:?}"
+            );
+        }
     }
 
     /// Builds the envelope pair `/construction/combine` would build for
@@ -939,10 +1127,16 @@ mod tests {
 
         // An envelope for another neuron alongside it is not.
         let other = manage_neuron_update(controller(), 9);
-        verify_envelopes(&disburse(NEURON_INDEX), &[pair(base), pair(other)]).unwrap_err();
+        assert_rejected(
+            verify_envelopes(&disburse(NEURON_INDEX), &[pair(base), pair(other)]),
+            "must differ only in their ingress",
+        );
 
         // And an empty request has nothing to describe.
-        verify_envelopes(&disburse(NEURON_INDEX), &[]).unwrap_err();
+        assert_rejected(
+            verify_envelopes(&disburse(NEURON_INDEX), &[]),
+            "No request payload provided",
+        );
     }
 
     /// The update and read-state halves are signed separately, so an envelope
@@ -959,11 +1153,17 @@ mod tests {
         // same transaction -- no extra signature needed to build this.
         let mut spliced = pair(base.clone());
         spliced.read_state = pair(later).read_state;
-        verify_envelopes(&disburse(NEURON_INDEX), &[spliced]).unwrap_err();
+        assert_rejected(
+            verify_envelopes(&disburse(NEURON_INDEX), &[spliced]),
+            "must read the result of that",
+        );
 
         // And the read-state call of an entirely different neuron's request.
         let mut spliced = pair(base);
         spliced.read_state = pair(manage_neuron_update(controller(), 9)).read_state;
-        verify_envelopes(&disburse(NEURON_INDEX), &[spliced]).unwrap_err();
+        assert_rejected(
+            verify_envelopes(&disburse(NEURON_INDEX), &[spliced]),
+            "must read the result of that",
+        );
     }
 }
