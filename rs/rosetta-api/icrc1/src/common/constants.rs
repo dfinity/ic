@@ -28,5 +28,9 @@ pub const MAX_MEMO_LENGTH_BYTES: usize = 1024;
 /// `/construction/payloads`. The arguments are copied into every envelope of the unsigned
 /// transaction, so their size must be bounded.
 pub const MAX_CANISTER_METHOD_ARGS_BYTES: usize = 4 * 1024;
+/// Candid skipping quota for decoding the ledger method arguments of client-supplied envelopes.
+/// The size limit alone does not bound the decoding work, so this applies the same quota as the
+/// `ic_cdk` endpoint macros of the ledger methods being called.
+pub const CANISTER_METHOD_ARGS_SKIPPING_QUOTA: usize = 10_000;
 pub const STATUS_COMPLETED: &str = "COMPLETED";
 pub const MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST: u64 = 10000;

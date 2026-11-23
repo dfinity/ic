@@ -363,13 +363,15 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
 ) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha2::Sha256;
+    use rand_0_10::SeedableRng as _;
     use rsa::traits::PublicKeyParts;
     use rsa::{Pkcs1v15Sign, PrivateKey};
 
     let bitlength = 2048; // minimum allowed
 
-    let priv_key =
-        PrivateKey::new(&mut RandCore10(rng), bitlength).expect("failed to generate RSA key");
+    // `rsa` takes a rand 0.10 RNG.
+    let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
+    let priv_key = PrivateKey::new(&mut rsa_rng, bitlength).expect("failed to generate RSA key");
 
     let pub_key_bytes =
         basic_sig_rsa::RsaPublicKey::from_components(&priv_key.e_bytes(), &priv_key.n_bytes())
@@ -386,28 +388,6 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
 
     (signature, pub_key_bytes)
 }
-
-/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` takes.
-struct RandCore10<'a, R>(&'a mut R);
-
-impl<R: RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
-    type Error = std::convert::Infallible;
-
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.0.next_u32())
-    }
-
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        Ok(self.0.next_u64())
-    }
-
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        self.0.fill_bytes(dst);
-        Ok(())
-    }
-}
-
-impl<R: RngCore + CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 fn random_signable_message_of_size<R: Rng + CryptoRng>(
     bytes_size: usize,

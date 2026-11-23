@@ -724,12 +724,15 @@ impl BackupHelper {
                 DiskStats::Space,
                 notify_if_exceeds_threshold,
             )?;
-            let inodes = self.get_disk_stats(
-                dir,
-                threshold,
-                DiskStats::Inodes,
-                notify_if_exceeds_threshold,
-            )?;
+            // Some filesystems (e.g. btrfs) don't report inode usage.
+            let inodes = self
+                .get_disk_stats(
+                    dir,
+                    threshold,
+                    DiskStats::Inodes,
+                    notify_if_exceeds_threshold,
+                )
+                .ok();
             stats.push((dir.as_path(), space, inodes, storage_type));
         }
         self.notification_client
