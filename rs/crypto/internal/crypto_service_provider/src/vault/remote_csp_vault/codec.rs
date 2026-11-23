@@ -478,11 +478,3 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
         }
     }
 }
-
-// Not derived, because `#[derive(Debug)]` would require `Item`, `SinkItem`
-// and `O` to implement `Debug`.
-impl<Item, SinkItem, O> std::fmt::Debug for Bincode<Item, SinkItem, O> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Bincode").finish()
-    }
-}
