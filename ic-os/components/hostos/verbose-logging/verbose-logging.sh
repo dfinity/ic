@@ -20,7 +20,7 @@ if [[ "${verbose,,}" == "true" ]]; then
     for i in $(seq 1 "${COUNT}"); do
         s=$(get_guest_vm_suffix "$i" "$COUNT")
 
-        tail -f "/var/log/libvirt/qemu/guestos-serial$s.log" | sanitize_output | while IFS= read -r line; do
+        tail -F "/var/log/libvirt/qemu/guestos-serial$s.log" | sanitize_output | while IFS= read -r line; do
             printf 'guestos-serial%s| %s\n' "$s" "$line" >/dev/tty1
             sleep "${DELAY}"
         done &

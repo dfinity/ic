@@ -1405,8 +1405,7 @@ mod tests {
 
     /// Returns the `ic.json5` config filled with some dummy values.
     ///
-    /// `reward_type` matters because the template keys the GuestOS metrics
-    /// firewall rule off it. Derived from the enum so it cannot drift from what a
+    /// `reward_type` is derived from the enum so it cannot drift from what a
     /// real node carries.
     fn get_config(reward_type: Option<NodeRewardType>) -> ConfigOptional {
         let node_reward_type = match reward_type {

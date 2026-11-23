@@ -34,7 +34,8 @@ pub fn generate_metrics_proxy_config(config: &HostOSConfig, output_path: &Path) 
 
     let output_content = render_metrics_proxy_config(template)?;
 
-    if let Some(parent) = output_path.parent() {
+    // A bare filename has `Some("")` as its parent, which chmod rejects.
+    if let Some(parent) = output_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         create_dir_all(parent)
             .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
         set_permissions(parent, Permissions::from_mode(0o755))
