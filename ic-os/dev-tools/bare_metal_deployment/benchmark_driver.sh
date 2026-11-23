@@ -1,35 +1,62 @@
 #!/usr/bin/env bash
-set -eEuo pipefail
+# Validation only, not for merging: a TEE GuestOS installs no SSH keys, so this reads its memory
+# from its metrics and its kernel log from HostOS (HOSTOS_IP, set by deploy.py).
+set -uo pipefail
 
-benchmark_runner="${1}"
 ssh_key="${2}"
-ip_address="${3}"
-tools="${@:4}"
-
-key_component=()
+guest="${3}"
+O=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30)
 if [ "${ssh_key}" != "None" ]; then
-    key_component=("-i" "${ssh_key}")
+    O+=(-i "${ssh_key}")
 fi
 
-TMPDIR=$(mktemp -d)
-trap "rm -rf ${TMPDIR}" exit
+read -r -d '' PY <<'EOF'
+import re, sys
+vals, free = {}, 0.0
+for line in sys.stdin:
+    m = re.match(r'node_buddyinfo_blocks\{[^}]*size="(\d+)"[^}]*\} (\S+)', line)
+    if m:
+        free += float(m.group(2)) * 4096 * 2 ** int(m.group(1))
+        continue
+    m = re.match(r'(node_memory_(?:MemTotal|MemFree|MemAvailable|Cached|Unaccepted)_bytes|node_boot_time_seconds|node_time_seconds|guestos_tee_active)(?:\{[^}]*\})? (\S+)', line)
+    if m:
+        vals[m.group(1)] = float(m.group(2))
+for k, v in sorted(vals.items()):
+    print(f"{k}: {v / 2**30:.2f} GiB" if k.endswith("_bytes") else f"{k}: {v:.0f}")
+print(f"free lists (buddyinfo): {free / 2**30:.2f} GiB")
+mf = vals.get("node_memory_MemFree_bytes")
+if mf is not None:
+    print(f"MemFree - free lists: {(mf - free) / 2**30:.2f} GiB")
+if "node_time_seconds" in vals and "node_boot_time_seconds" in vals:
+    print(f"uptime: {vals['node_time_seconds'] - vals['node_boot_time_seconds']:.0f} s")
+EOF
 
-# Send over the runner
-scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${key_component[@]} "${benchmark_runner}" "admin@[${ip_address}]:benchmark_runner.sh"
+guest_memory() {
+    echo "---- GuestOS memory ($(date -u +%FT%TZ))"
+    curl -sk --max-time 60 "https://[${guest}]:9100/metrics" | python3 -c "${PY}"
+}
 
-# Send over the tools
-if [ "${tools}" != "" ]; then
-    scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${key_component[@]} ${tools[@]} "admin@[${ip_address}]:"
-fi
-
-# Run benchmarking
-echo >&2 "Benchmarking node..."
-ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${key_component[@]} "admin@${ip_address}" "sudo ./benchmark_runner.sh"
-
-# Collect results
-scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${key_component[@]} -r "admin@[${ip_address}]:results" "${TMPDIR}"
-
-# Output results
-echo "-------------------- Benchmark Results --------------------"
-cat ${TMPDIR}/results/*
-echo "-----------------------------------------------------------"
+echo "-------------------- TEE probe --------------------"
+guest_memory
+echo "---- HostOS ${HOSTOS_IP}"
+ssh "${O[@]}" "admin@${HOSTOS_IP}" sudo bash -s <<'EOF'
+cd /var/log/libvirt/qemu && ls -la
+for f in *serial*; do
+    echo "== ${f}"
+    grep -a -E 'Linux version|Command line|Memory:|SEV|[Uu]naccepted|accept|deferred pages|Freeing unused kernel|Run /|Startup finished' "${f}" | tail -40
+done
+for f in *.log; do
+    case "${f}" in *serial*) continue ;; esac
+    echo "== ${f}"
+    grep -a -E 'starting up|shutting down|terminating' "${f}" | tail -6
+done
+virsh list --all
+for d in $(virsh list --name); do
+    virsh dominfo "${d}"
+    virsh dumpxml "${d}" | grep -E '<memory|<currentMemory|<vcpu|launchSecurity|<policy|<cmdline' | cut -c1-400
+done
+free -g
+journalctl -u guestos.service -o short-iso --no-pager | tail -30
+EOF
+guest_memory
+echo "---------------------------------------------------"
