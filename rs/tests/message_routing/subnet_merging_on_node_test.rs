@@ -121,12 +121,12 @@ const TOOL_TIMEOUT: Duration = Duration::from_secs(1800);
 /// checkpoint once the tool is done.
 const REPLICA_RESTART_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// Timeouts of the test itself, above `TOOL_TIMEOUT`, `REGISTRY_TIMEOUT` and
-/// `REPLICA_RESTART_TIMEOUT`.
+/// Timeouts of the test itself, above the sum of `TOOL_TIMEOUT`,
+/// `REGISTRY_TIMEOUT` and `REPLICA_RESTART_TIMEOUT`.
 /// The overall timeout additionally covers the setup and has to stay below the
 /// 3600s of the `eternal` timeout of the Bazel target.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2400);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3000);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
