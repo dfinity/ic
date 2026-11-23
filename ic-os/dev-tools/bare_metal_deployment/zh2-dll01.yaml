@@ -16,3 +16,5 @@ inject_enable_trusted_execution_environment: true
 # benchmark's `fio` write has more than that in flight, encryption stalls on buffer allocation.
 inject_image_memory_gb: 480
 inject_image_nr_of_vcpus: 64
+# Validation only, not for merging: room for accepting a 467 GiB TEE GuestOS's memory at boot.
+wait_time: 45
