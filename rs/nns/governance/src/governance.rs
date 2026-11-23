@@ -139,6 +139,7 @@ use ic_types::Time;
 use icp_ledger::{AccountIdentifier, Subaccount, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use itertools::Itertools;
 use maplit::hashmap;
+use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -4691,7 +4692,7 @@ impl Governance {
 
         // Make sure the manage neuron proposal is not too large. Otherwise they can occupy
         // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (10K).
-        let encoded_bytes = prost::Message::encoded_len(manage_neuron);
+        let encoded_bytes = manage_neuron.encoded_len();
         if encoded_bytes > MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
@@ -4732,23 +4733,16 @@ impl Governance {
     }
 
     /// Validates the proposal in the MakeProposal command of a ManageNeuron proposal (the "nested"
-    /// proposal). Returns an InvalidProposal error unless all of the following hold:
+    /// proposal). Enforces the following:
     ///
     ///     1. The nested proposal is a ManageNeuron proposal.
-    ///     2. Its command is not MakeProposal (i.e. there is at most one level of nesting).
+    ///     2. Its command is not MakeProposal (i.e. making a third proposal is not allowed).
     ///     3. It is valid on its own (see validate_proposal).
     ///
     /// (The size of the nested proposal is limited by MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX,
     /// which is checked by the caller. That bounds memory usage only because the commands of a
     /// ManageNeuron proposal cannot expand much when decoded; other proposal types can, e.g. a
     /// long list of empty elements.)
-    ///
-    /// This does NOT check whether the neuron that would make the nested proposal (the neuron
-    /// targeted by the enclosing proposal) is a followee of the neuron targeted by the nested
-    /// proposal on the NeuronManagement topic: this validation happens before the caller is
-    /// authorized, so the result would disclose (private) followees to anyone. Instead, that is
-    /// checked (after authorization) when the nested proposal is actually made, i.e. when the
-    /// enclosing proposal is executed.
     fn validate_nested_make_proposal(
         &self,
         nested_proposal: &Proposal,
