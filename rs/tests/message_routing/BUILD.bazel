@@ -141,7 +141,9 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_cooling_down_test",
+    srcs = ["subnet_merging_checks.rs"],
     cpus = MIN_LOCAL_CPUS + 16 * DEFAULT_VCPUS_PER_VM,  # 1 System + 3 Application subnets of 4 nodes each = 16 IC Node VMs * 6 vCPUs.
+    crate_root = "subnet_cooling_down_test.rs",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -173,7 +175,9 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_merging_on_node_test",
+    srcs = ["subnet_merging_checks.rs"],
     cpus = MIN_LOCAL_CPUS + 9 * DEFAULT_VCPUS_PER_VM,  # 1 System subnet of 1 node + 2 Application subnets of 4 nodes each = 9 IC Node VMs * 6 vCPUs.
+    crate_root = "subnet_merging_on_node_test.rs",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

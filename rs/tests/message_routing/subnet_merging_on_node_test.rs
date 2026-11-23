@@ -35,12 +35,13 @@ node runs on the merged state.
 
 end::catalog[] */
 
-use anyhow::{Result, bail};
+mod subnet_merging_checks;
+
+use anyhow::Result;
 use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_recovery::registry_helper::{RegistryHelper, RegistryPollingStrategy};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_available_metrics, replica_values};
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -48,9 +49,8 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
-    RETRY_BACKOFF, SshSession, get_dependency_path_from_env, get_guestos_img_version, scp_send_to,
+    SshSession, get_dependency_path_from_env, get_guestos_img_version, scp_send_to,
 };
-use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent};
 use ic_types::{Height, SubnetId};
@@ -76,9 +76,6 @@ const NODE_DATA_DIR: &str = "/var/lib/ic/data";
 /// The state directory of the replica on a node.
 const NODE_STATE_DIR: &str = "/var/lib/ic/data/ic_state";
 
-/// The checkpoints directory of the replica on a node.
-const NODE_CHECKPOINTS_DIR: &str = "/var/lib/ic/data/ic_state/checkpoints";
-
 /// The checkpoints directory of the merged state the tool assembles on the node.
 const MERGED_CHECKPOINTS_DIR: &str =
     "/var/lib/ic/data/recovery/merged_working_dir/data/ic_state/checkpoints";
@@ -93,10 +90,6 @@ const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 /// Where the admin key, which the tool accesses the node of `S` with, is copied
 /// to on the node.
 const ADMIN_KEY_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
-
-/// The height of the latest state the state manager of a replica holds, which
-/// it sets to the height of the checkpoint it starts from.
-const METRIC_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
 
 /// Timeout for `S` to become "merge ready". The ingress history of `S` only
 /// becomes free of terminal statuses once the entries of the ingress messages
@@ -117,12 +110,9 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// forever when prompts are skipped, so this is what ends a run that fails.
 /// Above the sum of the timeouts of its steps.
 const TOOL_TIMEOUT: Duration = Duration::from_secs(1800);
-/// Timeout for the replica on the node of `D` to start from the merged
-/// checkpoint once the tool is done.
-const REPLICA_RESTART_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Timeouts of the test itself, above the sum of `TOOL_TIMEOUT`,
-/// `REGISTRY_TIMEOUT` and `REPLICA_RESTART_TIMEOUT`.
+/// `REGISTRY_TIMEOUT` and the replica restart timeout.
 /// The overall timeout additionally covers the setup and has to stay below the
 /// 3600s of the `eternal` timeout of the Bazel target.
 const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
@@ -228,7 +218,17 @@ pub fn test(env: TestEnv) {
     let merged_checkpoint =
         check_merged_state_proposed(&env, &d_node, d_subnet.subnet_id, &canisters);
 
-    check_merged_state_running(&env, &d_node, &merged_checkpoint, &runtime);
+    check_state_ownership(&d_node);
+    runtime.block_on(subnet_merging_checks::check_merged_state_running(
+        &logger,
+        &d_node,
+        &merged_checkpoint,
+    ));
+    info!(
+        logger,
+        "Step 4 done: the replica on {} owns its state and started from the merged checkpoint {merged_checkpoint}",
+        d_node.get_ip_addr()
+    );
 }
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
@@ -408,82 +408,18 @@ fn check_merged_state_proposed(
     checkpoint.to_string()
 }
 
-/// Step 4: check that `d_node` holds exactly `merged_checkpoint` as the state
-/// of its replica, that every file of that state is owned by the replica, and
-/// that the replica started from that checkpoint. The state manager sets
-/// `METRIC_MAX_RESIDENT_HEIGHT` to the height of the checkpoint it starts from.
-fn check_merged_state_running(
-    env: &TestEnv,
-    d_node: &IcNodeSnapshot,
-    merged_checkpoint: &str,
-    runtime: &Runtime,
-) {
-    let logger = env.logger();
+/// Check ownership after the local upload, before waiting for the replica to start.
+fn check_state_ownership(d_node: &IcNodeSnapshot) {
     let node_ip = d_node.get_ip_addr();
-    info!(
-        logger,
-        "Step 4: Checking that node {node_ip} of subnet D runs on the merged state"
-    );
-    let run = |script: &str| {
-        d_node
-            .block_on_bash_script(script)
-            .unwrap_or_else(|e| panic!("failed to run `{script}` on node {node_ip}: {e}"))
-    };
-
-    let checkpoints = run(&format!("sudo ls {NODE_CHECKPOINTS_DIR}"));
-    let checkpoints: Vec<&str> = checkpoints.split_whitespace().collect();
-    assert_eq!(
-        checkpoints,
-        [merged_checkpoint],
-        "{NODE_CHECKPOINTS_DIR} on node {node_ip} does not hold exactly the merged checkpoint",
-    );
-    let merged_height = u64::from_str_radix(merged_checkpoint, 16).unwrap_or_else(|e| {
-        panic!("checkpoint {merged_checkpoint} is not named by its height: {e}")
-    });
-
-    // The replica can't start from files it doesn't own, so this fails with a
-    // more telling message than the check of the metric below would.
-    let not_owned = run(&format!(
-        "sudo find {NODE_STATE_DIR} ! -user ic-replica | head -n 10"
-    ));
+    let not_owned = d_node
+        .block_on_bash_script(&format!(
+            "sudo find {NODE_STATE_DIR} ! -user ic-replica | head -n 10"
+        ))
+        .unwrap_or_else(|e| {
+            panic!("failed to check ownership of {NODE_STATE_DIR} on node {node_ip}: {e}")
+        });
     assert!(
         not_owned.trim().is_empty(),
         "files of the state on node {node_ip} are not owned by ic-replica:\n{not_owned}",
-    );
-
-    runtime.block_on(async {
-        retry_with_msg_async!(
-            format!("node {node_ip} reporting {METRIC_MAX_RESIDENT_HEIGHT} {merged_height}"),
-            &logger,
-            REPLICA_RESTART_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let (metrics, err) =
-                    fetch_available_metrics(&[node_ip], &[METRIC_MAX_RESIDENT_HEIGHT]).await;
-                if let Some(err) = err {
-                    bail!("failed to scrape node {node_ip}: {err:?}");
-                }
-                let heights: Vec<f64> = metrics
-                    .get(&node_ip)
-                    .map(|metrics| {
-                        replica_values(metrics, METRIC_MAX_RESIDENT_HEIGHT, |_| true).collect()
-                    })
-                    .unwrap_or_default();
-                if heights != [merged_height as f64] {
-                    bail!("node {node_ip} reports {METRIC_MAX_RESIDENT_HEIGHT} {heights:?}");
-                }
-                Ok(())
-            }
-        )
-        .await
-        .unwrap_or_else(|e| {
-            panic!("the replica on node {node_ip} did not start from the merged checkpoint: {e}")
-        })
-    });
-
-    info!(
-        logger,
-        "Step 4 done: node {node_ip} of subnet D holds only the merged checkpoint \
-         {merged_checkpoint}, owned by the replica, which started from it"
     );
 }
