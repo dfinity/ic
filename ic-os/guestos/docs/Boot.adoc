@@ -158,11 +158,18 @@ system will set up its own +/var+ filesystem correctly again.
 Service: +generate-host-ssh-keys.service+, script: +/opt/ic/bin/generate-host-ssh-keys.sh+,
 depends on +/boot/config+ mount.
 
-This checks if ssh host keys for the system exist in the +config+ partition
+This checks if ssh host keys for the system exist in their storage location
 (creating them if necessary -- only on first boot after deployment). The
-keys are then copied to tmpfs and bind-mounted to +/etc/ssh+. Keeping
-host keys in the +config+ partition ensures that they are stable across
-system upgrades.
+host key files (and nothing else) are then copied to tmpfs and bind-mounted
+to +/etc/ssh+. The storage location keeps the keys stable across system
+upgrades:
+
+* Without TEE, the keys are kept in the +config+ partition.
+* With TEE (SEV-SNP), the host can read and write the +config+ partition, so
+  the keys are never stored there nor read from there. They are kept in the
+  SEV-encrypted store partition (+/var/lib/ic/data/ssh_host_keys+), which is
+  carried across upgrades. The Upgrade VM does not open the store and uses
+  ephemeral keys.
 
 == Set up node exporter keys
 
@@ -172,8 +179,10 @@ depends on +/boot/config+ mount.
 This generates the TLS key pair for the +node_exporter+ service on first boot.
 The keys are then bind-mounted into a suitable location within +/etc+.
 
-Similar to the ssh keys, the keys are held in the +config+ partition such that
-they are persisted across upgrades and available in early boot.
+Similar to the ssh keys, the keys are held in the +config+ partition without
+TEE, and in the SEV-encrypted store partition
+(+/var/lib/ic/data/node_exporter_tls+) with TEE, such that they are persisted
+across upgrades.
 
 == Set up of logical volume manager
 

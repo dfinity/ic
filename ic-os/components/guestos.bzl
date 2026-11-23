@@ -119,7 +119,7 @@ def component_files(mode):
         Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",
         Label("monitoring/node_exporter/node_exporter.service"): "/etc/systemd/system/node_exporter.service",
         Label("monitoring/node_exporter/guestos/node_exporter"): "/etc/default/node_exporter",
-        Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
+        Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys-guestos.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
         Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
         Label("monitoring/metrics-proxy/guestos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
         Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
@@ -168,7 +168,7 @@ def component_files(mode):
 
         # ssh
         Label("ssh/provision-ssh-keys.sh"): "/opt/ic/bin/provision-ssh-keys.sh",
-        Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
+        Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys-guestos.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
         Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
         Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-guestos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
         Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
