@@ -56,8 +56,9 @@ and the result is stored as `boot_args` on each boot partition. The file defines
 four complete command lines:
 
 * `BOOT_ARGS_A` / `BOOT_ARGS_B`: parameters for partition set A / B
-* `BOOT_ARGS_TEE_A` / `BOOT_ARGS_TEE_B`: the same plus `dfinity.tee=1`, used for
-  SEV-SNP guests
+* `BOOT_ARGS_TEE_A` / `BOOT_ARGS_TEE_B`: the same plus `dfinity.tee=1` and
+  `accept_memory=eager` (accept all memory at boot; see the comment in the
+  template), used for SEV-SNP guests
 
 === During the boot process
 
