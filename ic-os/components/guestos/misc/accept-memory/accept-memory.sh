@@ -8,7 +8,9 @@
 # before the kernel even brings up its console, which takes over 14 minutes for a 480 GiB guest.
 # Filling a tmpfs makes the kernel accept the memory that fills it; the tmpfs is this service's
 # own, so its memory is freed when the service exits. Acceptance runs at 1-1.5 GiB/s however many
-# vCPUs do it (the host serializes it), and many starve the rest of the guest, so a few do it.
+# vCPUs do it (the host serializes it), and many starve the rest of the guest, so a few do it. It
+# stops with 16 GiB left, so that other processes can still get memory meanwhile: filling to within
+# a few GiB made the guest stop responding.
 #
 # Usage: accept-memory.sh <directory on an empty tmpfs>
 
@@ -56,7 +58,6 @@ fill_parallel() {
 
 start=$(unaccepted_kib)
 log "$((start >> 20)) GiB unaccepted"
-fill_parallel 4 256 1024
-fill_parallel 1 64 256
+fill_parallel 4 256 16384
 rm -f "${dir}"/*
 log "accepted $(((start - $(unaccepted_kib)) >> 20)) GiB in ${SECONDS} s, $(($(unaccepted_kib) >> 10)) MiB left"
