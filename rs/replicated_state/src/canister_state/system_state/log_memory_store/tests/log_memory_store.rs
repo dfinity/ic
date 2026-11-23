@@ -936,6 +936,55 @@ fn test_from_checkpoint() {
     assert_eq!(s.next_idx(), TEST_NEXT_IDX);
 }
 
+/// Returns a store loaded from the page map of a store holding one record,
+/// logged at `timestamp`.
+fn loaded_store_with_one_record(timestamp: u64) -> LogMemoryStore {
+    let mut s = LogMemoryStore::new();
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(timestamp, b"a".to_vec());
+    s.append_delta_log(&mut delta);
+    LogMemoryStore::from_checkpoint(s.maybe_page_map().cloned(), s.next_idx())
+}
+
+#[test]
+fn test_first_timestamp_filled_on_first_use_after_loading() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    // Loading doesn't read the ring buffer.
+    assert_eq!(loaded.first_timestamp_cache.get(), None);
+
+    // Filled through a clone, it's there for the original too.
+    let clone = loaded.clone();
+    assert_eq!(clone.first_timestamp(), Some(1_000_000_000));
+    assert_eq!(
+        loaded.first_timestamp_cache.get(),
+        Some(&Some(1_000_000_000))
+    );
+}
+
+#[test]
+fn test_fill_caches_reads_the_header_and_first_timestamp() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    assert_eq!(loaded.header_cache.get(), None);
+    assert_eq!(loaded.first_timestamp_cache.get(), None);
+
+    loaded.fill_caches();
+    assert!(matches!(loaded.header_cache.get(), Some(Some(_))));
+    assert_eq!(
+        loaded.first_timestamp_cache.get(),
+        Some(&Some(1_000_000_000))
+    );
+}
+
+#[test]
+fn test_mutating_a_clone_leaves_the_first_timestamp_of_the_others() {
+    let loaded = loaded_store_with_one_record(1_000_000_000);
+    let mut clone = loaded.clone();
+    clone.clear();
+    assert_eq!(clone.first_timestamp(), None);
+    assert_eq!(loaded.first_timestamp(), Some(1_000_000_000));
+}
+
 #[test]
 fn test_next_idx_preserved_after_deallocate() {
     let log_size = 4096;
