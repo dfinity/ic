@@ -42,10 +42,15 @@ pub fn crypt_name(partition: Partition) -> &'static str {
     }
 }
 
+/// Returns the flags to activate the given partition's encrypted device with.
+///
+/// The store decrypts each read where it completes (`NO_READ_WORKQUEUE`), rather than queueing it
+/// to dm-crypt's workers, which also encrypt the writes: during heavy writes, such as a checkpoint's,
+/// queued reads wait behind that encryption, and with them execution's page faults.
 pub(crate) fn activate_flags(partition: Partition) -> CryptActivate {
     match partition {
         Partition::Var => CryptActivate::empty(),
-        Partition::Store => CryptActivate::ALLOW_DISCARDS,
+        Partition::Store => CryptActivate::ALLOW_DISCARDS | CryptActivate::NO_READ_WORKQUEUE,
     }
 }
 
