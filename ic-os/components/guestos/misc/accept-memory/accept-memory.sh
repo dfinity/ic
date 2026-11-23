@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# Accepts all of a TEE (SEV-SNP) guest's memory right after boot, from all vCPUs at once.
+# Accepts all of a TEE (SEV-SNP) guest's memory in the background after boot.
 #
 # SEV-SNP memory must be accepted before use, and the kernel accepts it lazily: unaccepted memory
 # counts as free, and more is accepted only when free memory runs low, not when it is too fragmented
-# for an allocation, which then reclaims page cache instead. `accept_memory=eager` accepts it all at
-# boot, but on one CPU, which takes over 14 minutes for a 480 GiB guest. Filling a tmpfs from every
-# vCPU makes the kernel accept it in parallel; the tmpfs is this service's own, so its memory is
-# freed when the service exits.
+# for an allocation, which then reclaims page cache instead. `accept_memory=eager` accepts it all
+# before the kernel even brings up its console, which takes over 14 minutes for a 480 GiB guest.
+# Filling a tmpfs makes the kernel accept the memory that fills it; the tmpfs is this service's
+# own, so its memory is freed when the service exits. Acceptance runs at 1-1.5 GiB/s however many
+# vCPUs do it (the host serializes it), and many starve the rest of the guest, so a few do it.
 #
 # Usage: accept-memory.sh <directory on an empty tmpfs>
 
@@ -55,8 +56,7 @@ fill_parallel() {
 
 start=$(unaccepted_kib)
 log "$((start >> 20)) GiB unaccepted"
-fill_parallel "$(nproc)" 256 1024
-fill_parallel 8 64 256
-fill_parallel 1 16 64
+fill_parallel 4 256 1024
+fill_parallel 1 64 256
 rm -f "${dir}"/*
 log "accepted $(((start - $(unaccepted_kib)) >> 20)) GiB in ${SECONDS} s, $(($(unaccepted_kib) >> 10)) MiB left"
