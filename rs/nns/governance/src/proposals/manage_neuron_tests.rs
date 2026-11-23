@@ -209,12 +209,12 @@ fn test_command_make_proposal_to_self_describing() {
         summary: "Vote yes on proposal 42.".to_string(),
         url: "https://forum.dfinity.org".to_string(),
         action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
-            id: None,
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 })),
             command: Some(Command::RegisterVote(RegisterVote {
                 proposal: Some(ProposalId { id: 42 }),
                 vote: Vote::Yes as i32,
             })),
+            id: None,
         }))),
         self_describing_action: None,
     };
