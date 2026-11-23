@@ -30,7 +30,8 @@ pub fn has_ipv6_connectivity(
 
     eprintln!("Bringing {} up with ip address {}", interface.name, ip);
 
-    get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;
+    // Skip DAD: a tentative address can't be the ping's source.
+    get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name, "nodad"])?;
     activate_link(&interface.name)?;
 
     let wait_time = Duration::from_secs(2);
