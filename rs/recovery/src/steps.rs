@@ -734,13 +734,17 @@ impl Step for UploadStateAndRestartStep {
             );
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
+            // The source has exactly one checkpoint. Sync the parent so rsync's
+            // --delete also removes other heights left in staging by an earlier upload.
+            let mut includes = vec![Path::new(CHECKPOINTS)];
             // The states metadata is only a cache that the state manager
             // rebuilds if it is missing, so it is uploaded only if present.
             // If it is absent, any copy left in the upload directory by an
             // interrupted upload is removed. This is a command of its own, so
             // that a failure stops the upload.
-            let has_states_metadata = self.data_src.join(STATES_METADATA).exists();
-            if !has_states_metadata {
+            if self.data_src.join(STATES_METADATA).exists() {
+                includes.push(Path::new(STATES_METADATA));
+            } else {
                 info!(
                     self.logger,
                     "Removing stale states metadata from the remote upload directory..."
@@ -752,11 +756,6 @@ impl Step for UploadStateAndRestartStep {
             }
 
             info!(self.logger, "Uploading state...");
-            let includes: Vec<_> =
-                Recovery::get_state_includes_with_given_checkpoint(max_checkpoint)
-                    .into_iter()
-                    .filter(|path| has_states_metadata || path != Path::new(STATES_METADATA))
-                    .collect();
             ssh_helper.rsync_includes(
                 &includes,
                 &self.data_src,

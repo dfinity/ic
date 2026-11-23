@@ -446,7 +446,7 @@ impl Recovery {
         )
     }
 
-    /// Return the list of paths to include when downloading/uploading the state with rsync.
+    /// Return the list of paths to include when downloading one checkpoint with rsync.
     ///
     /// This function must be updated if the state layout ever changes.
     pub fn get_state_includes_with_given_checkpoint(checkpoint_name: &str) -> Vec<PathBuf> {
@@ -645,15 +645,17 @@ impl Recovery {
 
     /// Get names of all checkpoints currently on disk
     pub fn get_checkpoint_names(path: &Path) -> RecoveryResult<Vec<String>> {
-        let res = read_dir(path)?
-            .flatten()
-            .filter_map(|e| {
-                e.path()
-                    .file_name()
-                    .and_then(|n| n.to_str().map(String::from))
+        read_dir(path)?
+            .map(|entry| {
+                let entry = entry.map_err(|err| RecoveryError::dir_error(path, err))?;
+                entry.file_name().into_string().map_err(|name| {
+                    RecoveryError::invalid_output_error(format!(
+                        "Invalid checkpoint name {name:?} in {}",
+                        path.display()
+                    ))
+                })
             })
-            .collect::<Vec<String>>();
-        Ok(res)
+            .collect()
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk
