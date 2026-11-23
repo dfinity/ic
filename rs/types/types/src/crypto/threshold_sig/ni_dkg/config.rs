@@ -72,9 +72,9 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
         let data = NiDkgConfigData {
             dkg_id: try_from_option_field(config.dkg_id, "NiDkgConfig::dkg_id")?,
             max_corrupt_dealers: NumberOfNodes::from(config.max_corrupt_dealers),
-            dealers: crate::try_collect_set(config.dealers, crate::node_id_try_from_protobuf)?,
+            dealers: crate::decode_set(config.dealers, crate::node_id_try_from_protobuf)?,
             max_corrupt_receivers: NumberOfNodes::from(config.max_corrupt_receivers),
-            receivers: crate::try_collect_set(config.receivers, crate::node_id_try_from_protobuf)?,
+            receivers: crate::decode_set(config.receivers, crate::node_id_try_from_protobuf)?,
             threshold: NumberOfNodes::from(config.threshold),
             registry_version: RegistryVersion::from(config.registry_version),
             resharing_transcript: config

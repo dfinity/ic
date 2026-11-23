@@ -63,17 +63,16 @@ impl TryFrom<pb::IngressPayload> for IngressPayload {
     type Error = ProxyDecodeError;
 
     fn try_from(payload: pb::IngressPayload) -> Result<Self, Self::Error> {
-        let serialized_ingress_messages =
-            crate::try_collect_map(payload.ingress_messages, |message| {
-                let ingress_message_id = IngressMessageId::new(
-                    Time::from_nanos_since_unix_epoch(message.expiry),
-                    MessageId::try_from(message.message_id.as_slice())?,
-                );
-                Ok((
-                    ingress_message_id,
-                    SignedRequestBytes::from(message.signed_request_bytes),
-                ))
-            })?;
+        let serialized_ingress_messages = crate::decode_map(payload.ingress_messages, |message| {
+            let ingress_message_id = IngressMessageId::new(
+                Time::from_nanos_since_unix_epoch(message.expiry),
+                MessageId::try_from(message.message_id.as_slice())?,
+            );
+            Ok((
+                ingress_message_id,
+                SignedRequestBytes::from(message.signed_request_bytes),
+            ))
+        })?;
 
         Ok(Self {
             serialized_ingress_messages,

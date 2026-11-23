@@ -124,7 +124,7 @@ pub fn chain_key_payload_to_bytes(payload: ChainKeyPayload, max_size: NumBytes) 
 pub fn bytes_to_chain_key_payload(data: &[u8]) -> Result<ChainKeyPayload, ProxyDecodeError> {
     let messages: Vec<ChainKeyAgreementProto> =
         slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
-    let agreements = crate::try_collect_map(messages, |message| {
+    let agreements = crate::decode_map(messages, |message| {
         let agreement = try_from_option_field(message.agreement, "ChainKeyAgreement::agreement")?;
         Ok((CallbackId::from(message.callback_id), agreement))
     })?;

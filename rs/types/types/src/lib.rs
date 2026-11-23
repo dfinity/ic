@@ -183,7 +183,7 @@ pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecod
 }
 
 /// Decodes protobuf entries into a map, rejecting a key that repeats an earlier one.
-pub(crate) fn try_collect_map<I: IntoIterator, K: Ord + fmt::Debug, V>(
+pub(crate) fn decode_map<I: IntoIterator, K: Ord + fmt::Debug, V>(
     entries: I,
     mut decode: impl FnMut(I::Item) -> Result<(K, V), ProxyDecodeError>,
 ) -> Result<BTreeMap<K, V>, ProxyDecodeError> {
@@ -201,7 +201,7 @@ pub(crate) fn try_collect_map<I: IntoIterator, K: Ord + fmt::Debug, V>(
 }
 
 /// Decodes protobuf items into a set, rejecting an item that repeats an earlier one.
-pub(crate) fn try_collect_set<I: IntoIterator, T: Ord + fmt::Debug>(
+pub(crate) fn decode_set<I: IntoIterator, T: Ord + fmt::Debug>(
     items: I,
     mut decode: impl FnMut(I::Item) -> Result<T, ProxyDecodeError>,
 ) -> Result<BTreeSet<T>, ProxyDecodeError> {
@@ -606,17 +606,17 @@ mod tests {
     }
 
     #[test]
-    fn try_collect_map_requires_distinct_keys() {
+    fn decode_map_requires_distinct_keys() {
         assert_eq!(
-            try_collect_map([(1, 'a'), (2, 'b')], Ok).unwrap(),
+            decode_map([(1, 'a'), (2, 'b')], Ok).unwrap(),
             BTreeMap::from([(1, 'a'), (2, 'b')])
         );
         assert_matches!(
-            try_collect_map([(1, 'a'), (2, 'b'), (1, 'c')], Ok),
+            decode_map([(1, 'a'), (2, 'b'), (1, 'c')], Ok),
             Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
         );
         assert_matches!(
-            try_collect_map([(1, 'a'), (2, 'b')], |(key, value)| match key {
+            decode_map([(1, 'a'), (2, 'b')], |(key, value)| match key {
                 1 => Ok((key, value)),
                 _ => Err(ProxyDecodeError::MissingField("value")),
             }),
@@ -625,14 +625,14 @@ mod tests {
     }
 
     #[test]
-    fn try_collect_set_requires_distinct_items() {
-        assert_eq!(try_collect_set([1, 2], Ok).unwrap(), BTreeSet::from([1, 2]));
+    fn decode_set_requires_distinct_items() {
+        assert_eq!(decode_set([1, 2], Ok).unwrap(), BTreeSet::from([1, 2]));
         assert_matches!(
-            try_collect_set([1, 2, 1], Ok),
+            decode_set([1, 2, 1], Ok),
             Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
         );
         assert_matches!(
-            try_collect_set([1, 2], |item| match item {
+            decode_set([1, 2], |item| match item {
                 1 => Ok(item),
                 _ => Err(ProxyDecodeError::MissingField("item")),
             }),

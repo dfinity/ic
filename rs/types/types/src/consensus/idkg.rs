@@ -1907,13 +1907,13 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
 impl TryFrom<pb::IDkgPayload> for IDkgPayload {
     type Error = ProxyDecodeError;
     fn try_from(payload: pb::IDkgPayload) -> Result<Self, Self::Error> {
-        let key_transcripts = crate::try_collect_map(payload.key_transcripts, |proto| {
+        let key_transcripts = crate::decode_map(payload.key_transcripts, |proto| {
             let key_transcript = MasterKeyTranscript::try_from(proto)?;
             Ok((key_transcript.key_id(), key_transcript))
         })?;
 
         // available_pre_signatures
-        let available_pre_signatures = crate::try_collect_map(
+        let available_pre_signatures = crate::decode_map(
             payload.available_pre_signatures,
             |available_pre_signature| {
                 let pre_signature: PreSignatureRef = try_from_option_field(
@@ -1928,7 +1928,7 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         )?;
 
         // pre_signatures_in_creation
-        let pre_signatures_in_creation = crate::try_collect_map(
+        let pre_signatures_in_creation = crate::decode_map(
             payload.pre_signatures_in_creation,
             |pre_signature_in_creation| {
                 let pre_signature: PreSignatureInCreation = try_from_option_field(
@@ -1953,7 +1953,7 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         };
 
         // idkg_transcripts
-        let idkg_transcripts = crate::try_collect_map(payload.idkg_transcripts, |proto| {
+        let idkg_transcripts = crate::decode_map(payload.idkg_transcripts, |proto| {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 ProxyDecodeError::Other(format!(
                     "IDkgPayload:: Failed to convert transcript: {err:?}"
@@ -1963,18 +1963,17 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         })?;
 
         // ongoing_xnet_reshares
-        let ongoing_xnet_reshares =
-            crate::try_collect_map(payload.ongoing_xnet_reshares, |reshare| {
-                let request: IDkgReshareRequest =
-                    try_from_option_field(reshare.request, "IDkgPayload::reshare::request")?;
-                let transcript: ReshareOfUnmaskedParams =
-                    try_from_option_field(reshare.transcript, "IDkgPayload::reshare::transcript")?;
-                Ok((request, transcript))
-            })?;
+        let ongoing_xnet_reshares = crate::decode_map(payload.ongoing_xnet_reshares, |reshare| {
+            let request: IDkgReshareRequest =
+                try_from_option_field(reshare.request, "IDkgPayload::reshare::request")?;
+            let transcript: ReshareOfUnmaskedParams =
+                try_from_option_field(reshare.transcript, "IDkgPayload::reshare::transcript")?;
+            Ok((request, transcript))
+        })?;
 
         // xnet_reshare_agreements
         let xnet_reshare_agreements =
-            crate::try_collect_map(payload.xnet_reshare_agreements, |agreement| {
+            crate::decode_map(payload.xnet_reshare_agreements, |agreement| {
                 let request: IDkgReshareRequest =
                     try_from_option_field(agreement.request, "IDkgPayload::agreement::request")?;
 

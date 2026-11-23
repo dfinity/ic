@@ -415,11 +415,11 @@ fn idkg_transcript_params_struct(
     let transcript_id: IDkgTranscriptId =
         try_from_option_field(proto.transcript_id, "IDkgTranscriptParams::transcript_id")?;
 
-    let dealers = crate::try_collect_set(proto.dealers, |tuple| {
+    let dealers = crate::decode_set(proto.dealers, |tuple| {
         node_id_try_from_option(tuple.dealer_id)
     });
 
-    let receivers = crate::try_collect_set(proto.receivers, node_id_try_from_protobuf);
+    let receivers = crate::decode_set(proto.receivers, node_id_try_from_protobuf);
 
     let params = IDkgTranscriptParams::new(
         transcript_id,
@@ -468,7 +468,7 @@ fn idkg_transcript_struct(proto: IDkgTranscriptProto) -> Result<IDkgTranscript, 
     let transcript_id: IDkgTranscriptId =
         try_from_option_field(proto.transcript_id, "IDkgTranscript::transcript_id")?;
 
-    let receivers = crate::try_collect_set(proto.receivers, node_id_try_from_protobuf);
+    let receivers = crate::decode_set(proto.receivers, node_id_try_from_protobuf);
     let receivers = IDkgReceivers::new(receivers?).map_err(|e| {
         InitialIDkgDealingsValidationError::DeserializationError {
             error: format!("Error deserializing receivers: {e}"),
@@ -521,7 +521,7 @@ fn signature_tuple_proto(
 fn verified_dealings_map(
     verified_protos: Vec<VerifiedIDkgDealingProto>,
 ) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, ProxyDecodeError> {
-    crate::try_collect_map(verified_protos, |proto| {
+    crate::decode_map(verified_protos, |proto| {
         let signed_dealing: SignedIDkgDealing = try_from_option_field(
             proto.signed_dealing_tuple,
             "VerifiedIDkgDealing::signed_dealing_tuple",
@@ -537,7 +537,7 @@ fn verified_dealings_map(
 fn basic_signature_batch_struct(
     signature_batch: Vec<SignatureTuple>,
 ) -> Result<BasicSignatureBatch<SignedIDkgDealing>, ProxyDecodeError> {
-    let signatures_map = crate::try_collect_map(signature_batch, |tuple| {
+    let signatures_map = crate::decode_map(signature_batch, |tuple| {
         let signer = node_id_try_from_option(tuple.signer)?;
         Ok((signer, BasicSigOf::new(BasicSig(tuple.signature))))
     })?;

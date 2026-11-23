@@ -40,7 +40,7 @@ impl TryFrom<pb::XNetPayload> for XNetPayload {
 
     fn try_from(payload: pb::XNetPayload) -> Result<Self, Self::Error> {
         Ok(Self {
-            stream_slices: crate::try_collect_map(payload.stream_slices, |subnet_stream_slice| {
+            stream_slices: crate::decode_map(payload.stream_slices, |subnet_stream_slice| {
                 Ok((
                     subnet_id_try_from_option(
                         subnet_stream_slice.subnet_id,

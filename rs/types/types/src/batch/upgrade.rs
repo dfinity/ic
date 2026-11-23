@@ -118,7 +118,7 @@ impl TryFrom<pb::UpgradePermitAction> for UpgradePermitAction {
 fn signature_batch(
     signatures: Vec<pb::BasicSignature>,
 ) -> Result<BasicSignatureBatch<UpgradeAuthorizationContent>, ProxyDecodeError> {
-    let signatures_map = crate::try_collect_map(signatures, |signature| {
+    let signatures_map = crate::decode_map(signatures, |signature| {
         let signature: BasicSignature<UpgradeAuthorizationContent> = signature.try_into()?;
         Ok((signature.signer, signature.signature))
     })?;
