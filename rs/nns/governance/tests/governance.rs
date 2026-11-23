@@ -3174,6 +3174,17 @@ async fn test_invalid_nested_manage_neuron_proposals() {
     };
     let test_cases = vec![
         (
+            "nested Motion proposal",
+            Proposal {
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Hello".to_string(),
+                })),
+                ..valid_nested_proposal.clone()
+            },
+            ErrorType::InvalidProposal,
+            "must be (another) ManageNeuron proposal",
+        ),
+        (
             "two levels of nesting",
             nested_manage_neuron_proposal(Command::MakeProposal(Box::new(
                 valid_nested_proposal.clone(),
@@ -3303,12 +3314,12 @@ async fn test_disallow_large_manage_neuron_proposals() {
                         id: 1,
                     })),
                     id: None,
-                    // The nested proposal is valid on its own, but too large.
                     command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
-                        title: Some("A Motion Proposal".to_string()),
-                        summary: "x".repeat(2 * MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX),
-                        action: Some(proposal::Action::Motion(Motion {
-                            motion_text: "Hello".to_string(),
+                        title: Some("An Install Code Proposal".to_string()),
+                        summary: "proposal 1".to_string(),
+                        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                            nns_function: 42,
+                            payload: vec![1_u8; 1_000_000],
                         })),
                         ..Default::default()
                     }))),
@@ -3321,7 +3332,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
         result,
         Err(GovernanceError { error_type, error_message })
         if error_type == ErrorType::InvalidProposal as i32
-            && error_message.contains("protobuf encoded")
+            && error_message.contains("must be (another) ManageNeuron proposal")
     );
 
     // Sanity check: disburse maturity should be allowed.
