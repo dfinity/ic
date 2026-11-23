@@ -8,4 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-metrics-encoder = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 ic0 = { workspace = true }
