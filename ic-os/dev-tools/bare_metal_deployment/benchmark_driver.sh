@@ -38,6 +38,14 @@ guest_memory() {
 
 echo "-------------------- TEE probe --------------------"
 guest_memory
+# Until (nearly) nothing is left unaccepted, or for at most 15 minutes.
+for i in $(seq 1 60); do
+    left=$(curl -sk --max-time 60 "https://[${guest}]:9100/metrics" | python3 -c "${PY}" | sed -n 's/^MemFree - free lists: \([0-9.]*\) GiB$/\1/p')
+    echo "$(date -u +%FT%TZ) MemFree - free lists: ${left} GiB"
+    case ${left} in 0.* | 1.*) break ;; esac
+    sleep 15
+done
+guest_memory
 echo "---- HostOS ${HOSTOS_IP}"
 ssh "${O[@]}" "admin@${HOSTOS_IP}" sudo bash -s <<'EOF'
 cd /var/log/libvirt/qemu && ls -la
