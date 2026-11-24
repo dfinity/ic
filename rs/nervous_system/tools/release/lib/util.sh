@@ -69,7 +69,11 @@ confirm_by_entering_dfx_hsm_pin() {
     fi
 
     prompt "If the above seems right, enter your HSM PIN now (otherwise, press Ctrl+C):"
-    read_secret_showing_asterisks
+    if ! read_secret_showing_asterisks; then
+        echo
+        echo "Input ended before Enter was pressed. Aborting..."
+        exit 1
+    fi
     DFX_HSM_PIN="$SECRET"
     unset SECRET
     echo
@@ -85,13 +89,17 @@ confirm_by_entering_dfx_hsm_pin() {
 # Reads a line from the user without showing it. Stores the result in SECRET.
 #
 # Prints one * instead of what the user typed in. Backspace works.
+#
+# Returns nonzero (and leaves SECRET empty) if input ends without the user
+# pressing Enter (e.g. end of pipe or Ctrl+D). This way, we require positive
+# confirmation from the user.
 read_secret_showing_asterisks() {
     SECRET=""
     local CHARACTER
     while IFS= read -r -s -n 1 CHARACTER; do
         # Enter (read gives an empty string for the newline).
         if [ -z "$CHARACTER" ]; then
-            break
+            return 0
         fi
 
         # Backspace (^? or ^H).
@@ -109,6 +117,10 @@ read_secret_showing_asterisks() {
         SECRET+="$CHARACTER"
         echo -n '*'
     done
+
+    # Input ended without Enter being pressed (e.g. pipe, or Ctrl-D).
+    SECRET=""
+    return 1
 }
 
 #### File interaction helpers
