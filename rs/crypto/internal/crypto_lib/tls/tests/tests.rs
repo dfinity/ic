@@ -65,6 +65,20 @@ fn should_have_stable_representation_of_private_key() {
 }
 
 #[test]
+fn should_have_stable_representation_of_certificate() {
+    let seed = Seed::from_bytes(&[0x42_u8; 32]);
+
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed, "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
+
+    assert_eq!(
+        hex::encode(cert.bytes),
+        "3081ea30819da003020102021307fb88ace68cf502daaa70fb8a85a24bc4174d300506032b657030163114301206035504030c0b636f6d6d6f6e206e616d65301e170d3231303530363139313731305a170d3231303530363139333335305a30163114301206035504030c0b636f6d6d6f6e206e616d65302a300506032b6570032100baffcb2b09492ea50f6b0ca9b4d0fd7cd330ae289b4a5276e92027196b80d2dc300506032b6570034100225f066d392fe49c36ef2fad73d439c2841966add7a79843b235e448f36bc8ed74e95fe4c38ec64932c2cf44de112c87b60f469512de7ee87122ea848f8cf301"
+    );
+}
+
+#[test]
 fn should_generate_self_signed_certificate() {
     let rng = &mut reproducible_rng();
     let (cert, _secret_key) = generate_tls_key_pair_der(

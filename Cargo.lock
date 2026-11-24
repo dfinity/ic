@@ -5700,6 +5700,7 @@ dependencies = [
  "der 0.7.10",
  "guest_disk",
  "guest_upgrade_shared",
+ "hex",
  "http-body-util",
  "hyper",
  "hyper-util",

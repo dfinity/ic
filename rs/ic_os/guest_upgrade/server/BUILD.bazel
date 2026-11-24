@@ -46,4 +46,7 @@ rust_library(
 rust_test(
     name = "server_test",
     crate = ":server",
+    deps = [
+        "@crate_index//:hex",
+    ],
 )
