@@ -409,9 +409,9 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
         proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-    ) -> Result<(), PayloadValidationError> {
+    ) -> Result<NumBytes, PayloadValidationError> {
         if payload.is_empty() {
-            return Ok(());
+            return Ok(NumBytes::new(0));
         }
         let raw_payload_len = payload.len();
 
@@ -443,7 +443,7 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
             }
         }
 
-        Ok(())
+        Ok(NumBytes::new(raw_payload_len as u64))
     }
 }
 

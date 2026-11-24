@@ -1,4 +1,4 @@
-use crate::{consensus::PayloadValidationError, validation::ValidationResult};
+use crate::consensus::PayloadValidationError;
 use ic_base_types::NumBytes;
 use ic_types::{
     Height, NodeId, Time, batch::ValidationContext, consensus::BlockPayload, crypto::CryptoHashOf,
@@ -53,7 +53,8 @@ pub trait BatchPayloadBuilder: Send + Sync {
     /// Builds a payload and returns it in serialized form.
     ///
     /// # Arguments
-    /// - `max_size`: The maximum [wire size](Self::wire_size) the payload is supposed to have
+    /// - `max_size`: The maximum size the payload is supposed to have, as
+    ///   [`Self::validate_payload`] returns it
     /// - `past_payloads`: A collection of past payloads. Allows the payload builder
     ///   to deduplicate messages.
     /// - `context`: [`ValidationContext`] under which the payload is supposed to be validated
@@ -79,7 +80,9 @@ pub trait BatchPayloadBuilder: Send + Sync {
     ///
     /// # Returns
     ///
-    /// - `Ok(())` on success
+    /// - On success, the size of the payload in a block proposal sent to peers, which is
+    ///   what counts against the block's payload size limit. It may be an estimate, as long
+    ///   as every node computes the same one.
     /// - A [`BatchPayloadValidationError`] describing the problem otherwise
     fn validate_payload(
         &self,
@@ -87,16 +90,7 @@ pub trait BatchPayloadBuilder: Send + Sync {
         proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-    ) -> ValidationResult<PayloadValidationError>;
-
-    /// Returns the size of a valid payload in a block proposal sent to peers, which
-    /// is what counts against the block's payload size limit. It may be an estimate,
-    /// as long as every node computes the same one.
-    ///
-    /// Defaults to the size of the payload itself, for a payload that is sent as it is.
-    fn wire_size(&self, payload: &[u8]) -> NumBytes {
-        NumBytes::new(payload.len() as u64)
-    }
+    ) -> Result<NumBytes, PayloadValidationError>;
 }
 
 /// Indicates that a payload can be transformed into a set of messages, which
@@ -107,6 +101,6 @@ pub trait IntoMessages<M> {
     /// # Guarantees
     ///
     /// This function must be infallible if the corresponding [`BatchPayloadBuilder::validate_payload`]
-    /// returns `Ok(())` on the same payload.
+    /// returns `Ok` on the same payload.
     fn into_messages(payload: &[u8]) -> M;
 }

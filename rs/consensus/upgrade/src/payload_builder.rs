@@ -1,7 +1,7 @@
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext};
 use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationError};
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
-use ic_interfaces::validation::{ValidationError, ValidationResult};
+use ic_interfaces::validation::ValidationError;
 use ic_types::batch::ValidationContext;
 use ic_types::{Height, NumBytes};
 
@@ -25,10 +25,10 @@ impl BatchPayloadBuilder for UpgradePayloadBuilderImpl {
         _proposal_context: &ProposalContext,
         payload: &[u8],
         _past_payloads: &[PastPayload],
-    ) -> ValidationResult<PayloadValidationError> {
+    ) -> Result<NumBytes, PayloadValidationError> {
         // TODO: implement proper validation
         if payload.is_empty() {
-            Ok(())
+            Ok(NumBytes::new(0))
         } else {
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidUpgradePayload(InvalidUpgradePayloadReason::NonEmpty),

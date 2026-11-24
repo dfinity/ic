@@ -173,15 +173,12 @@ pub(crate) fn payload_to_messages(
         .chain(async_receipts.into_iter().map(PayloadMessage::AsyncReceipt))
 }
 
-/// The estimated size of a valid payload in a block proposal sent to peers: the sum of
-/// the [`PayloadSize`] estimates of its messages, as the payload builder adds them up.
-pub(crate) fn wire_size(data: &[u8]) -> NumBytes {
-    let size = match bytes_to_payload(data) {
-        Ok(payload) => payload_to_messages(payload)
-            .map(|message| PayloadSize::of(&message).wire())
-            .sum(),
-        Err(_) => data.len(),
-    };
+/// The estimated size of the payload in a block proposal sent to peers: the sum of the
+/// [`PayloadSize`] estimates of its messages, as the payload builder adds them up.
+pub(crate) fn wire_size(payload: CanisterHttpPayload) -> NumBytes {
+    let size: usize = payload_to_messages(payload)
+        .map(|message| PayloadSize::of(&message).wire())
+        .sum();
     NumBytes::new(size as u64)
 }
 

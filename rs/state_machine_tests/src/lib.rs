@@ -981,10 +981,10 @@ impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
         &self,
         _height: Height,
         _proposal_context: &ProposalContext,
-        _payload: &[u8],
+        payload: &[u8],
         _past_payloads: &[PastPayload],
-    ) -> Result<(), PayloadValidationError> {
-        Ok(())
+    ) -> Result<NumBytes, PayloadValidationError> {
+        Ok(NumBytes::new(payload.len() as u64))
     }
 }
 

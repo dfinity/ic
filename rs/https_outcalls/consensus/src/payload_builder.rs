@@ -1232,7 +1232,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-    ) -> Result<(), PayloadValidationError> {
+    ) -> Result<NumBytes, PayloadValidationError> {
         let _time = self
             .metrics
             .op_duration
@@ -1241,7 +1241,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
         // Empty payloads are always valid
         if payload.is_empty() {
-            return Ok(());
+            return Ok(NumBytes::new(0));
         }
 
         if payload.len() > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
@@ -1267,11 +1267,8 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             &payload,
             proposal_context.validation_context,
             past_payloads,
-        )
-    }
-
-    fn wire_size(&self, payload: &[u8]) -> NumBytes {
-        parse::wire_size(payload)
+        )?;
+        Ok(parse::wire_size(payload))
     }
 }
 

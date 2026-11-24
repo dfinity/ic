@@ -264,8 +264,7 @@ impl BatchPayloadSectionBuilder {
                     &canister_http,
                     &past_payloads,
                 ) {
-                    Ok(()) => {
-                        let size = builder.wire_size(&canister_http);
+                    Ok(size) => {
                         payload.canister_http = canister_http;
                         size
                     }
@@ -299,8 +298,6 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                     proposal_context.validation_context,
                 );
-                let size = NumBytes::new(query_stats.len() as u64);
-
                 // Check validation as safety measure
                 match builder.validate_payload(
                     height,
@@ -308,7 +305,7 @@ impl BatchPayloadSectionBuilder {
                     &query_stats,
                     &past_payloads,
                 ) {
-                    Ok(()) => {
+                    Ok(size) => {
                         payload.query_stats = query_stats;
                         size
                     }
@@ -342,12 +339,10 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                     proposal_context.validation_context,
                 );
-                let size = NumBytes::new(chain_key.len() as u64);
-
                 // Check validation as safety measure
                 match builder.validate_payload(height, proposal_context, &chain_key, &past_payloads)
                 {
-                    Ok(()) => {
+                    Ok(size) => {
                         payload.chain_key = chain_key;
                         size
                     }
@@ -381,11 +376,9 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                     proposal_context.validation_context,
                 );
-                let size = NumBytes::new(upgrade.len() as u64);
-
                 // Check validation as safety measure
                 match builder.validate_payload(height, proposal_context, &upgrade, &past_payloads) {
-                    Ok(()) => {
+                    Ok(size) => {
                         payload.upgrade = upgrade;
                         size
                     }
@@ -470,9 +463,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context,
                     &payload.canister_http,
                     &past_payloads,
-                )?;
-
-                Ok(builder.wire_size(&payload.canister_http))
+                )
             }
             Self::QueryStats(builder) => {
                 let past_payloads: Vec<PastPayload> =
@@ -489,9 +480,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context,
                     &payload.query_stats,
                     &past_payloads,
-                )?;
-
-                Ok(NumBytes::new(payload.query_stats.len() as u64))
+                )
             }
             Self::ChainKey(builder) => {
                 let past_payloads: Vec<PastPayload> =
@@ -508,9 +497,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context,
                     &payload.chain_key,
                     &past_payloads,
-                )?;
-
-                Ok(NumBytes::new(payload.chain_key.len() as u64))
+                )
             }
             Self::Upgrade(builder) => {
                 let past_payloads: Vec<PastPayload> =
@@ -522,14 +509,7 @@ impl BatchPayloadSectionBuilder {
                         }
                     });
 
-                builder.validate_payload(
-                    height,
-                    proposal_context,
-                    &payload.upgrade,
-                    &past_payloads,
-                )?;
-
-                Ok(NumBytes::new(payload.upgrade.len() as u64))
+                builder.validate_payload(height, proposal_context, &payload.upgrade, &past_payloads)
             }
         }
     }

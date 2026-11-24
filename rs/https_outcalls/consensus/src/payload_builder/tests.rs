@@ -164,7 +164,7 @@ fn response_is_delivered_if_it_fits_into_the_block_once_stripped() {
             let wire_budget = NumBytes::new(10_000);
             let context = default_validation_context();
             let payload = payload_builder.build_payload(Height::new(1), wire_budget, &[], &context);
-            payload_builder
+            let wire_size = payload_builder
                 .validate_payload(
                     Height::new(1),
                     &test_proposal_context(&context),
@@ -173,7 +173,6 @@ fn response_is_delivered_if_it_fits_into_the_block_once_stripped() {
                 )
                 .expect("built payload must pass validation");
             assert!(payload.len() > wire_budget.get() as usize);
-            let wire_size = payload_builder.wire_size(&payload);
             assert!(wire_size < wire_budget);
             let parsed = bytes_to_payload(&payload).expect("parse error");
             assert_eq!(parsed.responses.len(), 1);
@@ -2286,7 +2285,7 @@ fn run_non_flexible_validation_test<F>(
     https_feature_flag: bool,
     mut modify: F,
     validation_context: &ValidationContext,
-) -> Result<(), PayloadValidationError>
+) -> Result<NumBytes, PayloadValidationError>
 where
     F: FnMut(&mut CanisterHttpResponse, &mut CanisterHttpResponseMetadata),
 {
@@ -4658,7 +4657,7 @@ fn flexible_error_timeout_valid() {
                 &payload_to_bytes_max_4mb(payload),
                 &[],
             );
-            assert_matches!(result, Ok(()));
+            assert_matches!(result, Ok(_));
         },
     );
 }
@@ -4854,7 +4853,7 @@ fn flexible_bounded_wait_request_times_out_a_second_after_its_deadline() {
                 )
             )) if id == callback_id
         );
-        assert_matches!(validate_at(12), Ok(()));
+        assert_matches!(validate_at(12), Ok(_));
     });
 }
 
@@ -4963,7 +4962,7 @@ fn flexible_error_responses_too_large_valid() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
-        assert_matches!(result, Ok(()));
+        assert_matches!(result, Ok(_));
     });
 }
 
@@ -5000,7 +4999,7 @@ fn flexible_error_responses_too_large_valid_with_unseen_members() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
-        assert_matches!(result, Ok(()));
+        assert_matches!(result, Ok(_));
     });
 }
 
@@ -5034,7 +5033,7 @@ fn flexible_error_responses_too_large_valid_with_mixed_ok_and_reject() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
-        assert_matches!(result, Ok(()));
+        assert_matches!(result, Ok(_));
     });
 }
 
@@ -5428,7 +5427,7 @@ fn flexible_error_too_many_rejects_valid() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
-        assert_matches!(result, Ok(()));
+        assert_matches!(result, Ok(_));
     });
 }
 
@@ -6443,7 +6442,7 @@ fn validate_out_of_cycles_payload(
     callback_id: CallbackId,
     context: CanisterHttpRequestContext,
     error: CanisterHttpOutOfCycles,
-) -> Result<(), PayloadValidationError> {
+) -> Result<NumBytes, PayloadValidationError> {
     let payload = CanisterHttpPayload {
         out_of_cycles: vec![error],
         ..Default::default()
@@ -6511,7 +6510,7 @@ fn validate_payload_fails_for_a_non_flexible_out_of_cycles_that_does_not_hold() 
     // And the honest figures validate.
     assert_matches!(
         validate(Cycles::zero(), consensus_cost, Cycles::zero()),
-        Ok(())
+        Ok(_)
     );
 }
 
@@ -7845,7 +7844,7 @@ fn validate_payload_accepts_initial_spent_within_the_collective_allowance() {
         result.expect("validation did not run")
     };
 
-    assert_matches!(validate(allowance), Ok(()));
+    assert_matches!(validate(allowance), Ok(_));
     assert_matches!(
         validate(allowance - Cycles::new(1)),
         Err(ValidationError::InvalidArtifact(
@@ -7905,7 +7904,7 @@ fn validate_payload_accepts_a_threshold_signed_response_at_the_quoted_price() {
                     &payload_to_bytes_max_4mb(payload),
                     &[],
                 ),
-                Ok(())
+                Ok(_)
             );
         },
     );
@@ -7919,7 +7918,7 @@ fn validate_flexible_payload_with_allowance(
     min_responses: u32,
     per_replica_allowance: Cycles,
     payload: CanisterHttpPayload,
-) -> Result<(), PayloadValidationError> {
+) -> Result<NumBytes, PayloadValidationError> {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let mut result = None;
     setup_test_with_contexts(
@@ -7992,7 +7991,7 @@ fn validate_payload_fails_for_flexible_initial_spent_exceeding_allowance() {
             initial_spent,
             flexible_payload(vec![group]),
         ),
-        Ok(())
+        Ok(_)
     );
 }
 
@@ -8700,7 +8699,7 @@ fn build_and_validate_and_parse_payload_with_max_size(
             &payload,
             &[],
         ),
-        Ok(())
+        Ok(_)
     );
     bytes_to_payload(&payload).expect("parse error")
 }
@@ -8718,7 +8717,7 @@ fn build_and_validate_and_parse_payload_with_context(
             &payload,
             &[],
         ),
-        Ok(())
+        Ok(_)
     );
     bytes_to_payload(&payload).expect("parse error")
 }
@@ -8828,7 +8827,7 @@ fn build_async_receipt_payload(
                     &bytes,
                     past_payloads,
                 ),
-                Ok(())
+                Ok(_)
             );
             payload = Some(bytes_to_payload(&bytes).expect("parse error"));
         },
@@ -9185,7 +9184,7 @@ fn validate_async_receipt_payload(
     context: CanisterHttpRequestContext,
     refunds: Vec<CanisterHttpResponseShare>,
     past_payloads: &[PastPayload],
-) -> Result<(), PayloadValidationError> {
+) -> Result<NumBytes, PayloadValidationError> {
     validate_async_receipt_payload_at(
         num_nodes,
         callback_id,
@@ -9205,7 +9204,7 @@ fn validate_async_receipt_payload_at(
     refunds: Vec<CanisterHttpResponseShare>,
     past_payloads: &[PastPayload],
     validation_context: &ValidationContext,
-) -> Result<(), PayloadValidationError> {
+) -> Result<NumBytes, PayloadValidationError> {
     let payload = CanisterHttpPayload {
         async_receipts: refunds,
         ..Default::default()
@@ -9251,7 +9250,7 @@ fn validate_payload_fails_for_an_async_receipt_of_a_timed_out_delivered_context(
     // rejection below cannot be down to anything else about it.
     assert_matches!(
         validate_at(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1)),
-        Ok(())
+        Ok(_)
     );
     assert_matches!(
         validate_at(DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT),
@@ -9263,7 +9262,10 @@ fn validate_payload_fails_for_an_async_receipt_of_a_timed_out_delivered_context(
     );
 }
 
-fn assert_already_refunded(result: Result<(), PayloadValidationError>, expected_signer: NodeId) {
+fn assert_already_refunded(
+    result: Result<NumBytes, PayloadValidationError>,
+    expected_signer: NodeId,
+) {
     assert_matches!(
         result,
         Err(ValidationError::InvalidArtifact(

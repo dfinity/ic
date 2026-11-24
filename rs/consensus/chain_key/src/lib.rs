@@ -536,7 +536,7 @@ impl BatchPayloadBuilder for ChainKeyPayloadBuilderImpl {
         context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-    ) -> Result<(), PayloadValidationError> {
+    ) -> Result<NumBytes, PayloadValidationError> {
         let _time = self
             .metrics
             .op_duration
@@ -545,8 +545,9 @@ impl BatchPayloadBuilder for ChainKeyPayloadBuilderImpl {
 
         // Empty payloads are always valid
         if payload.is_empty() {
-            return Ok(());
+            return Ok(NumBytes::new(0));
         }
+        let size = NumBytes::new(payload.len() as u64);
 
         let (valid_keys, request_expiry) =
             self.get_enabled_keys_and_expiry(height, context.validation_context.time)?;
@@ -557,8 +558,8 @@ impl BatchPayloadBuilder for ChainKeyPayloadBuilderImpl {
         {
             Ok(state) => state,
             Err(err) => {
-                return validation_failed_err(ChainKeyPayloadValidationFailure::StateUnavailable(
-                    err,
+                return Err(validation_failed(
+                    ChainKeyPayloadValidationFailure::StateUnavailable(err),
                 ));
             }
         };
@@ -574,7 +575,8 @@ impl BatchPayloadBuilder for ChainKeyPayloadBuilderImpl {
             valid_keys,
             state.get_ref(),
             delivered_ids,
-        )
+        )?;
+        Ok(size)
     }
 }
 
@@ -1480,7 +1482,7 @@ mod tests {
                 // The canonical encoding is accepted (the test crypto accepts any signature).
                 let payload = as_bytes(BTreeMap::from([(id, fake_agreement_for_context(context))]));
                 let validation = builder.validate_payload(HEIGHT, &proposal_context, &payload, &[]);
-                assert_matches!(validation, Ok(()));
+                assert_matches!(validation, Ok(_));
 
                 // Encoding the same reply followed by an additional argument still decodes to
                 // the same reply, but must be rejected because it is not the canonical encoding.
