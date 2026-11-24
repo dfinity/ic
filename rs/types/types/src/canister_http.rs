@@ -1495,8 +1495,6 @@ mod tests {
         HttpMethod, ReplicationCounts, TransformFunc,
     };
     use ic_types_test_utils::ids::node_test_id;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
     use rstest::rstest;
     use std::str::FromStr;
     use strum::IntoEnumIterator;
@@ -2208,10 +2206,11 @@ mod tests {
     fn non_replicated_delegated_node_is_stable() {
         let node_ids: BTreeSet<NodeId> = (0..13).map(node_test_id).collect();
 
-        // (RNG seed, index `i` of the delegated node `node_test_id(i)`)
-        let cases = [(0, 7), (1, 1), (2, 8), (3, 8), (4, 1), (5, 11)];
+        // Index `i` of the delegated node `node_test_id(i)`, for the RNG seeds
+        // 0, 1, 2, ...
+        let expected_nodes = [7, 1, 8, 8, 1, 11, 5, 6, 9, 6, 0, 10, 1, 9, 9, 7];
 
-        for (seed, expected_node) in cases {
+        for (seed, expected_node) in (0..).zip(expected_nodes) {
             let context = CanisterHttpRequestContext::generate_from_args(
                 UNIX_EPOCH,
                 &dummy_request(),
@@ -2219,7 +2218,7 @@ mod tests {
                 &node_ids,
                 RegistryVersion::from(1),
                 CanisterCyclesCostSchedule::Normal,
-                &mut ChaCha20Rng::from_seed([seed; 32]),
+                &mut ReproducibleRng::from_seed_for_debugging([seed; 32]),
                 /* pay_as_you_go_enabled = */ false,
             )
             .unwrap();
@@ -2262,7 +2261,7 @@ mod tests {
                 &node_ids,
                 RegistryVersion::from(1),
                 CanisterCyclesCostSchedule::Normal,
-                &mut ChaCha20Rng::from_seed([seed; 32]),
+                &mut ReproducibleRng::from_seed_for_debugging([seed; 32]),
                 PricingVersion::PayAsYouGo,
             )
             .unwrap();
