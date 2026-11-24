@@ -33,6 +33,12 @@ def _wasm_rust_transition_impl(_settings, attr):
             "embed-bitcode=yes",
             "-C",
             "target-feature=+bulk-memory",
+            # Use 32-bit limbs in the crates that pick their limb size with cpubits (k256, p256,
+            # p384 and crypto-bigint). cpubits picks 64-bit limbs on wasm32, but Wasm has no
+            # 64x64->128-bit multiply, so 64-bit limb arithmetic is emulated, which makes k256
+            # several times slower.
+            "--cfg",
+            "cpubits=\"32\"",
         ],
     }
 

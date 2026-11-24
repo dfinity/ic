@@ -166,11 +166,20 @@ fn should_use_only_the_leftmost_32_bytes_of_a_longer_digest() {
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
-    let digest = [rng.r#gen::<[u8; 32]>(), rng.r#gen::<[u8; 32]>()].concat();
+    // 2^29 bytes is the shortest digest whose length in bits overflows a
+    // u32, on which the rfc6979 crate panics. A zero-initialized vector gets
+    // memory only for the pages written to, so this 512 MiB digest is cheap.
+    for len in [64, 1 << 29] {
+        let mut digest = vec![0_u8; len];
+        rng.fill(&mut digest[..64]);
 
-    let sig = sk.sign_digest_with_ecdsa(&digest);
-    assert_eq!(sig, sk.sign_digest_with_ecdsa(&digest[..32]));
-    assert!(pk.verify_ecdsa_signature_prehashed(&digest, &sig));
+        let sig = sk.sign_digest_with_ecdsa(&digest);
+        assert_eq!(sig, sk.sign_digest_with_ecdsa(&digest[..32]), "len = {len}");
+        assert!(
+            pk.verify_ecdsa_signature_prehashed(&digest, &sig),
+            "len = {len}"
+        );
+    }
 }
 
 #[test]
