@@ -72,6 +72,7 @@ fn secret_key_generation_from_seed_is_stable() {
 }
 
 #[test]
+#[cfg(feature = "rand")]
 fn secret_key_generation_from_rng_is_stable() {
     // Each key is the next 32 bytes of the RNG output
     let mut rng = test_rng_with_seed([42; 32]);
