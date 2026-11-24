@@ -21,9 +21,11 @@ name = "validate_request"
 path = "fuzz_targets/validate_request.rs"
 test = false
 doc = false
+bench = false
 
 [[bin]]
 name = "signed_ingress"
 path = "fuzz_targets/signed_ingress.rs"
 test = false
 doc = false
+bench = false
