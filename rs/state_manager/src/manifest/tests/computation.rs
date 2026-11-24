@@ -1,10 +1,10 @@
 use crate::manifest::{
     AlignedBuffer, BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE,
     DIRECT_IO_ALIGN, DiffScript, FileWithSize, MANIFEST_SPAN_CHUNKS, MAX_FILE_SIZE_TO_GROUP_V3,
-    MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics, ManifestValidationError, RehashManifest,
-    StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest,
-    compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
-    filter_out_zero_chunks,
+    MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics, ManifestValidationError, REHASH_EVERY_NTH_CHUNK,
+    RehashManifest, StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks,
+    build_meta_manifest, compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes,
+    files_with_sizes, filter_out_zero_chunks,
     hash::{ManifestHash, chunk_hasher},
     hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
     observe_file_sizes, open_for_hashing, read_chunk, validate_chunk, validate_manifest,
@@ -1246,6 +1246,57 @@ fn test_hash_plan() {
     }
     assert!(seen_used as f64 >= 0.4 * repetitions as f64);
     assert!(seen_used as f64 <= 0.6 * repetitions as f64);
+}
+
+/// Pins which reused chunk `hash_plan` recomputes, for fixed seeds. The seed is
+/// the checkpoint height, so all replicas compute the same hash plan; a change
+/// in this choice (for example from a new `rand` version) changes which chunks
+/// they re-verify.
+#[test]
+fn hash_plan_recomputed_chunk_is_stable() {
+    let max_chunk_size = 1024;
+    let num_chunks = REHASH_EVERY_NTH_CHUNK as u32;
+    let file_size = u64::from(num_chunks * max_chunk_size);
+    let base_manifest = Manifest::new(
+        CURRENT_STATE_SYNC_VERSION,
+        vec![FileInfo {
+            relative_path: PathBuf::from("file"),
+            size_bytes: file_size,
+            hash: [0; 32],
+        }],
+        (0..num_chunks)
+            .map(|i| ChunkInfo {
+                file_index: 0,
+                size_bytes: max_chunk_size,
+                offset: u64::from(i * max_chunk_size),
+                hash: [i as u8; 32],
+            })
+            .collect(),
+    );
+    let files = [FileWithSize(PathBuf::from("file"), file_size)];
+
+    // Index of the only chunk out of `REHASH_EVERY_NTH_CHUNK` that is recomputed,
+    // for the seeds 0, 1, 2, ...
+    let expected_indices = [0, 4, 7, 4, 5, 4, 3, 0, 1, 0, 2, 5, 5, 8, 3, 2];
+
+    for (seed, expected_index) in (0..).zip(expected_indices) {
+        let chunk_actions = hash_plan(
+            &base_manifest,
+            &files,
+            btreeset! { PathBuf::from("file") },
+            max_chunk_size,
+            seed,
+            REHASH_EVERY_NTH_CHUNK,
+        );
+
+        let recomputed_indices: Vec<usize> = chunk_actions
+            .iter()
+            .enumerate()
+            .filter(|(_, action)| matches!(action, ChunkAction::RecomputeAndCompare(_)))
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(recomputed_indices, [expected_index], "seed {seed}");
+    }
 }
 
 #[test]
