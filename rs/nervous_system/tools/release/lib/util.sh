@@ -162,3 +162,20 @@ print(re.sub(
 )
 .strip())'
 }
+
+# The inverse of increment_markdown_heading_levels. For example, "###  Added"
+# (as written by increment_markdown_heading_levels) becomes "## Added".
+# Top-level headings (i.e. "# Foo") are left alone, since they have no lower
+# level to go to.
+decrement_markdown_heading_levels() {
+    python3 -c 'import sys, re
+s = sys.stdin.read()
+print(re.sub(
+    r"^#(#+) +",  # Grab Markdown heading, except for one of its # characters.
+    r"\1 ",       # Drop that # character to decrease the level.
+    s,   # Input.
+    0,   # Unlimited replacements.
+    re.MULTILINE,
+)
+.strip())'
+}
