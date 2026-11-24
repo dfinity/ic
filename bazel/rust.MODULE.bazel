@@ -1238,11 +1238,10 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "x509-parser",
         "zeroize",
     ],
     package = "rcgen",
-    version = "^0.13.2",
+    version = "^0.14.10",
 )
 crate.spec(
     package = "rgb",

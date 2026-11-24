@@ -18,7 +18,7 @@ use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
 use ic_types::ReplicaVersion;
-use rcgen::CertifiedKey;
+use rcgen::{CertifiedKey, KeyPair, PublicKeyData};
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
@@ -141,7 +141,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         let my_certificate = rcgen::generate_simple_self_signed(vec!["localhost".into()])
             .context("Failed to generate self-signed certificate")?;
 
-        let my_public_key_der = my_certificate.key_pair.public_key_der().clone();
+        let my_public_key_der = my_certificate.signing_key.subject_public_key_info();
 
         let server_uri = Uri::from_maybe_shared(format!(
             "https://[{}]:{}",
@@ -388,10 +388,10 @@ impl DiskEncryptionKeyExchangeClientAgent {
     async fn create_upgrade_service_client(
         &self,
         server_addr: Uri,
-        my_certified_key: CertifiedKey,
+        my_certified_key: CertifiedKey<KeyPair>,
     ) -> Result<(ServiceClientType, Vec<u8>)> {
         let cert_der = my_certified_key.cert.der().clone();
-        let key_der = PrivateKeyDer::try_from(my_certified_key.key_pair.serialize_der())
+        let key_der = PrivateKeyDer::try_from(my_certified_key.signing_key.serialize_der())
             .map_err(|e| anyhow!("{e}"))
             .context("Failed to convert private key")?;
 

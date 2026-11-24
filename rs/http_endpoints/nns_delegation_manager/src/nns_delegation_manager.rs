@@ -850,14 +850,17 @@ mod tests {
     }
 
     async fn generate_self_signed_cert() -> RustlsConfig {
-        let CertifiedKey { cert, key_pair } =
+        let CertifiedKey { cert, signing_key } =
             generate_simple_self_signed(vec!["127.0.0.1".to_string()]).unwrap();
 
         let cert_der = CertificateDer::from(cert);
 
-        RustlsConfig::from_der(vec![cert_der.as_ref().to_vec()], key_pair.serialize_der())
-            .await
-            .unwrap()
+        RustlsConfig::from_der(
+            vec![cert_der.as_ref().to_vec()],
+            signing_key.serialize_der(),
+        )
+        .await
+        .unwrap()
     }
 
     #[derive(Copy, Clone, Eq, PartialEq)]

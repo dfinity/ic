@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
-use rcgen::{CertificateParams, KeyPair};
+use rcgen::{CertificateParams, DistinguishedName, DnType, DnValue, Issuer, KeyPair};
 use reqwest::{Client, Request};
 use rsa::{PrivateKey, pkcs1::DecodeRsaPrivateKey, pkcs8::EncodePrivateKey};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use std::{
 };
 use tokio::net::lookup_host;
 use url::Url;
+use x509_parser::{asn1_rs::Tag, pem::parse_x509_pem};
 
 use crate::{
     driver::{
@@ -66,8 +67,7 @@ pub(crate) struct DevRootCa {
     /// serve in their chains and what a driver-side client adds as a trust anchor.
     pub(crate) cert_pem: String,
     /// The same CA as an `rcgen` issuer.
-    pub(crate) cert: rcgen::Certificate,
-    pub(crate) key: KeyPair,
+    pub(crate) issuer: Issuer<'static, KeyPair>,
 }
 
 /// The PEM of the dev root CA certificate. See [`DevRootCa`].
@@ -90,39 +90,67 @@ pub(crate) fn dev_root_ca() -> Result<DevRootCa> {
 
     // The checked-in key is PKCS#1 (`-----BEGIN RSA PRIVATE KEY-----`), which
     // `rcgen` loads only under its `aws_lc_rs` backend; under `ring` it takes
-    // PKCS#8 only. Which of the two is compiled in is not ours to decide: both
-    // features are on, and `rcgen` prefers `aws_lc_rs` when they are — but only
-    // because `rustls-acme` happens to enable it, four crates away (see
-    // `cargo tree -i rcgen -e features`). Re-encoding to PKCS#8 works under either
-    // backend, so it does not matter if that ever changes; relying on the feature
-    // would turn an unrelated dependency edit into a runtime failure in every
-    // local gateway test.
+    // PKCS#8 only. Which of the two is compiled in is not ours to decide:
+    // `rcgen` prefers `aws_lc_rs` when both features are on, and that one is on
+    // only because `ic-bn-lib` happens to enable it, elsewhere in the workspace
+    // (see `cargo tree -i rcgen@0.14 -e features`). Re-encoding to PKCS#8 works
+    // under either backend, so it does not matter if that ever changes; relying
+    // on the feature would turn an unrelated dependency edit into a runtime
+    // failure in every local gateway test.
     let key_pkcs8_pem = PrivateKey::from_pkcs1_pem(&key_pkcs1_pem)
         .context("parsing the dev root CA key as PKCS#1")?
         .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
         .context("re-encoding the dev root CA key as PKCS#8")?;
     let key = KeyPair::from_pem(&key_pkcs8_pem).context("loading the dev root CA key")?;
 
-    // `from_ca_cert_pem` extracts what is needed to act as an issuer, of which
-    // `signed_by` uses one thing: the subject name, which becomes the leaf's
-    // issuer. (It carries the CA's subject key identifier across too, but that
-    // reaches the leaf as an authority key identifier only when
-    // `use_authority_key_identifier_extension` is set, and `CertificateParams::new`
-    // leaves it false — the leaf's only extension is its SAN.) `self_signed` then
-    // re-signs the CA merely to obtain an `rcgen::Certificate` to pass as that
-    // issuer; the result is not the checked-in certificate byte for byte and is
-    // never served. What makes the chain verify is the issuer name plus the
-    // signature, both of which are the real CA's.
-    let cert = CertificateParams::from_ca_cert_pem(&cert_pem)
-        .context("parsing the dev root CA certificate")?
-        .self_signed(&key)
-        .context("loading the dev root CA certificate as an issuer")?;
+    // `signed_by` takes one thing from the issuer's parameters: the subject
+    // name, which becomes the leaf's issuer. (An authority key identifier would
+    // also need the CA's subject key identifier, but a leaf gets one only when
+    // `use_authority_key_identifier_extension` is set, and
+    // `CertificateParams::new` leaves it false — the leaf's only extension is its
+    // SAN.) What makes the chain verify is the issuer name plus the signature,
+    // both of which are the real CA's.
+    let mut params = CertificateParams::default();
+    params.distinguished_name = subject_distinguished_name(&cert_pem)
+        .context("reading the subject of the dev root CA certificate")?;
 
     Ok(DevRootCa {
         cert_pem,
-        cert,
-        key,
+        issuer: Issuer::new(params, key),
     })
+}
+
+/// The subject of the certificate in `cert_pem`, as an `rcgen` name that keeps
+/// the order, type and string encoding of every attribute. A certificate that
+/// `rcgen` issues under this name has an issuer field that matches the subject
+/// byte for byte, which is how a client finds the CA certificate in its trust
+/// store.
+fn subject_distinguished_name(cert_pem: &str) -> Result<DistinguishedName> {
+    let (_, pem) = parse_x509_pem(cert_pem.as_bytes()).context("decoding the PEM")?;
+    let cert = pem.parse_x509().context("parsing the certificate")?;
+    let mut name = DistinguishedName::new();
+    for rdn in cert.subject().iter() {
+        let [attribute] = rdn.iter().collect::<Vec<_>>()[..] else {
+            bail!("multi-valued relative distinguished names are not supported");
+        };
+        let oid: Vec<u64> = attribute
+            .attr_type()
+            .iter()
+            .context("an attribute type has an arc that does not fit in a u64")?
+            .collect();
+        let attribute_type = DnType::from_oid(&oid);
+        if name.get(&attribute_type).is_some() {
+            bail!("repeated attribute type {attribute_type:?}");
+        }
+        let value = attribute.as_str().context("reading an attribute value")?;
+        let value = match attribute.attr_value().tag() {
+            Tag::PrintableString => DnValue::PrintableString(value.try_into()?),
+            Tag::Utf8String => DnValue::Utf8String(value.to_string()),
+            tag => bail!("unsupported attribute value type {tag:?}"),
+        };
+        name.push(attribute_type, value);
+    }
+    Ok(name)
 }
 
 /// Represents an IC HTTP Gateway VM, it is a wrapper around Farm's Universal VM.
@@ -486,7 +514,7 @@ sudo networkctl reconfigure enp2s0
                 format!("*.raw.{domain}"),
             ])
             .context("building the gateway certificate parameters")?
-            .signed_by(&key, &ca.cert, &ca.key)
+            .signed_by(&key, &ca.issuer)
             .context("signing the gateway certificate")?;
             let certificate = Certificate {
                 priv_key_pem: key.serialize_pem(),
