@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "93855ece32a67246ce8787dab3b93a5139aaae41ac693b70e8b0fed2792606b6",
+  "checksum": "89f26b57754f2a697ceb1e9aafa205cb806cb25bd35f0ceda63e47471adcd363",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18043,7 +18043,7 @@
             "target": "maplit"
           },
           {
-            "id": "maxminddb 0.29.0",
+            "id": "maxminddb 0.32.0",
             "target": "maxminddb"
           },
           {
@@ -35116,6 +35116,55 @@
         }
       ],
       "version": "0.29.0"
+    },
+    "maxminddb 0.32.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default"
+        ],
+        "deps": [
+          {
+            "id": "ipnetwork 0.21.1",
+            "target": "ipnetwork"
+          },
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "maxminddb",
+      "license": "ISC",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "ISC"
+      ],
+      "name": "maxminddb",
+      "package_url": "https://github.com/oschwald/maxminddb-rust",
+      "repository": {
+        "Http": {
+          "sha256": "9b43d2458d977b610b04a3858e6504f06133663d303a1a0606601b530bfc9bc6",
+          "url": "https://static.crates.io/crates/maxminddb/0.32.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "maxminddb",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.32.0"
     },
     "memchr 2.8.3": {
       "common_attrs": {
@@ -66782,7 +66831,7 @@
     "lru 0.19.0",
     "macaddr 1.0.1",
     "maplit 1.0.2",
-    "maxminddb 0.29.0",
+    "maxminddb 0.32.0",
     "memmap2 0.9.12",
     "minicbor 0.22.0",
     "mockall 0.15.0",

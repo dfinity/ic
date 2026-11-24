@@ -4021,7 +4021,7 @@ dependencies = [
  "lru 0.19.0",
  "macaddr",
  "maplit",
- "maxminddb",
+ "maxminddb 0.32.0",
  "memmap2",
  "minicbor",
  "mockall",
@@ -5848,7 +5848,7 @@ dependencies = [
  "instant-acme",
  "ipnet",
  "itertools 0.15.0",
- "maxminddb",
+ "maxminddb 0.29.0",
  "moka",
  "nix 0.31.4",
  "parse-size",
@@ -6166,7 +6166,7 @@ dependencies = [
  "isbot",
  "itertools 0.15.0",
  "lazy_static",
- "maxminddb",
+ "maxminddb 0.29.0",
  "moka",
  "prometheus",
  "rand 0.8.8",
@@ -7839,6 +7839,18 @@ dependencies = [
  "memmap2",
  "serde",
  "simdutf8",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "maxminddb"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b43d2458d977b610b04a3858e6504f06133663d303a1a0606601b530bfc9bc6"
+dependencies = [
+ "ipnetwork",
+ "memchr",
+ "serde",
  "thiserror 2.0.21",
 ]
 
