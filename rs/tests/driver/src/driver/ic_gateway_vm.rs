@@ -1006,3 +1006,70 @@ async fn await_status_is_healthy(
     })
     .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rcgen::{BasicConstraints, IsCa};
+    use x509_parser::parse_x509_certificate;
+
+    /// A self-signed CA certificate with the given subject, and its key.
+    fn ca_certificate(subject: DistinguishedName) -> Result<(rcgen::Certificate, KeyPair)> {
+        let key = KeyPair::generate()?;
+        let mut params = CertificateParams::default();
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.distinguished_name = subject;
+        Ok((params.self_signed(&key)?, key))
+    }
+
+    #[test]
+    fn issued_leaf_has_the_ca_subject_as_its_issuer() -> Result<()> {
+        let mut subject = DistinguishedName::new();
+        subject.push(
+            DnType::CountryName,
+            DnValue::PrintableString("CH".try_into()?),
+        );
+        subject.push(
+            DnType::OrganizationName,
+            DnValue::Utf8String("Zürich Test".to_string()),
+        );
+        subject.push(
+            DnType::CommonName,
+            DnValue::PrintableString("test root ca".try_into()?),
+        );
+        let (ca_cert, ca_key) = ca_certificate(subject)?;
+
+        let mut params = CertificateParams::default();
+        params.distinguished_name = subject_distinguished_name(&ca_cert.pem())?;
+        let issuer = Issuer::new(params, ca_key);
+        let leaf_key = KeyPair::generate()?;
+        let leaf = CertificateParams::new(vec!["example.com".to_string()])?
+            .signed_by(&leaf_key, &issuer)?;
+
+        let (_, ca_x509) = parse_x509_certificate(ca_cert.der())?;
+        let (_, leaf_x509) = parse_x509_certificate(leaf.der())?;
+        assert_eq!(leaf_x509.issuer().as_raw(), ca_x509.subject().as_raw());
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_values_other_than_printable_and_utf8_strings() -> Result<()> {
+        for value in [
+            DnValue::Ia5String("test root ca".try_into()?),
+            DnValue::BmpString("test root ca".try_into()?),
+        ] {
+            let mut subject = DistinguishedName::new();
+            subject.push(DnType::CommonName, value);
+            let (ca_cert, _) = ca_certificate(subject)?;
+            let error = subject_distinguished_name(&ca_cert.pem())
+                .expect_err("only PrintableString and UTF8String values are supported");
+            assert!(
+                error
+                    .to_string()
+                    .starts_with("unsupported attribute value type"),
+                "{error:#}"
+            );
+        }
+        Ok(())
+    }
+}
