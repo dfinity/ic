@@ -120,8 +120,9 @@ impl PrivateKey {
     /// Create a new random secret Ed25519 key using specified RNG
     #[cfg(feature = "rand")]
     pub fn generate_using_rng<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
-        let sk = SigningKey::generate(rng);
-        Self { sk }
+        let mut seed = zeroize::Zeroizing::new([0_u8; Self::BYTES]);
+        rng.fill_bytes(seed.as_mut_slice());
+        Self::deserialize_raw_32(&seed)
     }
 
     /// Generate a key using an input seed

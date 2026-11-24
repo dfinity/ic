@@ -389,7 +389,7 @@ crate.spec(
         "precomputed-tables",
     ],
     package = "curve25519-dalek",
-    version = "^4.1.3",
+    version = "^5.0.0",
 )
 crate.spec(
     package = "darling",
@@ -428,16 +428,14 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "std",
+        "alloc",
         "zeroize",
         "digest",
-        "batch",
         "pkcs8",
-        "pem",
         "hazmat",
     ],
     package = "ed25519-dalek",
-    version = "^2.2.0",
+    version = "^3.0.0",
 )
 crate.spec(
     package = "erased-serde",
@@ -555,7 +553,7 @@ crate.spec(
 )
 crate.spec(
     package = "group",
-    version = "^0.13",
+    version = "^0.14",
 )
 crate.spec(
     package = "hashlink",
@@ -579,6 +577,11 @@ crate.spec(
 crate.spec(
     package = "hkdf",
     version = "^0.12",
+)
+crate.spec(
+    package = "hkdf",
+    package_alias = "hkdf_0_13",
+    version = "^0.13",
 )
 crate.spec(
     package = "http",
