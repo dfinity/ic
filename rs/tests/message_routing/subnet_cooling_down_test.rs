@@ -1,5 +1,5 @@
 /* tag::catalog[]
-Title:: Draining and merging a subnet that is "cooling down".
+Title:: Draining and merging a subnet.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -66,9 +66,9 @@ Runbook::
    e. execute an update call on `U10` (on `S`) that calls `U11` (on `O`), like
       c;
    f. execute an update call on `U13` (on `O`) making a best effort call to
-      `U14` (on `S`) that carries cycles and has the loop as its payload, so
-      that `U14` holds the call context of a best effort call whose deadline
-      passes before the merge.
+      `U14` (on `S`) that carries cycles and makes `U14` loop, so that `U14`
+      holds the call context of a best effort call whose deadline passes
+      before the merge.
    Wait until all of these loops are running.
 6. Execute an update call on `U1` that makes two calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
@@ -160,9 +160,6 @@ Runbook::
    stays halted until `UnhaltDestinationSubnet`.
 21. Execute `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
    node, replacing the state directory holding the checkpoint it halted at.
-   Deleting that checkpoint is what makes the recovery unambiguous: it does not
-   hold the canisters of `S`, so a replica coming up on it would serve a state
-   that silently lost them.
 22. Execute `RestartDestinationReplica` to set permissions on the installed
    state and start the vault and replica on that node.
 23. After `RestartDestinationReplica`: check that the checkpoints directory
@@ -315,7 +312,7 @@ const STABLE_MEMORY_BLOB: &[u8] = b"this blob has to survive the subnet merge";
 /// the callee's open call context, which the merge has to carry over like any
 /// other canister state.
 const BEST_EFFORT_CALL_CYCLES: u128 = 1_000_000_000;
-const BEST_EFFORT_CALL_TIMEOUT_SECONDS: u32 = 60;
+const BEST_EFFORT_CALL_TIMEOUT_SECONDS: u32 = 30;
 
 /// The reject code (`SYS_UNKNOWN`) a best effort call is rejected with when its
 /// deadline passes before a response arrived.
@@ -534,14 +531,9 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // One runtime for the whole test, kept alive across all of its phases: the
-    // agents of the phase that sets the scenario up are used again by the phase
-    // that checks the outcome.
-    //
-    // The merging tool runs in between, on this thread, which is deliberately
-    // not inside that runtime: every registry read, ssh command and rsync of
-    // `ic-recovery` blocks on a runtime of its own, which a thread that is
-    // driving one cannot do.
+    // The agents are reused by all asynchronous checks, so these run on a
+    // single runtime. The steps of the merging tool create runtimes of their
+    // own, so they run outside of it.
     let runtime = Runtime::new().expect("failed to create a tokio runtime");
 
     let context = runtime.block_on(prepare(&env));

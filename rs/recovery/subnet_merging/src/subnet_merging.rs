@@ -761,14 +761,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::CheckRegistryForRoutingTableEntry
             | StepType::ProposeCupForDestinationSubnet
             | StepType::UnhaltDestinationSubnet
-            | StepType::CheckRegistryVersionOnAllSubnets => {}
-            StepType::DeleteSourceSubnet => print_url_and_ask_for_confirmation(
-                &self.logger,
-                self.dashboard_url(),
-                "Please check the dashboard to see if it is safe to delete the subnet that was \
-                 merged away",
-            ),
-            StepType::Cleanup => {}
+            | StepType::CheckRegistryVersionOnAllSubnets
+            | StepType::DeleteSourceSubnet
+            | StepType::Cleanup => {}
         }
     }
 

@@ -429,8 +429,7 @@ pub fn await_merge_readiness(
 /// on a quorum of its replicas, logging the subnets that have not after every
 /// round.
 ///
-/// `skipped` is the subnet that was merged away: its replicas are stopped by
-/// the time this runs, so it reports no metrics anymore, and it is about to be
+/// `skipped` is the subnet that was merged away: it is halted and about to be
 /// deleted. What matters is that every *other* subnet already routes its
 /// canisters to the destination subnet.
 pub fn await_registry_version_on_all_subnets(
