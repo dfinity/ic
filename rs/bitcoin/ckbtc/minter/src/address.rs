@@ -1,7 +1,8 @@
 //! Utilities to derive, display, and parse Bitcoin addresses.
 
 use crate::{ECDSAPublicKey, Network};
-use bech32::Variant;
+use bech32::primitives::decode::{CheckedHrpstring, UncheckedHrpstring};
+use bech32::{Bech32, Bech32m, Hrp};
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -162,25 +163,11 @@ pub fn account_to_bitcoin_address(
 }
 
 fn encode_bech32(network: Network, hash: &[u8], version: WitnessVersion) -> String {
-    use bech32::u5;
-
-    let hrp = hrp(network);
-    let witness_version: u5 =
-        u5::try_from_u8(version as u8).expect("bug: witness version must be smaller than 32");
-    let data: Vec<u5> = std::iter::once(witness_version)
-        .chain(
-            bech32::convert_bits(hash, 8, 5, true)
-                .expect("bug: bech32 bit conversion failed on valid inputs")
-                .into_iter()
-                .map(|b| {
-                    u5::try_from_u8(b).expect("bug: bech32 bit conversion produced invalid outputs")
-                }),
-        )
-        .collect();
+    let hrp = Hrp::parse(hrp(network)).expect("bug: invalid bech32 human-readable part");
     match version {
-        WitnessVersion::V0 => bech32::encode(hrp, data, bech32::Variant::Bech32)
+        WitnessVersion::V0 => bech32::segwit::encode_v0(hrp, hash)
             .expect("bug: bech32 encoding failed on valid inputs"),
-        WitnessVersion::V1 => bech32::encode(hrp, data, bech32::Variant::Bech32m)
+        WitnessVersion::V1 => bech32::segwit::encode_v1(hrp, hash)
             .expect("bug: bech32m encoding failed on valid inputs"),
     }
 }
@@ -212,6 +199,15 @@ pub fn hrp(network: Network) -> &'static str {
         Network::Testnet => "tb",
         Network::Regtest => "bcrt",
     }
+}
+
+/// The checksum algorithm of a bech32 string.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Variant {
+    /// The bech32 checksum of BIP-173.
+    Bech32,
+    /// The bech32m checksum of BIP-350.
+    Bech32m,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -337,43 +333,32 @@ fn parse_bip173_address(
     address: &str,
     network: Network,
 ) -> Result<BitcoinAddress, ParseAddressError> {
-    let (found_hrp, five_bit_groups, variant) =
-        bech32::decode(address).map_err(|e| ParseAddressError::MalformedAddress(e.to_string()))?;
+    let (checked, variant) = decode_bech32(address)?;
+    let found_hrp = checked.hrp().to_lowercase();
     let expected_hrp = hrp(network);
 
-    if found_hrp.to_lowercase() != expected_hrp {
+    if found_hrp != expected_hrp {
         return Err(ParseAddressError::UnexpectedHumanReadablePart {
             expected: expected_hrp.to_string(),
             actual: found_hrp,
         });
     }
 
-    if five_bit_groups.is_empty() {
-        return Err(ParseAddressError::NoData);
-    }
-
-    let witness_version = five_bit_groups[0].to_u8();
+    let witness_version = match checked.fe32_iter().next() {
+        Some(witness_version) => witness_version.to_u8(),
+        None => return Err(ParseAddressError::NoData),
+    };
 
     match witness_version {
         0 => {
-            if variant != bech32::Variant::Bech32 {
+            if variant != Variant::Bech32 {
                 return Err(ParseAddressError::InvalidBech32Variant {
-                    expected: bech32::Variant::Bech32,
+                    expected: Variant::Bech32,
                     found: variant,
                 });
             }
 
-            let data = bech32::convert_bits(
-                &five_bit_groups[1..],
-                /*from=*/ 5,
-                /*to=*/ 8,
-                /*pad=*/ false,
-            )
-            .map_err(|e| {
-                ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {address}: {e}"
-                ))
-            })?;
+            let data = witness_program(checked, address)?;
 
             match data.len() {
                 20 => {
@@ -395,23 +380,13 @@ fn parse_bip173_address(
             }
         }
         1 => {
-            if variant != bech32::Variant::Bech32m {
+            if variant != Variant::Bech32m {
                 return Err(ParseAddressError::InvalidBech32Variant {
-                    expected: bech32::Variant::Bech32m,
+                    expected: Variant::Bech32m,
                     found: variant,
                 });
             }
-            let data = bech32::convert_bits(
-                &five_bit_groups[1..],
-                /*from=*/ 5,
-                /*to=*/ 8,
-                /*pad=*/ false,
-            )
-            .map_err(|e| {
-                ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {address}: {e}"
-                ))
-            })?;
+            let data = witness_program(checked, address)?;
 
             if data.len() != 32 {
                 return Err(ParseAddressError::BadWitnessLength {
@@ -430,26 +405,68 @@ fn parse_bip173_address(
     }
 }
 
+/// Validates the checksum of a bech32 string, which can be either a bech32 or a bech32m
+/// checksum, and returns the string without the checksum and the checksum variant.
+fn decode_bech32(address: &str) -> Result<(CheckedHrpstring<'_>, Variant), ParseAddressError> {
+    let unchecked = UncheckedHrpstring::new(address)
+        .map_err(|e| ParseAddressError::MalformedAddress(error_with_sources(&e)))?;
+    if unchecked.has_valid_checksum::<Bech32>() {
+        Ok((unchecked.remove_checksum::<Bech32>(), Variant::Bech32))
+    } else if unchecked.has_valid_checksum::<Bech32m>() {
+        Ok((unchecked.remove_checksum::<Bech32m>(), Variant::Bech32m))
+    } else {
+        Err(ParseAddressError::MalformedAddress(
+            "invalid checksum".to_string(),
+        ))
+    }
+}
+
+/// Returns the witness program of a bech32 string whose data part starts with witness version 0
+/// or 1, rejecting a program whose padding bits are invalid.
+fn witness_program(
+    mut checked: CheckedHrpstring<'_>,
+    address: &str,
+) -> Result<Vec<u8>, ParseAddressError> {
+    checked
+        .remove_witness_version()
+        .expect("bug: witness versions 0 and 1 are valid segwit versions");
+    checked.validate_segwit_padding().map_err(|e| {
+        ParseAddressError::MalformedAddress(format!(
+            "failed to decode witness from address {address}: {e}"
+        ))
+    })?;
+    Ok(checked.byte_iter().collect())
+}
+
+/// Formats an error followed by its chain of sources. The errors of the bech32 crate display
+/// only their own message and leave the cause to `source`.
+fn error_with_sources(error: &dyn std::error::Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        message.push_str(": ");
+        message.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    message
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BitcoinAddress, ParseAddressError, Variant, hrp, parse_bip173_address};
     use crate::Network;
     use assert_matches::assert_matches;
-    use bech32::u5;
+    use bech32::{Bech32, ByteIterExt, Fe32, Fe32IterExt, Hrp};
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
-        let data: Vec<u5> = witness_version
-            .iter()
-            .map(|n| u5::try_from_u8(*n).unwrap())
-            .chain(
-                bech32::convert_bits(data, 8, 5, true)
-                    .unwrap()
-                    .into_iter()
-                    .map(|b| u5::try_from_u8(b).unwrap()),
-            )
-            .collect();
-        let hrp = hrp(network);
-        bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap()
+        let hrp = Hrp::parse(hrp(network)).unwrap();
+        witness_version
+            .map(|n| Fe32::try_from(n).unwrap())
+            .into_iter()
+            .chain(data.iter().copied().bytes_to_fes())
+            .with_checksum::<Bech32>(&hrp)
+            .chars()
+            .collect()
     }
 
     #[test]
