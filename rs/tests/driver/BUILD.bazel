@@ -131,6 +131,7 @@ rust_library(
         "@crate_index//:url",
         "@crate_index//:walkdir",
         "@crate_index//:wat",
+        "@crate_index//:x509-parser",
         "@crate_index//:zstd",
     ],
 )

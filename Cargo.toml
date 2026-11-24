@@ -870,7 +870,7 @@ ratatui = { version = "0.30.2", default-features = false, features = [
     "macros",
 ] }
 rayon = "1.10.0"
-rcgen = { version = "0.13.2", features = ["x509-parser", "zeroize"] }
+rcgen = { version = "0.14.10", features = ["zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.7.1"

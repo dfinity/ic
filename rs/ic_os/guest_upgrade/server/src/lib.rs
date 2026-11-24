@@ -8,6 +8,7 @@ use config_types::TrustedExecutionEnvironmentConfig;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use ic_types::ReplicaVersion;
+use rcgen::PublicKeyData;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
 use thiserror::Error;
@@ -96,7 +97,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         let upgrade_service = Arc::new(DiskEncryptionKeyExchangeServiceImpl::new(
             self.sev_firmware_factory.clone(),
             self.sev_root_certificate_verification,
-            certified_key.key_pair.public_key_der(),
+            certified_key.signing_key.subject_public_key_info(),
             self.trusted_execution_environment_config.clone(),
             self.store_device_path.clone(),
             self.store_luks_header_path.clone(),
@@ -208,7 +209,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
 
 #[cfg(test)]
 mod tests {
-    use rcgen::{CertificateParams, KeyPair};
+    use rcgen::{CertificateParams, KeyPair, PublicKeyData};
     use x509_parser::parse_x509_certificate;
 
     /// An ECDSA P-256 key, the key type that `rcgen::generate_simple_self_signed` generates.
@@ -222,9 +223,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgTW3oNh4fZ2BdQbRD
     const PUBLIC_KEY_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004a0422eea4da570bb7e325ec8fa20e4068ee1fa4628a9e679d69decbee01378668cc5f7a808c3029d9fb078c58bf5e55733f28f29494b5668e2d973b62fee5b04";
 
     /// Each party of the key exchange puts two public keys into the custom data of its
-    /// attestation report: its own, from `KeyPair::public_key_der`, and its peer's, from the
-    /// peer's certificate. The custom data of the two parties match only if `public_key_der`
-    /// returns exactly the SubjectPublicKeyInfo that the certificate contains.
+    /// attestation report: its own, from `PublicKeyData::subject_public_key_info`, and its
+    /// peer's, from the peer's certificate. The custom data of the two parties match only if
+    /// `subject_public_key_info` returns exactly the SubjectPublicKeyInfo that the certificate
+    /// contains.
     #[test]
     fn own_public_key_is_the_subject_public_key_info_of_the_certificate() {
         let key_pair = KeyPair::from_pem(KEY_PKCS8_PEM).unwrap();
@@ -234,7 +236,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgTW3oNh4fZ2BdQbRD
             .unwrap();
         let (_, x509) = parse_x509_certificate(certificate.der()).unwrap();
 
-        let public_key_der = key_pair.public_key_der();
+        let public_key_der = key_pair.subject_public_key_info();
 
         assert_eq!(hex::encode(&public_key_der), PUBLIC_KEY_DER_HEX);
         assert_eq!(public_key_der, x509.public_key().raw);

@@ -506,11 +506,11 @@ pub fn start_consensus_manager(
 }
 
 pub fn generate_self_signed_cert() -> quinn::ServerConfig {
-    let CertifiedKey { cert, key_pair } =
+    let CertifiedKey { cert, signing_key } =
         generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
 
     let cert_der = CertificateDer::from(cert);
-    let priv_key = PrivatePkcs8KeyDer::from(key_pair.serialize_der());
+    let priv_key = PrivatePkcs8KeyDer::from(signing_key.serialize_der());
 
     let mut server_config =
         quinn::ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())
