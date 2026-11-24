@@ -14,6 +14,7 @@ use ratatui::crossterm::event::{
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::size;
 use ratatui::{DefaultTerminal, Frame, restore};
+use ratatui_textarea::TextArea;
 use recovery_utils::{
     RecoveryUpgraderCommand, build_recovery_upgrader_install_command,
     build_recovery_upgrader_prep_command,
@@ -25,7 +26,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tracing::error;
-use tui_textarea::TextArea;
 
 // ============================================================================
 // Constants

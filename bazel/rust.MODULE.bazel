@@ -165,7 +165,7 @@ crate.spec(
 )
 crate.spec(
     package = "assert_cmd",
-    version = "^2.0.16",
+    version = "^2.2.2",
 )
 crate.spec(
     package = "assert_matches",
@@ -899,7 +899,7 @@ crate.spec(
 )
 crate.spec(
     package = "libnss",
-    version = "^0.5.0",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "libsystemd",
@@ -1090,7 +1090,7 @@ crate.spec(
 )
 crate.spec(
     package = "ping",
-    version = "^0.5.0",
+    version = "^0.10.0",
 )
 crate.spec(
     default_features = False,
@@ -1228,8 +1228,19 @@ crate.spec(
     version = "^0.10.1",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "all-widgets",
+        "crossterm",
+        "layout-cache",
+        "macros",
+    ],
     package = "ratatui",
-    version = "^0.29",
+    version = "^0.30.2",
+)
+crate.spec(
+    package = "ratatui-textarea",
+    version = "^0.9.4",
 )
 crate.spec(
     package = "rayon",
@@ -1271,7 +1282,7 @@ crate.spec(
 )
 crate.spec(
     package = "rexpect",
-    version = "0.6",
+    version = "^0.7.1",
 )
 crate.spec(
     package = "ripemd",
@@ -1593,10 +1604,6 @@ crate.spec(
 crate.spec(
     package = "textplots",
     version = "^0.8",
-)
-crate.spec(
-    package = "tui-textarea",
-    version = "^0.7",
 )
 crate.spec(
     package = "thiserror",
