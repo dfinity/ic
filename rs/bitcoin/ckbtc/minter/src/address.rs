@@ -163,7 +163,7 @@ pub fn account_to_bitcoin_address(
 }
 
 fn encode_bech32(network: Network, hash: &[u8], version: WitnessVersion) -> String {
-    let hrp = Hrp::parse(hrp(network)).expect("bug: invalid bech32 human-readable part");
+    let hrp = bech32_hrp(network);
     match version {
         WitnessVersion::V0 => bech32::segwit::encode_v0(hrp, hash)
             .expect("bug: bech32 encoding failed on valid inputs"),
@@ -198,6 +198,15 @@ pub fn hrp(network: Network) -> &'static str {
         Network::Mainnet => "bc",
         Network::Testnet => "tb",
         Network::Regtest => "bcrt",
+    }
+}
+
+/// Returns the human-readable part of a bech32 address as an [`Hrp`].
+fn bech32_hrp(network: Network) -> Hrp {
+    match network {
+        Network::Mainnet => bech32::hrp::BC,
+        Network::Testnet => bech32::hrp::TB,
+        Network::Regtest => bech32::hrp::BCRT,
     }
 }
 
@@ -453,13 +462,13 @@ fn error_with_sources(error: &dyn std::error::Error) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitcoinAddress, ParseAddressError, Variant, hrp, parse_bip173_address};
+    use super::{BitcoinAddress, ParseAddressError, Variant, bech32_hrp, parse_bip173_address};
     use crate::Network;
     use assert_matches::assert_matches;
-    use bech32::{Bech32, ByteIterExt, Fe32, Fe32IterExt, Hrp};
+    use bech32::{Bech32, ByteIterExt, Fe32, Fe32IterExt};
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
-        let hrp = Hrp::parse(hrp(network)).unwrap();
+        let hrp = bech32_hrp(network);
         witness_version
             .map(|n| Fe32::try_from(n).unwrap())
             .into_iter()
