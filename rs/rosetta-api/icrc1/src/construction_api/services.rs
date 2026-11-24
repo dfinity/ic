@@ -279,6 +279,9 @@ pub fn construction_parse(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::constants::{
+        MAX_ENVELOPES_PER_TRANSACTION, MAX_PUBLIC_KEY_BYTES, MAX_SIGNATURE_BYTES,
+    };
     use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operations;
     use crate::construction_api::types::CanisterMethodName;
     use crate::construction_api::utils::build_icrc1_transaction_from_canister_method_args;
@@ -310,6 +313,128 @@ mod tests {
     const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
     // A realistic "now" (~2023) that is well away from the u64 boundary.
     const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
+
+    /// Builds and signs a transfer over the longest permitted ingress window, which has the
+    /// largest number of envelopes.
+    fn signed_transfer_over_max_ingress_window() -> (UnsignedTransaction, Vec<Signature>) {
+        let keypair = Ed25519KeyPair::generate(42);
+        let from = Account {
+            owner: keypair.generate_principal_id().unwrap().0,
+            subaccount: None,
+        };
+        let operations = icrc1_operation_to_rosetta_core_operations(
+            crate::common::storage::types::IcrcOperation::Transfer {
+                from,
+                to: Account {
+                    owner: Principal::anonymous(),
+                    subaccount: None,
+                },
+                spender: None,
+                amount: candid::Nat::from(1_u64),
+                fee: None,
+            },
+            Currency {
+                symbol: DEFAULT_TOKEN_SYMBOL.to_string(),
+                decimals: DEFAULT_DECIMAL_PLACES as u32,
+                metadata: None,
+            },
+            None,
+        )
+        .unwrap();
+        let metadata = ConstructionPayloadsRequestMetadata {
+            memo: None,
+            ingress_start: Some(NOW_NANOS),
+            ingress_end: Some(NOW_NANOS + MAX_INGRESS_WINDOW.as_nanos() as u64),
+            created_at_time: None,
+        };
+        let payloads = construction_payloads(
+            operations,
+            Some(metadata),
+            &Principal::anonymous(),
+            vec![(&keypair).into()],
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS),
+        )
+        .unwrap();
+        let signatures = RosettaClient::sign_transaction(&keypair, payloads.clone()).unwrap();
+        let unsigned_transaction =
+            UnsignedTransaction::from_str(&payloads.unsigned_transaction).unwrap();
+        (unsigned_transaction, signatures)
+    }
+
+    fn combine(
+        unsigned_transaction: UnsignedTransaction,
+        signatures: Vec<Signature>,
+    ) -> Result<ConstructionCombineResponse, Error> {
+        construction_combine(unsigned_transaction.to_string(), signatures)
+    }
+
+    fn assert_combine_error(result: Result<ConstructionCombineResponse, Error>, expected: &str) {
+        let err = result.unwrap_err();
+        assert!(
+            format!("{err:?}").contains(expected),
+            "expected an error containing {expected:?}, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn construction_combine_accepts_transaction_over_max_ingress_window() {
+        let (unsigned_transaction, signatures) = signed_transfer_over_max_ingress_window();
+        assert_eq!(
+            unsigned_transaction.envelope_contents.len(),
+            MAX_ENVELOPES_PER_TRANSACTION
+        );
+
+        assert!(combine(unsigned_transaction, signatures).is_ok());
+    }
+
+    #[test]
+    fn construction_combine_rejects_too_many_envelopes() {
+        let (mut unsigned_transaction, mut signatures) = signed_transfer_over_max_ingress_window();
+        let extra_envelope = unsigned_transaction.envelope_contents[0].clone();
+        unsigned_transaction.envelope_contents.push(extra_envelope);
+        signatures.push(signatures[0].clone());
+
+        assert_combine_error(
+            combine(unsigned_transaction, signatures),
+            "The number of envelopes must not exceed",
+        );
+    }
+
+    #[test]
+    fn construction_combine_rejects_repeated_envelopes() {
+        let (mut unsigned_transaction, signatures) = signed_transfer_over_max_ingress_window();
+        // Replacing an envelope with a copy of another one leaves as many envelopes as
+        // signatures, but the copy would reuse the signature of the original.
+        let first_envelope = unsigned_transaction.envelope_contents[0].clone();
+        *unsigned_transaction.envelope_contents.last_mut().unwrap() = first_envelope;
+
+        assert_combine_error(
+            combine(unsigned_transaction, signatures),
+            "must not contain repeated envelopes",
+        );
+    }
+
+    #[test]
+    fn construction_combine_rejects_oversized_signature() {
+        let (unsigned_transaction, mut signatures) = signed_transfer_over_max_ingress_window();
+        signatures[0].hex_bytes = hex::encode([0_u8; MAX_SIGNATURE_BYTES + 1]);
+
+        assert_combine_error(
+            combine(unsigned_transaction, signatures),
+            "A signature must not be larger than",
+        );
+    }
+
+    #[test]
+    fn construction_combine_rejects_oversized_public_key() {
+        let (unsigned_transaction, mut signatures) = signed_transfer_over_max_ingress_window();
+        signatures[0].public_key.hex_bytes = hex::encode([0_u8; MAX_PUBLIC_KEY_BYTES + 1]);
+
+        assert_combine_error(
+            combine(unsigned_transaction, signatures),
+            "A public key must not be larger than",
+        );
+    }
 
     // A window whose span exceeds the documented 24h bound would make the loop
     // build a huge list of ingress expiries, so it is rejected before the loop.

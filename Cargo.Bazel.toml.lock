@@ -3938,7 +3938,7 @@ dependencies = [
  "csv",
  "ctrlc",
  "curve25519-dalek",
- "darling 0.20.11",
+ "darling 0.24.1",
  "dashmap",
  "der 0.7.10",
  "derive-new",
@@ -3947,7 +3947,6 @@ dependencies = [
  "directories-next",
  "duration-string",
  "ed25519-dalek",
- "educe 0.5.11",
  "erased-serde",
  "escargot",
  "ethnum",
@@ -4081,6 +4080,7 @@ dependencies = [
  "quinn",
  "quinn-udp",
  "quote",
+ "rand 0.10.4",
  "rand 0.8.8",
  "rand 0.9.5",
  "rand_chacha 0.3.1",
@@ -4115,7 +4115,6 @@ dependencies = [
  "scopeguard",
  "scraper",
  "scrypt",
- "secp256k1 0.29.100",
  "security-framework 3.7.0",
  "semver 1.0.28",
  "serde",
@@ -4144,11 +4143,11 @@ dependencies = [
  "socks5-impl",
  "ssh2",
  "static_assertions",
- "strum 0.26.3",
- "strum_macros 0.26.4",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "stubborn-io",
  "subtle",
- "syn 2.0.119",
+ "syn 3.0.10",
  "sys-mount",
  "syscalls",
  "tar",
@@ -4891,9 +4890,9 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -7427,13 +7426,12 @@ dependencies = [
 
 [[package]]
 name = "libfuzzer-sys"
-version = "0.4.7"
+version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7"
+checksum = "a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2"
 dependencies = [
  "arbitrary",
  "cc",
- "once_cell",
 ]
 
 [[package]]
@@ -10509,9 +10507,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.42.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b"
+checksum = "f172c4812a19b26d1c23cdb0070e69db335503dfa378b910eb857386e5b8beba"
 dependencies = [
  "bitflags",
  "fallible-iterator",
@@ -12561,9 +12559,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-rusqlite"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cef2b2b09428079c22bf68cb48170c80b4f8c9c3ae1879aabfc22a94b5eaf2a1"
+checksum = "bf2a5f12f89def36f15f2ed88aae9101320b9476766b02a63b3349e05b49e33a"
 dependencies = [
  "crossbeam-channel",
  "rusqlite",
@@ -13287,9 +13285,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",

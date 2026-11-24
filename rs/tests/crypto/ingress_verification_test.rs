@@ -28,6 +28,7 @@ use ic_types::messages::{
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
 use rand::{CryptoRng, Rng, SeedableRng, rngs::StdRng};
+use rand_0_10::SeedableRng as _;
 use reqwest::{StatusCode, Url};
 use slog::debug;
 
@@ -158,8 +159,9 @@ impl<'a> GenericIdentity<'a> {
                 (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
             GenericIdentityType::WebAuthnRsaPkcs1 => {
-                let sk =
-                    rsa::PrivateKey::new(&mut RandCore10(rng), 2048).expect("RSA keygen failed");
+                // `rsa` takes a rand 0.10 RNG.
+                let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
+                let sk = rsa::PrivateKey::new(&mut rsa_rng, 2048).expect("RSA keygen failed");
                 let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::PublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
             }
@@ -2725,28 +2727,6 @@ fn webauthn_sign_rsa_pkcs1(sk: &rsa::PrivateKey, msg: &[u8]) -> Vec<u8> {
     };
     webauthn_sign_message(msg, sign_fn)
 }
-
-/// Makes a rand 0.8 RNG usable as the rand_core 0.10 RNG that `rsa` takes.
-struct RandCore10<'a, R>(&'a mut R);
-
-impl<R: rand::RngCore> rsa::rand_core::TryRng for RandCore10<'_, R> {
-    type Error = std::convert::Infallible;
-
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.0.next_u32())
-    }
-
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        Ok(self.0.next_u64())
-    }
-
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        self.0.fill_bytes(dst);
-        Ok(())
-    }
-}
-
-impl<R: rand::RngCore + CryptoRng> rsa::rand_core::TryCryptoRng for RandCore10<'_, R> {}
 
 fn webauthn_sign_ed25519(sk: &ic_ed25519::PrivateKey, msg: &[u8]) -> Vec<u8> {
     // WebAuthn EdDSA signatures are the raw 64-byte R || s encoding from
