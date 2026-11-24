@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "6374deced9de36dc99dfe6a18a4c341394d8d1a6fe1030d19662b270f7c7fd3e",
+  "checksum": "91c83ec5bf834b3b5fc7a7be568574c3cba822824aed22ebab81fd01b8993cd1",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18316,10 +18316,6 @@
           {
             "id": "rustls 0.23.46",
             "target": "rustls"
-          },
-          {
-            "id": "rustls-pemfile 2.2.0",
-            "target": "rustls_pemfile"
           },
           {
             "id": "rusty-fork 0.3.1",
@@ -66900,7 +66896,6 @@
     "rustc-demangle 0.1.28",
     "rustix 1.1.6",
     "rustls 0.23.46",
-    "rustls-pemfile 2.2.0",
     "rusty-fork 0.3.1",
     "schemars 0.8.22",
     "scoped_threadpool 0.1.9",

@@ -904,7 +904,6 @@ rustls = { version = "0.23.46", default-features = false, features = [
     "brotli",
     "tls12",
 ] }
-rustls-pemfile = "^2.1.2"
 rusty-fork = "^0.3.0"
 schemars = { version = "0.8.21", features = ["derive"] }
 scoped_threadpool = "^0.1.9"
