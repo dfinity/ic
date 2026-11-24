@@ -104,7 +104,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 }
 
 pub struct InternalHttpQueryHandler {
-    log: ReplicaLogger,
+    log: Arc<ReplicaLogger>,
     hypervisor: Arc<Hypervisor>,
     canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
@@ -132,7 +132,7 @@ impl InternalHttpQueryHandler {
         let query_max_expiry_time = config.query_cache_max_expiry_time;
         let query_data_certificate_expiry_time = config.query_cache_data_certificate_expiry_time;
         Self {
-            log,
+            log: Arc::new(log),
             hypervisor,
             canister_manager,
             own_subnet_type,
@@ -282,7 +282,7 @@ impl InternalHttpQueryHandler {
             None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
         };
         let mut context = query_context::QueryContext::new(
-            &self.log,
+            Arc::clone(&self.log),
             Arc::clone(&self.hypervisor),
             Arc::clone(&self.canister_manager),
             self.own_subnet_type,

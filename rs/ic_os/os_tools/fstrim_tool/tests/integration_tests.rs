@@ -5,12 +5,7 @@ use std::fs::read_to_string;
 use tempfile::tempdir;
 
 fn new_fstrim_tool_command() -> Command {
-    match Command::cargo_bin("fstrim_tool") {
-        // When in Cargo environment.
-        Ok(cmd) => cmd,
-        // When in Bazel environment
-        Err(_) => Command::new("rs/ic_os/os_tools/fstrim_tool/fstrim_tool_bin"),
-    }
+    Command::cargo_bin("fstrim_tool").expect("fstrim_tool binary should exist")
 }
 
 /// Replaces lines that contain:

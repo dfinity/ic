@@ -3,7 +3,7 @@
 
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::embedders::{Config as EmbeddersConfig, MAX_FUNCTIONS};
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -73,6 +73,11 @@ pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 10_000;
 /// are not `icp:` metadata. `max_custom_sections` is the interface-spec limit on
 /// `icp:public` / `icp:private` metadata.
 pub const MAX_RAW_CUSTOM_SECTIONS: usize = 1024;
+/// Maximum number of imports (of any kind) allowed in a Wasm module.
+///
+/// A canister may only import the fixed set of `ic0` system-API functions (<80)
+/// plus `env.memory` and `env.table`.
+pub const MAX_NUMBER_IMPORTS: usize = 200;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1824,6 +1829,8 @@ fn check_custom_sections_and_code_size(
     let mut parser = wasmparser::Parser::new(0);
     let mut data = wasm.as_slice();
     let mut custom_sections: usize = 0;
+    // Running total of function-name entries across every name section in the module.
+    let mut name_section_entries: usize = 0;
     let mut code_section_size = NumBytes::from(0);
     let mut seen_code_section = false;
     loop {
@@ -1853,12 +1860,40 @@ fn check_custom_sections_and_code_size(
             {
                 return Ok(code_section_size);
             }
-            wasmparser::Payload::CustomSection(_) => {
+            wasmparser::Payload::CustomSection(reader) => {
                 custom_sections += 1;
                 if custom_sections > MAX_RAW_CUSTOM_SECTIONS {
                     return Err(WasmValidationError::TooManyCustomSections {
                         defined: custom_sections,
                         allowed: MAX_RAW_CUSTOM_SECTIONS,
+                    });
+                }
+                // Bound the function name subsections of the name section(s).
+                // A well-formed module has a single name section naming each
+                // function at most once, so the module-wide total cannot
+                // legitimately exceed the function limit.
+                if let wasmparser::KnownCustom::Name(name_reader) = reader.as_known() {
+                    for subsection in name_reader {
+                        // A malformed name section is reported later by Wasmtime.
+                        let Ok(subsection) = subsection else { break };
+                        if let wasmparser::Name::Function(map) = subsection {
+                            name_section_entries =
+                                name_section_entries.saturating_add(map.count() as usize);
+                            if name_section_entries > MAX_FUNCTIONS {
+                                return Err(WasmValidationError::TooManyNameSectionEntries {
+                                    allowed: MAX_FUNCTIONS,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            wasmparser::Payload::ImportSection(reader) => {
+                // Bound the number of imports.
+                let num_imports = reader.count() as usize;
+                if num_imports > MAX_NUMBER_IMPORTS {
+                    return Err(WasmValidationError::TooManyImports {
+                        allowed: MAX_NUMBER_IMPORTS,
                     });
                 }
             }

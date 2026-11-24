@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::vec::Vec;
 
 use anyhow::{Context, Result};
-use ping::dgramsock;
+use ping::{Pinger, SocketType};
 use rayon::prelude::*;
 
 use utils::{get_command_stdout, retry, retry_pred};
@@ -30,7 +30,8 @@ pub fn has_ipv6_connectivity(
 
     eprintln!("Bringing {} up with ip address {}", interface.name, ip);
 
-    get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;
+    // Skip DAD: a tentative address can't be the ping's source.
+    get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name, "nodad"])?;
     activate_link(&interface.name)?;
 
     let wait_time = Duration::from_secs(2);
@@ -44,7 +45,10 @@ pub fn has_ipv6_connectivity(
                 ping_target,
                 wait_time.as_secs()
             );
-            dgramsock::ping(ping_target, Some(ping_timeout), None, None, None, None)
+            Pinger::builder()
+                .socket_type(SocketType::DGRAM)
+                .build()
+                .and_then(|mut pinger| pinger.ping(ping_target, ping_timeout))
                 .context("Ping failed.")
         },
         wait_time,

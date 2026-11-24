@@ -3,7 +3,6 @@ use crate::vault::remote_csp_vault::TarpcCspVaultResponse;
 use bincode::config::Options;
 use bytes::{Bytes, BytesMut};
 use core::marker::PhantomData;
-use educe::Educe;
 use ic_crypto_internal_logmon::metrics::{CryptoMetrics, MessageType, MetricsDomain, ServiceType};
 use ic_logger::{ReplicaLogger, debug};
 use serde::{Deserialize, Serialize};
@@ -27,12 +26,8 @@ use tokio_serde::{Deserializer, Serializer};
 /// values. However, for types like [`EccPoint`] that first invoke costly
 /// conversions on the inner value that yield something that will actually be
 /// serialized, calling `Object::serialize()` twice is expensive.
-#[derive(Educe)]
-#[educe(Debug)]
 pub struct Bincode<Item, SinkItem, O = bincode::DefaultOptions> {
-    #[educe(Debug(ignore))]
     pub options: O,
-    #[educe(Debug(ignore))]
     ghost: PhantomData<(Item, SinkItem)>,
 }
 

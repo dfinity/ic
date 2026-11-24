@@ -420,6 +420,9 @@ rust_bench(
     name = "basic_sig_bench",
     testonly = True,
     srcs = ["benches/basic_sig.rs"],
+    aliases = {
+        "@crate_index//:rand_0_10": "rand_0_10",
+    },
     pin_cpu = True,
     proc_macro_deps = [
         # Keep sorted.
@@ -493,6 +496,7 @@ rust_bench(
         "@crate_index//:proptest",
         "@crate_index//:prost",
         "@crate_index//:rand",
+        "@crate_index//:rand_0_10",
         "@crate_index//:rand_chacha",
         "@crate_index//:rsa",
         "@crate_index//:rustls",

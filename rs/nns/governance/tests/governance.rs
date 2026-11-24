@@ -46,10 +46,11 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS, dissolve_delay_bonus_multiplier,
     governance::{
         Environment, Governance, HeapGrowthPotential, INITIAL_NEURON_DISSOLVE_DELAY,
-        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
-        get_node_provider_reward, max_dissolve_delay_seconds,
+        MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NEURON_CREATION_SPIKE, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+        PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS, get_node_provider_reward,
+        max_dissolve_delay_seconds,
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
@@ -2930,6 +2931,339 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     }
 }
 
+/// Neurons 1, 2, and 3 (the "members") manage neuron 4 (the "intermediate" neuron), which in turn
+/// manages neurons 5 and 6. Neuron 7 is managed by neuron 1 only. Neuron 42 is public, so that
+/// the other neurons can follow it on topics other than NeuronManagement. Neuron i is controlled
+/// by principal(i).
+fn fixture_for_nested_manage_neuron() -> api::Governance {
+    let mut driver = fake::FakeDriver::default();
+
+    let mut new_neuron = move |id: u64, manager_neuron_ids: Vec<u64>| {
+        let manager_neuron_ids = manager_neuron_ids
+            .into_iter()
+            .map(|id| NeuronId { id })
+            .collect::<Vec<NeuronId>>();
+        api::Neuron {
+            id: Some(NeuronId { id }),
+            controller: Some(principal(id)),
+            cached_neuron_stake_e8s: 10 * E8,
+            account: driver
+                .random_byte_array()
+                .expect("Could not get random byte array")
+                .to_vec(),
+            dissolve_state: Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
+            aging_since_timestamp_seconds: u64::MAX,
+            followees: hashmap! {
+                Topic::NeuronManagement as i32 => api::neuron::Followees {
+                    followees: manager_neuron_ids,
+                },
+            },
+            ..Default::default()
+        }
+    };
+
+    let neurons = vec![
+        new_neuron(1, vec![]),
+        new_neuron(2, vec![]),
+        new_neuron(3, vec![]),
+        new_neuron(4, vec![1, 2, 3]),
+        new_neuron(5, vec![4]),
+        new_neuron(6, vec![4]),
+        new_neuron(7, vec![1]),
+        api::Neuron {
+            visibility: Some(Visibility::Public as i32),
+            ..new_neuron(42, vec![])
+        },
+    ];
+
+    GovernanceProtoBuilder::new()
+        .with_instant_neuron_operations()
+        .with_economics(api::NetworkEconomics::with_default_values())
+        .with_neurons(neurons)
+        .with_short_voting_period(1)
+        .with_neuron_management_voting_period(1)
+        .build()
+}
+
+/// A ManageNeuron proposal that makes neuron `managed_id` follow neuron 42 on the Governance
+/// topic.
+fn new_follow_manage_neuron_proposal(managed_id: u64) -> Proposal {
+    Proposal {
+        title: Some(format!("Make neuron {managed_id} follow neuron 42")),
+        summary: "Follow neuron 42 on the Governance topic.".to_string(),
+        action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                id: managed_id,
+            })),
+            command: Some(Command::Follow(Follow {
+                topic: Topic::Governance as i32,
+                followees: vec![NeuronId { id: 42 }],
+            })),
+            id: None,
+        }))),
+        ..Default::default()
+    }
+}
+
+/// A ManageNeuron proposal for the intermediate neuron 4 whose command is to make
+/// `nested_proposal`.
+fn new_nested_manage_neuron_proposal(nested_proposal: Proposal) -> Proposal {
+    Proposal {
+        title: Some("Make neuron 4 propose".to_string()),
+        summary: "Make neuron 4 make a proposal.".to_string(),
+        action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 4 })),
+            command: Some(Command::MakeProposal(Box::new(nested_proposal))),
+            id: None,
+        }))),
+        ..Default::default()
+    }
+}
+
+fn new_governance_for_nested_manage_neuron() -> Governance {
+    let driver = fake::FakeDriver::default();
+    Governance::new(
+        fixture_for_nested_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    )
+}
+
+#[tokio::test]
+async fn test_nested_manage_neuron_proposal() {
+    // Step 1: Prepare the world.
+    let mut gov = new_governance_for_nested_manage_neuron();
+
+    // Step 2: Run the code under test. Member neuron 1 proposes that the intermediate neuron 4
+    // makes a proposal for neuron 5, and member neuron 2 votes to adopt it.
+    let nested_proposal = new_follow_manage_neuron_proposal(5);
+    let outer_proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &new_nested_manage_neuron_proposal(nested_proposal),
+        )
+        .await
+        .unwrap();
+    // 1 out of 3 members is not a majority yet.
+    assert_eq!(
+        gov.get_proposal_data(outer_proposal_id).unwrap().status(),
+        ProposalStatus::Open
+    );
+    fake::register_vote_assert_success(
+        &mut gov,
+        principal(2),
+        NeuronId { id: 2 },
+        outer_proposal_id,
+        Vote::Yes,
+    );
+
+    // Step 3: Verify results.
+
+    // Step 3.1: The outer proposal is executed, by making the nested proposal.
+    assert_eq!(
+        gov.get_proposal_data(outer_proposal_id).unwrap().status(),
+        ProposalStatus::Executed
+    );
+    let nested_proposal_id = ProposalId {
+        // Here, we make use of the fact that proposal IDs are sequential
+        // (and there have been no other proposals).
+        id: outer_proposal_id.id + 1,
+    };
+    let nested_proposal_data = gov.get_proposal_data(nested_proposal_id).unwrap();
+    assert_eq!(nested_proposal_data.proposer, Some(NeuronId { id: 4 }));
+    assert_eq!(
+        nested_proposal_data
+            .proposal
+            .as_ref()
+            .unwrap()
+            .managed_neuron(),
+        Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 }))
+    );
+
+    // Step 3.2: Neuron 4 is the only manager of neuron 5, and voted to adopt the nested proposal
+    // when making it. Therefore, the nested proposal is executed right away.
+    let governance_followees_of = |gov: &Governance, id: u64| -> Vec<u64> {
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |neuron| {
+                neuron.followees.get(&(Topic::Governance as i32)).cloned()
+            })
+            .expect("Neuron not found.")
+            .map(|followees| {
+                followees
+                    .followees
+                    .iter()
+                    .map(|followee| followee.id)
+                    .collect::<Vec<u64>>()
+            })
+            .unwrap_or_default()
+    };
+    assert_eq!(nested_proposal_data.status(), ProposalStatus::Executed);
+    assert_eq!(governance_followees_of(&gov, 5), vec![42]);
+    // Neuron 6 is not affected.
+    assert_eq!(governance_followees_of(&gov, 6), Vec::<u64>::new());
+
+    // Step 3.3: Both the proposer of the outer proposal and the intermediate neuron (the proposer
+    // of the nested proposal) pay the fee for a ManageNeuron proposal.
+    let neuron_management_fee_e8s = gov
+        .heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .neuron_management_fee_per_proposal_e8s;
+    for (neuron_id, expected_fees_e8s) in [
+        (1, neuron_management_fee_e8s),
+        (2, 0),
+        (4, neuron_management_fee_e8s),
+    ] {
+        let observed_fees_e8s = gov
+            .neuron_store
+            .with_neuron(&NeuronId { id: neuron_id }, |neuron| neuron.neuron_fees_e8s)
+            .expect("Neuron not found.");
+        assert_eq!(observed_fees_e8s, expected_fees_e8s, "neuron {neuron_id}");
+    }
+}
+
+#[tokio::test]
+async fn test_invalid_nested_manage_neuron_proposals() {
+    // Step 1: Prepare the world.
+    let mut gov = new_governance_for_nested_manage_neuron();
+    let valid_nested_proposal = new_follow_manage_neuron_proposal(5);
+    let nested_manage_neuron_proposal = |command: Command| Proposal {
+        action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 5 })),
+            command: Some(command),
+            id: None,
+        }))),
+        ..valid_nested_proposal.clone()
+    };
+    let test_cases = vec![
+        (
+            "nested Motion proposal",
+            Proposal {
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "This proposal is doomed.".to_string(),
+                })),
+                ..valid_nested_proposal.clone()
+            },
+            "must be (another) ManageNeuron proposal",
+        ),
+        (
+            "two levels of nesting",
+            nested_manage_neuron_proposal(Command::MakeProposal(Box::new(
+                valid_nested_proposal.clone(),
+            ))),
+            "cannot itself make a third proposal",
+        ),
+        (
+            "too large",
+            Proposal {
+                summary: "x".repeat(MANAGE_NEURON_ACTION_ENCODED_BYTES_MAX),
+                ..valid_nested_proposal.clone()
+            },
+            "at most",
+        ),
+    ];
+
+    for (label, nested_proposal, expected_message_fragment) in test_cases {
+        // Step 2: Run the code under test.
+        let result = gov
+            .make_proposal(
+                &NeuronId { id: 1 },
+                &principal(1),
+                &new_nested_manage_neuron_proposal(nested_proposal),
+            )
+            .await;
+
+        // Step 3: Verify results.
+        let GovernanceError {
+            error_type,
+            error_message,
+        } = result.expect_err(label);
+        assert_eq!(
+            error_type,
+            ErrorType::InvalidProposal as i32,
+            "{label}: {error_message}"
+        );
+        assert!(
+            error_message.contains(expected_message_fragment),
+            "{label}: {error_message}"
+        );
+    }
+
+    // Sanity check: the valid nested proposal is accepted. Since it gets the first proposal ID, no
+    // proposal was created above.
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &new_nested_manage_neuron_proposal(valid_nested_proposal),
+        )
+        .await
+        .unwrap();
+    assert_eq!(proposal_id, ProposalId { id: 1 });
+}
+
+/// Whether the intermediate neuron manages the target of the nested proposal is not checked when
+/// the enclosing proposal is made (that would disclose the target's followees to an unauthorized
+/// caller), but when the intermediate neuron makes the nested proposal.
+#[tokio::test]
+async fn test_nested_manage_neuron_proposal_for_neuron_not_managed_by_intermediate_neuron() {
+    // Step 1: Prepare the world. Neuron 7 is managed by neuron 1, not by the intermediate
+    // neuron 4. (Neuron 7 needs some manager. Otherwise, making the nested proposal would fail for
+    // a different reason: that neuron 7 has no followees on the NeuronManagement topic.)
+    let mut gov = new_governance_for_nested_manage_neuron();
+
+    // Step 2: Run the code under test.
+    let outer_proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &new_nested_manage_neuron_proposal(new_follow_manage_neuron_proposal(7)),
+        )
+        .await
+        .unwrap();
+    fake::register_vote_assert_success(
+        &mut gov,
+        principal(2),
+        NeuronId { id: 2 },
+        outer_proposal_id,
+        Vote::Yes,
+    );
+
+    // Step 3: Verify results. The enclosing proposal was adopted, but failed to execute.
+    let outer_proposal = gov.get_proposal_data(outer_proposal_id).unwrap();
+    assert_eq!(outer_proposal.status(), ProposalStatus::Failed);
+    let failure_reason = outer_proposal.failure_reason.as_ref().unwrap();
+    assert!(
+        failure_reason
+            .error_message
+            .contains("Proposer not among the followees"),
+        "{failure_reason:?}"
+    );
+
+    // No second proposal was created.
+    assert_eq!(
+        gov.get_proposal_data(ProposalId {
+            id: outer_proposal_id.id + 1
+        }),
+        None
+    );
+
+    // The effect of the second proposal did not take place:
+    // Neuron 7 does NOT follow anyone (on the Governance topic).
+    assert_eq!(
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 7 }, |neuron| {
+                neuron.followees.get(&(Topic::Governance as i32)).cloned()
+            })
+            .expect("Neuron not found."),
+        None
+    );
+}
+
 #[tokio::test]
 async fn test_disallow_large_manage_neuron_proposals() {
     let driver = fake::FakeDriver::default();
@@ -2969,8 +3303,9 @@ async fn test_disallow_large_manage_neuron_proposals() {
         .await;
     assert_matches!(
         result,
-        Err(GovernanceError { error_type, .. })
-        if error_type == ErrorType::PreconditionFailed as i32
+        Err(GovernanceError { error_type, error_message })
+        if error_type == ErrorType::InvalidProposal as i32
+            && error_message.contains("must be (another) ManageNeuron proposal")
     );
 
     // Sanity check: disburse maturity should be allowed.

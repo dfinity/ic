@@ -7,8 +7,9 @@ shipped in the GuestOS image and run on a node of the destination subnet the
 way operators run `ic-recovery` on a node, i.e. with its directory in
 `/var/lib/ic/data`, carries a subnet merge through: it halts both subnets,
 downloads their states (the one of its own node locally), merges them on the
-node, reroutes the canister ID ranges and proposes the recovery CUP of the
-destination subnet at the merged state.
+node, reroutes the canister ID ranges, proposes the recovery CUP of the
+destination subnet at the merged state, and replaces the state of its own node
+with the merged state, from which the replica on the node then starts.
 
 The subnet that is merged away is called `S`, and the Application subnet it is
 merged into is called `D`.
@@ -19,15 +20,22 @@ Runbook::
 1. Install a universal canister on each of `S` and `D`.
 2. Run the subnet merging tool on a node of `D`, over SSH, with all its steps
    and without prompts: it downloads the state of `S` from a node of `S` over
-   SSH and the state of `D` locally, and merges them on the node.
+   SSH and the state of `D` locally, merges them on the node, and replaces the
+   state of its own node with the merged state.
 3. Check that the merged state on the node of `D` is a single checkpoint
    holding the canisters of both `S` and `D`, and that the registry holds the
    recovery CUP of `D` at the height of that checkpoint.
+4. Check that the node of `D` holds exactly the merged checkpoint, that all
+   files of the state of the node are owned by the replica, and that the
+   replica started from that checkpoint.
 
-Success:: The tool completes all its steps on the node of `D`, and the
-recovery CUP of `D` is at the merged state it assembled there.
+Success:: The tool completes all its steps on the node of `D`, the recovery
+CUP of `D` is at the merged state it assembled there, and the replica on that
+node runs on the merged state.
 
 end::catalog[] */
+
+mod subnet_merging_checks;
 
 use anyhow::Result;
 use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
@@ -65,6 +73,9 @@ const DKG_INTERVAL_LENGTH: u64 = 49;
 /// `ic-recovery` works by default when run on a node.
 const NODE_DATA_DIR: &str = "/var/lib/ic/data";
 
+/// The state directory of the replica on a node.
+const NODE_STATE_DIR: &str = "/var/lib/ic/data/ic_state";
+
 /// The checkpoints directory of the merged state the tool assembles on the node.
 const MERGED_CHECKPOINTS_DIR: &str =
     "/var/lib/ic/data/recovery/merged_working_dir/data/ic_state/checkpoints";
@@ -100,11 +111,12 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// Above the sum of the timeouts of its steps.
 const TOOL_TIMEOUT: Duration = Duration::from_secs(1800);
 
-/// Timeouts of the test itself, above `TOOL_TIMEOUT` and `REGISTRY_TIMEOUT`.
+/// Timeouts of the test itself, above the sum of `TOOL_TIMEOUT`,
+/// `REGISTRY_TIMEOUT` and the replica restart timeout.
 /// The overall timeout additionally covers the setup and has to stay below the
 /// 3600s of the `eternal` timeout of the Bazel target.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2400);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3000);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2700);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3300);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -203,7 +215,20 @@ pub fn test(env: TestEnv) {
         d_subnet.subnet_id,
     );
 
-    check_merged_state_proposed(&env, &d_node, d_subnet.subnet_id, &canisters);
+    let merged_checkpoint =
+        check_merged_state_proposed(&env, &d_node, d_subnet.subnet_id, &canisters);
+
+    check_state_ownership(&d_node);
+    runtime.block_on(subnet_merging_checks::check_merged_state_running(
+        &logger,
+        &d_node,
+        &merged_checkpoint,
+    ));
+    info!(
+        logger,
+        "Step 4 done: the replica on {} owns its state and started from the merged checkpoint {merged_checkpoint}",
+        d_node.get_ip_addr()
+    );
 }
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
@@ -259,8 +284,8 @@ fn run_tool_on_node(
          --skip-prompts \
          --source-subnet-id {s_subnet_id} \
          --destination-subnet-id {d_subnet_id} \
-         --download-node-source {s_node_ip} \
-         --download-node-destination local \
+         --source-node {s_node_ip} \
+         --destination-node local \
          --merge-ready-timeout-secs {merge_ready_timeout} \
          --halt-timeout-secs {halt_timeout} \
          --registry-timeout-secs {registry_timeout} \
@@ -289,13 +314,14 @@ fn run_tool_on_node(
 /// Step 3: check that the tool assembled the merged state in its directory on
 /// `d_node`, as a single checkpoint holding exactly `canisters`, the only
 /// canisters on `S` and `D`, and that the registry holds recovery CUP contents
-/// of `D` at the height of that checkpoint.
+/// of `D` at the height of that checkpoint. Returns the name of that
+/// checkpoint.
 fn check_merged_state_proposed(
     env: &TestEnv,
     d_node: &IcNodeSnapshot,
     d_subnet_id: SubnetId,
     canisters: &BTreeSet<String>,
-) {
+) -> String {
     let logger = env.logger();
     let node_ip = d_node.get_ip_addr();
     info!(
@@ -308,7 +334,7 @@ fn check_merged_state_proposed(
             .unwrap_or_else(|e| panic!("failed to run `{script}` on node {node_ip}: {e}"))
     };
 
-    let checkpoints = run(&format!("sudo ls {MERGED_CHECKPOINTS_DIR}"));
+    let checkpoints = run(&format!("ls {MERGED_CHECKPOINTS_DIR}"));
     let checkpoints: Vec<&str> = checkpoints.split_whitespace().collect();
     let [checkpoint] = checkpoints.as_slice() else {
         panic!(
@@ -320,7 +346,7 @@ fn check_merged_state_proposed(
         .unwrap_or_else(|e| panic!("checkpoint {checkpoint} is not named by its height: {e}"));
 
     let in_checkpoint = run(&format!(
-        "sudo ls {MERGED_CHECKPOINTS_DIR}/{checkpoint}/canister_states"
+        "ls {MERGED_CHECKPOINTS_DIR}/{checkpoint}/canister_states"
     ));
     let in_checkpoint: BTreeSet<String> =
         in_checkpoint.split_whitespace().map(String::from).collect();
@@ -377,5 +403,23 @@ fn check_merged_state_proposed(
         logger,
         "Step 3 done: node {node_ip} holds the merged checkpoint {checkpoint} with the canisters \
          of S and D, and the registry holds the recovery CUP of subnet D at its height"
+    );
+
+    checkpoint.to_string()
+}
+
+/// Check ownership after the local upload, before waiting for the replica to start.
+fn check_state_ownership(d_node: &IcNodeSnapshot) {
+    let node_ip = d_node.get_ip_addr();
+    let not_owned = d_node
+        .block_on_bash_script(&format!(
+            "sudo find {NODE_STATE_DIR} ! -user ic-replica | head -n 10"
+        ))
+        .unwrap_or_else(|e| {
+            panic!("failed to check ownership of {NODE_STATE_DIR} on node {node_ip}: {e}")
+        });
+    assert!(
+        not_owned.trim().is_empty(),
+        "files of the state on node {node_ip} are not owned by ic-replica:\n{not_owned}",
     );
 }
