@@ -270,6 +270,10 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
 
         wait_until_canister_migration_is_completable(&env, split_registry_version).await;
 
+        // No reject responses are expected from here on.
+        let reject_response_counts_before_completion =
+            get_chatting_canister_reject_response_counts(&env, test_params).await;
+
         info!(
             env.logger(),
             "Proposing to complete the canister migration."
@@ -307,13 +311,15 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         // probe just before the chatting canisters' metrics are measured and the canisters are
         // stopped.
         stop_calls_probe.store(true, Ordering::Relaxed);
+
+        reject_response_counts_before_completion
     };
 
     // Continuously make calls to all the counter canisters for the entire duration of the split
     // and of the canister migration (starting before the split is proposed, stopping just before
     // measuring the chatting canisters' metrics), asserting that every single one of them
     // succeeds.
-    tokio::join!(
+    let (reject_response_counts_before_completion, ()) = tokio::join!(
         split_and_complete_canister_migration,
         call_counter_canisters_until_stopped(
             &env,
@@ -323,7 +329,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         ),
     );
 
-    check_chatting_canisters(&env, test_params).await;
+    check_chatting_canisters(&env, test_params, &reject_response_counts_before_completion).await;
 }
 
 /// Continuously makes calls to every counter canister — routing each call to whichever subnet
@@ -526,11 +532,54 @@ async fn stop_chatting_canisters(
     .await;
 }
 
+/// Returns the number of reject responses that each chatting canister has received so far.
+async fn get_chatting_canister_reject_response_counts(
+    env: &TestEnv,
+    test_params: &TestParams,
+) -> BTreeMap<CanisterId, usize> {
+    let source_subnet = get_source_subnet(env);
+    let destination_subnet = get_destination_subnet(env);
+    let third_subnet = get_third_subnet(env);
+    let canister_ids_by_subnet = [
+        (
+            &source_subnet,
+            &test_params.source_subnet_chatting_canister_ids,
+        ),
+        (
+            &destination_subnet,
+            &test_params.destination_subnet_chatting_canister_ids,
+        ),
+        (
+            &third_subnet,
+            &test_params.third_subnet_chatting_canister_ids,
+        ),
+    ];
+
+    futures::future::join_all(
+        canister_ids_by_subnet
+            .iter()
+            .flat_map(|(subnet, canister_ids)| {
+                canister_ids.iter().map(move |canister_id| async move {
+                    let runtime = runtime_from_subnet(subnet);
+                    let metrics: Metrics = Canister::new(&runtime, *canister_id)
+                        .query_("metrics", candid, ())
+                        .await
+                        .expect("Failed to make a query call");
+                    (*canister_id, metrics.reject_responses)
+                })
+            }),
+    )
+    .await
+    .into_iter()
+    .collect::<BTreeMap<CanisterId, usize>>()
+}
+
 async fn check_chatting_canisters_metrics(
     env: &TestEnv,
     subnet: &SubnetSnapshot,
     canister_ids: &[CanisterId],
     subnet_type: &str,
+    reject_response_counts_before_completion: &BTreeMap<CanisterId, usize>,
 ) {
     info!(
         env.logger(),
@@ -568,13 +617,13 @@ async fn check_chatting_canisters_metrics(
         );
         // Rejects are expected during the split (see below), but they can only happen between the
         // moment the other subnets adopt the splitting registry version and the splitting subnet
-        // reaching the splitting block. When the current function is called, the split has already
-        // completed since long (2 DKG intervals), and so has the canister migration, so none are
-        // expected to happen anymore.
+        // reaching the splitting block. The canister migration is only completed once no stream
+        // holds messages routed according to the old routing table, so none are expected from
+        // just before its completion on.
         assert_eq!(
-            metrics_after.reject_responses - metrics_before.reject_responses,
-            0,
-            "Canister {canister_id} received some reject responses after the split: {}",
+            metrics_after.reject_responses, reject_response_counts_before_completion[canister_id],
+            "Canister {canister_id} received some reject responses during or after the completion \
+            of the canister migration: {}",
             metrics_after.log,
         );
 
@@ -736,7 +785,11 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
 /// First collects metrics from all the canister and checks that there are no reported errors in
 /// them, and then stops the canisters. Stopping a canister would fail if there is still an open
 /// call context.
-async fn check_chatting_canisters(env: &TestEnv, test_params: &TestParams) {
+async fn check_chatting_canisters(
+    env: &TestEnv,
+    test_params: &TestParams,
+    reject_response_counts_before_completion: &BTreeMap<CanisterId, usize>,
+) {
     let source_subnet = get_source_subnet(env);
     let destination_subnet = get_destination_subnet(env);
     let third_subnet = get_third_subnet(env);
@@ -747,18 +800,21 @@ async fn check_chatting_canisters(env: &TestEnv, test_params: &TestParams) {
             &third_subnet,
             &test_params.third_subnet_chatting_canister_ids,
             "third",
+            reject_response_counts_before_completion,
         ),
         check_chatting_canisters_metrics(
             env,
             &source_subnet,
             &test_params.source_subnet_chatting_canister_ids,
             "source",
+            reject_response_counts_before_completion,
         ),
         check_chatting_canisters_metrics(
             env,
             &destination_subnet,
             &test_params.destination_subnet_chatting_canister_ids,
             "destination",
+            reject_response_counts_before_completion,
         )
     );
 
