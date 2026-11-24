@@ -1056,7 +1056,11 @@ impl Step for CheckSourceSubnetDeletedStep {
                              {registry_version}: {err}"
                         ))
                     })?
-                    .unwrap_or_default();
+                    .ok_or_else(|| {
+                        RecoveryError::RegistryError(format!(
+                            "No subnet list at registry version {registry_version}"
+                        ))
+                    })?;
                 if subnet_ids.contains(&source_subnet_id) {
                     return Err(RecoveryError::RegistryError(format!(
                         "Subnet {source_subnet_id} is still in the registry at version \
