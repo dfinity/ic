@@ -5,7 +5,7 @@ use std::fmt::Formatter;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Condvar, Mutex, PoisonError};
+use std::sync::{Condvar, Mutex};
 use uuid::Uuid;
 
 use crate::ResolvedStatePair;
@@ -170,16 +170,11 @@ impl Semaphore {
 
     /// Blocks until a permit is available and takes it. Dropping the permit releases it.
     fn acquire(&self) -> SemaphorePermit<'_> {
+        let available_permit_count = self.available_permit_count.lock().unwrap();
         let mut available_permit_count = self
-            .available_permit_count
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        while *available_permit_count == 0 {
-            available_permit_count = self
-                .permit_released
-                .wait(available_permit_count)
-                .unwrap_or_else(PoisonError::into_inner);
-        }
+            .permit_released
+            .wait_while(available_permit_count, |count| *count == 0)
+            .unwrap();
         *available_permit_count -= 1;
         SemaphorePermit { semaphore: self }
     }
@@ -191,16 +186,16 @@ struct SemaphorePermit<'a> {
 
 impl Drop for SemaphorePermit<'_> {
     fn drop(&mut self) {
-        *self
-            .semaphore
-            .available_permit_count
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) += 1;
+        *self.semaphore.available_permit_count.lock().unwrap() += 1;
         self.semaphore.permit_released.notify_one();
     }
 }
 
-/* Check whether Apalache complains about deadlocks with traces of length one */
+/* Check whether Apalache complains about deadlocks with traces of length one.
+ *
+ * Before starting Apalache, waits until fewer than `MAX_CONCURRENT_APALACHE_PROCESSES`
+ * Apalache processes are running in this process.
+ */
 fn run_apalache(
     apalache_binary: &Path,
     tla_module: &Path,
@@ -221,7 +216,7 @@ fn run_apalache(
         .arg("--length=1")
         .arg(tla_module)
         .env("TEST_TMPDIR", &tmp_subdir_str);
-    // Held until Apalache exits, so that at most MAX_CONCURRENT_APALACHE_PROCESSES run at once.
+    // Held until Apalache exits.
     let _permit = APALACHE_PROCESS_PERMITS.acquire();
     cmd.status()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
@@ -296,9 +291,6 @@ fn sha256_hex(input: Vec<u8>) -> String {
  *
  * Returns an error if Apalache returns one, or if there's something wrong with
  * the setup.
- *
- * Before starting Apalache, waits until fewer than `MAX_CONCURRENT_APALACHE_PROCESSES`
- * Apalache processes are running in this process.
  */
 pub fn check_tla_code_link_raw(
     apalache: &Path,
