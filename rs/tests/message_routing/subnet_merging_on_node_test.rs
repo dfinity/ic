@@ -21,10 +21,12 @@ Runbook::
    and install the NNS canisters.
 1. Install a universal canister on each of `S` and `D`.
 2. Run the subnet merging tool on a node of `D`, over SSH, with all its steps
-   and without prompts: it downloads the state of `S` from a node of `S` over
+   up to `UnhaltDestinationSubnet` and without prompts: it downloads the state of `S` from a node of `S` over
    SSH and the state of `D` locally, merges them on the node, replaces the
    state of its own node with the merged state, waits until its own node
-   reports the recovery CUP, and unhalts `D`.
+   reports the recovery CUP, and unhalts `D`. The steps deleting `S` and the
+   working directory of the tool are skipped: `subnet_cooling_down_test`
+   covers them, and the checks below inspect that working directory.
 3. Check that the merged state on the node of `D` is a single checkpoint
    holding the canisters of both `S` and `D`, and that the registry holds the
    recovery CUP of `D` at the height of that checkpoint.
@@ -33,7 +35,8 @@ Runbook::
    the replica runs at or above the height of the merged checkpoint. `D` is
    unhalted by then, so the replica may have created newer checkpoints.
 
-Success:: The tool completes all its steps on the node of `D`, the recovery
+Success:: The tool completes all its steps up to `UnhaltDestinationSubnet` on
+the node of `D`, the recovery
 CUP of `D` is at the merged state it assembled there, and the replica on that
 node runs on the merged state.
 
@@ -240,7 +243,8 @@ pub fn test(env: TestEnv) {
 }
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
-/// of `S`, through all its steps and without prompts.
+/// of `S`, through all its steps up to `UnhaltDestinationSubnet` and without
+/// prompts.
 fn run_tool_on_node(
     env: &TestEnv,
     s_node: &IcNodeSnapshot,
@@ -298,6 +302,10 @@ fn run_tool_on_node(
          --halt-timeout-secs {halt_timeout} \
          --registry-timeout-secs {registry_timeout} \
          --poll-interval-secs {poll_interval} \
+         --skip check-registry-version-on-all-subnets \
+         --skip delete-source-subnet \
+         --skip check-registry-for-source-subnet-deletion \
+         --skip cleanup \
          2>&1",
         tool_timeout = TOOL_TIMEOUT.as_secs(),
         replica_version = get_guestos_img_version(),
@@ -315,7 +323,8 @@ fn run_tool_on_node(
 
     info!(
         logger,
-        "Step 2 done: the subnet merging tool ran through all its steps on node {d_node_ip}"
+        "Step 2 done: the subnet merging tool ran through all its steps up to \
+         UnhaltDestinationSubnet on node {d_node_ip}"
     );
 }
 

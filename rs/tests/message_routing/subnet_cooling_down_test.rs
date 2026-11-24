@@ -173,10 +173,12 @@ Runbook::
    `CheckRegistryVersionOnAllSubnets`, which waits until every subnet other
    than `S` has reached the registry version recorded by
    `CheckRegistryForRoutingTableEntry` on a quorum of its replicas, i.e. routes
-   the canisters of `S` to `D`, and `DeleteSourceSubnet`, which submits a
-   proposal deleting `S`.
-27. After `DeleteSourceSubnet`: check that `S` is gone from the registry. The
-   tool's last step, `Cleanup`, then deletes its working directory.
+   the canisters of `S` to `D`, `DeleteSourceSubnet`, which submits a proposal
+   deleting `S`, and `CheckRegistryForSourceSubnetDeletion`, which waits until
+   the registry no longer holds `S`.
+27. After `CheckRegistryForSourceSubnetDeletion`: check that the registry the
+   test driver observes no longer holds `S` either. The tool's last step,
+   `Cleanup`, then deletes its working directory.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -362,9 +364,9 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 /// so that a stuck step fails with its own error. The sum is dominated by
 /// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
 /// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
-/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and the wait of
-/// `CheckRegistryVersionOnAllSubnets` (`REGISTRY_TIMEOUT`), about 2545s
-/// together.
+/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and the three waits of
+/// `REGISTRY_TIMEOUT` once `D` is unhalted (`CheckRegistryVersionOnAllSubnets`,
+/// `CheckRegistryForSourceSubnetDeletion` and step 27), about 2785s together.
 /// `HALT_TIMEOUT` is counted once although it applies to each of the two
 /// subnets: both are scheduled to halt before either is waited for, so the two
 /// waits overlap. The overall timeout additionally covers the setup (booting
@@ -853,7 +855,8 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                      routes the canisters of S to D"
                 );
             }
-            StepType::DeleteSourceSubnet => {
+            StepType::DeleteSourceSubnet => {}
+            StepType::CheckRegistryForSourceSubnetDeletion => {
                 runtime.block_on(check_source_subnet_deleted(&topology, context));
             }
             StepType::Cleanup => {}
@@ -873,21 +876,31 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     );
 }
 
-/// Step 27: check that the subnet the tool deleted is gone from the registry.
+/// Step 27: check that the subnet the tool deleted is gone from the registry
+/// the test driver observes, following the newer registry versions until one
+/// no longer holds `S`, for up to `REGISTRY_TIMEOUT`.
 async fn check_source_subnet_deleted(topology: &TopologySnapshot, context: &Context<'_>) {
     let logger = &context.logger;
     let s_subnet_id = context.s_subnet.subnet_id;
 
-    let topology = topology
-        .block_for_newer_registry_version()
-        .await
-        .expect("the registry should have a newer version after the subnet was deleted");
-    let remaining: Vec<_> = topology.subnets().map(|subnet| subnet.subnet_id).collect();
-    assert!(
-        !remaining.contains(&s_subnet_id),
-        "subnet S ({s_subnet_id}) is still in the registry at version {}: {remaining:?}",
-        topology.get_registry_version(),
-    );
+    let deadline = Instant::now() + REGISTRY_TIMEOUT;
+    let mut topology = topology.clone();
+    let remaining = loop {
+        let remaining: Vec<_> = topology.subnets().map(|subnet| subnet.subnet_id).collect();
+        if !remaining.contains(&s_subnet_id) {
+            break remaining;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "subnet S ({s_subnet_id}) is still in the registry at version {} after \
+             {REGISTRY_TIMEOUT:?}: {remaining:?}",
+            topology.get_registry_version(),
+        );
+        topology = topology
+            .block_for_newer_registry_version()
+            .await
+            .expect("the registry should get a newer version deleting subnet S");
+    };
     info!(
         logger,
         "Step 27 done: subnet S is gone as of registry version {}; the remaining subnets are \

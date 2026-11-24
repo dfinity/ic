@@ -6,8 +6,8 @@ use crate::{
     layout::Layout,
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
-        CheckRoutingTableStep, ComputeExpectedMergedManifestStep, DownloadStateStep,
-        MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
+        CheckRoutingTableStep, CheckSourceSubnetDeletedStep, ComputeExpectedMergedManifestStep,
+        DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
         StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
         WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
@@ -127,6 +127,9 @@ pub enum StepType {
     CheckRegistryVersionOnAllSubnets,
     /// Submit a proposal to delete the source subnet.
     DeleteSourceSubnet,
+    /// Wait until the registry no longer holds the source subnet, i.e. until
+    /// the proposal deleting it has been executed.
+    CheckRegistryForSourceSubnetDeletion,
     /// Delete the working directory of the tool.
     Cleanup,
 }
@@ -244,12 +247,20 @@ impl SubnetMerging {
         )
         .expect("Failed to initialize recovery");
 
-        Self::check_subnets_preconditions(
-            &recovery,
-            subnet_merging_args.source_subnet_id,
-            subnet_merging_args.destination_subnet_id,
-        )
-        .expect("Subnets should satisfy all the preconditions");
+        // Once the proposal deleting the source subnet has been submitted, the
+        // registry may no longer hold that subnet, so the preconditions cannot
+        // be checked when resuming after `DeleteSourceSubnet`.
+        let source_subnet_may_be_deleted = subnet_merging_args
+            .next_step
+            .is_some_and(|next_step| next_step as usize > StepType::DeleteSourceSubnet as usize);
+        if !source_subnet_may_be_deleted {
+            Self::check_subnets_preconditions(
+                &recovery,
+                subnet_merging_args.source_subnet_id,
+                subnet_merging_args.destination_subnet_id,
+            )
+            .expect("Subnets should satisfy all the preconditions");
+        }
 
         let layout =
             Layout::new(&recovery, &logger).expect("Failed to create the working directories");
@@ -763,6 +774,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::UnhaltDestinationSubnet
             | StepType::CheckRegistryVersionOnAllSubnets
             | StepType::DeleteSourceSubnet
+            | StepType::CheckRegistryForSourceSubnetDeletion
             | StepType::Cleanup => {}
         }
     }
@@ -901,6 +913,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                     &self.recovery.admin_helper,
                     self.params.source_subnet_id,
                 ),
+            }
+            .into(),
+            StepType::CheckRegistryForSourceSubnetDeletion => CheckSourceSubnetDeletedStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
             }
             .into(),
             StepType::Cleanup => self.recovery.get_cleanup_step().into(),
