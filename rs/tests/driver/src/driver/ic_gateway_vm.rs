@@ -124,7 +124,13 @@ pub(crate) fn dev_root_ca() -> Result<DevRootCa> {
 /// the order, type and string encoding of every attribute. A certificate that
 /// `rcgen` issues under this name has an issuer field that matches the subject
 /// byte for byte, which is how a client finds the CA certificate in its trust
-/// store.
+/// store. Names with multi-valued RDNs, repeated attribute types, or values
+/// other than PrintableString and UTF8String are rejected.
+///
+/// `rcgen` can read the subject itself (`Issuer::from_ca_cert_pem`) only with
+/// its `x509-parser` feature, which stays off: it would make Bazel build
+/// x509-parser with `verify-aws` for the wasm32 canisters as well, and
+/// aws-lc-sys does not build for wasm32.
 fn subject_distinguished_name(cert_pem: &str) -> Result<DistinguishedName> {
     let (_, pem) = parse_x509_pem(cert_pem.as_bytes()).context("decoding the PEM")?;
     let cert = pem.parse_x509().context("parsing the certificate")?;
@@ -142,11 +148,11 @@ fn subject_distinguished_name(cert_pem: &str) -> Result<DistinguishedName> {
         if name.get(&attribute_type).is_some() {
             bail!("repeated attribute type {attribute_type:?}");
         }
-        let value = attribute.as_str().context("reading an attribute value")?;
+        let read_value = || attribute.as_str().context("reading an attribute value");
         let value = match attribute.attr_value().tag() {
-            Tag::PrintableString => DnValue::PrintableString(value.try_into()?),
-            Tag::Utf8String => DnValue::Utf8String(value.to_string()),
-            tag => bail!("unsupported attribute value type {tag:?}"),
+            Tag::PrintableString => DnValue::PrintableString(read_value()?.try_into()?),
+            Tag::Utf8String => DnValue::Utf8String(read_value()?.to_string()),
+            tag => bail!("unsupported attribute value type {tag}"),
         };
         name.push(attribute_type, value);
     }
