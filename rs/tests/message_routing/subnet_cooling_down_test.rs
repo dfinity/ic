@@ -169,8 +169,12 @@ Runbook::
    `WaitForCupOnDestinationSubnet`, which waits until `D`'s node reports the
    recovery CUP, i.e. it came up on the merged state, and
    `UnhaltDestinationSubnet`, which submits a proposal unhalting `D`.
-25. After `UnhaltDestinationSubnet`: wait until `D` is healthy, then check that
-   `U12`, now served by `D`, kept the stable memory, the snapshot and (up to
+25. After `UnhaltDestinationSubnet`: check that the call loops of `UDS` and
+   `UOS` of step 2, stalled since step 11, advance again. Their peers `USD` and
+   `USO` were hosted by `S` and are served by `D` now: `UDS`'s loop only
+   advances once `D` executes again, and `UOS`'s loop once the calls from `O`
+   to a canister of `S` are responded to again. Then wait until `D` is healthy,
+   and check that `U12`, now served by `D`, kept the stable memory, the snapshot and (up to
    what an idle canister burns) the cycles balance of step 4, and that `U7`,
    which `D` hosted all along, can call `U12` now that both are on the same
    subnet.
@@ -202,8 +206,9 @@ holds exactly the canisters of both, and the registry version the tool records
 routes the canister ID ranges of `S` to `D`; the registry holds the recovery
 CUP contents of `D` at the merged state, with `D` halted; the replica on `D`'s
 node runs on the merged state the tool uploaded to it; and once `D` is
-recovered at the merged state, the canisters of `S` kept their state and `U2a`
-and `U2b` are installed, every ingress message that was in progress across the
+recovered at the merged state and unhalted, the call loops of `UDS` and `UOS`
+advance again, the canisters of `S` kept their state and `U2a` and `U2b` are
+installed, every ingress message that was in progress across the
 merge completes, and the call context of the best effort call whose deadline
 passed before the merge is closed; finally, `S` is deleted.
 
@@ -420,6 +425,11 @@ const HALT_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_M
 /// time: this has been observed to take up to four minutes.
 const INGRESS_COMPLETION_TIMEOUT: Duration = Duration::from_secs(480);
 
+/// Timeout for the call loops of `UDS` and `UOS` to advance again once `D` is
+/// unhalted (step 25): the nodes of `D` have to pick up the registry version
+/// unhalting `D`, and `O` has to deliver the calls of `UOS` to `D`.
+const LOOPS_RESUMED_TIMEOUT: Duration = Duration::from_secs(180);
+
 /// How long the loops of `UDS` and `UOS` are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
@@ -431,16 +441,17 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 /// so that a stuck step fails with its own error. The sum is dominated by
 /// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
 /// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
-/// 15s apart, about 525s) and `INGRESS_COMPLETION_TIMEOUT`, about 2725s
-/// together. `HALT_TIMEOUT` is counted once although it applies to each of the
+/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT`, `INGRESS_COMPLETION_TIMEOUT`
+/// and the wait of `CheckRegistryVersionOnAllSubnets` (`REGISTRY_TIMEOUT`),
+/// about 3025s together. `HALT_TIMEOUT` is counted once although it applies to each of the
 /// two subnets: both are scheduled to halt before either is waited for, so the
 /// two waits overlap. Likewise `INGRESS_COMPLETION_TIMEOUT`, as the ingress
 /// messages it applies to complete concurrently. The overall timeout
 /// additionally covers the setup (booting the IC and installing the NNS) and
 /// has to stay below the 3600s of the `eternal` timeout of the Bazel target,
 /// which also covers what runs outside of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3000);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3500);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3100);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3550);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -908,6 +919,7 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
     );
 
     let mut executed_steps = vec![];
+    let mut stalled_iterations = vec![];
     for (step_type, step) in merging {
         info!(logger, "Next step: {step_type:?}");
         info!(logger, "{}", step.descr());
@@ -924,7 +936,7 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
             }
             StepType::CheckMergeReadiness => {
                 info!(logger, "Step 10 done: subnet S is \"merge ready\"");
-                runtime.block_on(check_loops_stalled(context));
+                stalled_iterations = runtime.block_on(check_loops_stalled(context));
             }
             StepType::HaltSourceSubnetAtCupHeight => {}
             StepType::HaltDestinationSubnetAtCupHeight => {}
@@ -998,6 +1010,7 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
                     logger,
                     "Step 24 done: subnet D came up on the merged state and is unhalted"
                 );
+                runtime.block_on(check_loops_resumed(context, &stalled_iterations));
                 runtime.block_on(verify_after_merge(context));
             }
             StepType::CheckRegistryVersionOnAllSubnets => {
@@ -1552,7 +1565,9 @@ async fn check_ingress_and_queries_rejected(context: &Context) {
 ///
 /// Iterations whose call to `S` was rejected with `SYS_TRANSIENT` do not count
 /// (see `start_call_loop`).
-async fn check_loops_stalled(context: &Context) {
+///
+/// Returns the iterations the loops are stalled at.
+async fn check_loops_stalled(context: &Context) -> Vec<u64> {
     let logger = &context.logger;
     info!(
         logger,
@@ -1567,7 +1582,7 @@ async fn check_loops_stalled(context: &Context) {
         before.push(global_counter(canister).await.unwrap());
     }
     tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
-    for ((canister, name), before) in canisters.into_iter().zip(before) {
+    for ((canister, name), &before) in canisters.into_iter().zip(&before) {
         let after = global_counter(canister).await.unwrap();
         assert_eq!(
             before, after,
@@ -1582,6 +1597,47 @@ async fn check_loops_stalled(context: &Context) {
     info!(
         logger,
         "Step 11 done: the call loops of UDS and UOS are stalled"
+    );
+    before
+}
+
+/// Step 25: check that the call loops of `UDS` and `UOS` advance past the
+/// iterations `stalled_iterations` they were stalled at in step 11, i.e. that
+/// their calls to `USD` and `USO`, which `D` serves after the merge, are
+/// replied again.
+async fn check_loops_resumed(context: &Context, stalled_iterations: &[u64]) {
+    let logger = &context.logger;
+    info!(
+        logger,
+        "Step 25: Checking that the call loops of UDS and UOS advance again"
+    );
+    let uds = UniversalCanister::from_canister_id(&context.d_agent, context.uds);
+    let uos = UniversalCanister::from_canister_id(&context.o_agent, context.uos);
+    let canisters = [(&uds, "UDS"), (&uos, "UOS")];
+    for ((canister, name), &stalled) in canisters.into_iter().zip(stalled_iterations) {
+        retry_with_msg_async!(
+            format!("waiting until {name}'s call loop advances past iteration {stalled}"),
+            logger,
+            LOOPS_RESUMED_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let iteration = global_counter(canister).await?;
+                if iteration <= stalled {
+                    bail!("{name}'s call loop is still at iteration {iteration}");
+                }
+                Ok(())
+            }
+        )
+        .await
+        .unwrap_or_else(|e| panic!("{name}'s call loop did not advance after the merge: {e}"));
+        info!(
+            logger,
+            "Step 25: {name}'s call loop advanced past iteration {stalled}"
+        );
+    }
+    info!(
+        logger,
+        "Step 25: the call loops of UDS and UOS advance again"
     );
 }
 
