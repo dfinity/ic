@@ -2021,6 +2021,17 @@ crate.annotation(
         "opt-level=3",
     ],
 )
+
+# Build p384 0.14 with its formally verified fiat-crypto field and scalar
+# arithmetic instead of its default crypto-bigint backend. p384 depends on
+# fiat-crypto only under `cfg(p384_backend = "fiat")`, which crate_universe maps
+# to no platform, so the annotation adds that dependency too.
+crate.annotation(
+    crate = "p384",
+    rustc_flags = ["--cfg=p384_backend=\"fiat\""],
+    version = "^0.14",
+    deps = ["@@rules_rust++crate+crate_index__fiat-crypto-0.3.0//:fiat_crypto"],
+)
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
     build_script_data = ["@jemalloc//:libjemalloc"],

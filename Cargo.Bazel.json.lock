@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "82961776b54f63bf15c5bc8358d5bafb716bce633604f05ce7487f65a3746e36",
+  "checksum": "76c24c7824d7d5bdd1c84cedd930150b99afe1dff41646eba6f8ae9ec6a338be",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -40005,7 +40005,13 @@
             ]
           }
         },
-        "edition": "2024"
+        "edition": "2024",
+        "extra_deps": [
+          "@@rules_rust++crate+crate_index__fiat-crypto-0.3.0//:fiat_crypto"
+        ],
+        "rustc_flags": [
+          "--cfg=p384_backend=\"fiat\""
+        ]
       },
       "library_target_name": "p384",
       "license": "Apache-2.0 OR MIT",
