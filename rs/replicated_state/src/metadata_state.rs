@@ -1166,6 +1166,11 @@ impl SystemMetadata {
     ///  * Retains most other fields. Many of these will be overwritten by Message
     ///    Routing at the beginning of the next round.
     ///
+    /// On both subnets:
+    ///  * Drops `canister_allocation_ranges` and `last_generated_canister_id`.
+    ///    Message Routing reinitializes them from the registry at the beginning of
+    ///    the next round.
+    ///
     /// Notes:
     ///  * `prev_state_hash` will be set by `take_tip()`.
     ///  * `own_subnet_type` will be set during `load_checkpoint()`, based on
@@ -1193,8 +1198,8 @@ impl SystemMetadata {
             mut ingress_history,
             mut streams,
             mut subnet_schedule,
-            mut canister_allocation_ranges,
-            mut last_generated_canister_id,
+            canister_allocation_ranges: _,
+            last_generated_canister_id: _,
             prev_state_hash,
             batch_time,
             network_topology,
@@ -1268,10 +1273,6 @@ impl SystemMetadata {
             // No streams.
             streams = Default::default();
 
-            // Will be initialized from the registry in subnet B's first round.
-            canister_allocation_ranges = Default::default();
-            last_generated_canister_id = None;
-
             // No in-progress subnet calls on subnet B.
             subnet_call_context_manager = Default::default();
 
@@ -1295,9 +1296,10 @@ impl SystemMetadata {
             ingress_history,
             streams,
             subnet_schedule,
-            // Already populated from the registry for subnet B.
-            canister_allocation_ranges,
-            last_generated_canister_id,
+            // Dropped on both subnets; reinitialized from the registry by Message Routing
+            // at the beginning of the next round.
+            canister_allocation_ranges: Default::default(),
+            last_generated_canister_id: None,
             prev_state_hash,
             batch_time,
             // Already populated from the registry.
