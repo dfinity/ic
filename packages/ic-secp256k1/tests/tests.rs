@@ -394,6 +394,45 @@ fn should_accept_bip341_signatures_that_we_generate() {
 }
 
 #[test]
+fn should_reject_truncated_bip340_and_bip341_signatures() {
+    use rand::RngCore;
+
+    let mut rng = test_rng();
+
+    let sk = PrivateKey::generate_using_rng(&mut rng);
+    let pk = sk.public_key();
+
+    let msg = rng.r#gen::<[u8; 32]>();
+
+    // Every proper prefix of a valid signature is rejected, including those
+    // shorter than the 32-byte encoding of r.
+    let sig = sk.sign_message_with_bip340(&msg, &mut rng);
+    assert!(pk.verify_bip340_signature(&msg, &sig));
+    for len in 0..sig.len() {
+        assert!(
+            !pk.verify_bip340_signature(&msg, &sig[..len]),
+            "len = {len}"
+        );
+    }
+
+    // The Taproot tree root is valid, so BIP341 verification gets as far as
+    // parsing the signature.
+    for ttr_len in [0, 32] {
+        let mut ttr = vec![0_u8; ttr_len];
+        rng.fill_bytes(&mut ttr);
+
+        let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
+        assert!(pk.verify_bip341_signature(&msg, &sig, &ttr));
+        for len in 0..sig.len() {
+            assert!(
+                !pk.verify_bip341_signature(&msg, &sig[..len], &ttr),
+                "len = {len}, ttr_len = {ttr_len}"
+            );
+        }
+    }
+}
+
+#[test]
 fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodingError> {
     let pk = PublicKey::deserialize_sec1(&hex::decode("04E38257CE81AB62AB1DF591E360AB0021D2D24E737299CF48317DBF31A3996A2A78DD07EA1996F24FE829B4EE968BA2700632D8F165E793E41AE37B8911FC83C9").unwrap())?;
     let msg = b"test";
