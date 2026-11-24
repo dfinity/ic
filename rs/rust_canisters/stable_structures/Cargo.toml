@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
-ic-stable-structures = { workspace = true }
+ic-stable-structures = "0.7.2"
 
 [[bin]]
 name = "stable_structures"

@@ -37,14 +37,12 @@ thread_local! {
         StableMinHeap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2))),
         )
-        .expect("Unable to init bounded StableMinHeap")
     );
 
     static BOUNDED_VEC: RefCell<StableVec<BoundedFuzzStruct, Memory>> = RefCell::new(
         StableVec::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))),
         )
-        .expect("Unable to init bounded StableVec")
     );
 
     static DIR: TempDir = Builder::new().prefix("stable_structures_multiple_ops_persistent").tempdir().unwrap();
@@ -187,7 +185,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                 bounded_data.truncate(MAX_VALUE_SIZE as usize);
 
                 BOUNDED_MINHEAP.with_borrow_mut(|stable_minheap| {
-                    let _ = stable_minheap.push(&BoundedFuzzStruct { data: bounded_data });
+                    stable_minheap.push(&BoundedFuzzStruct { data: bounded_data });
                 });
             }
             StableStructOperation::MinHeapPop => {
@@ -200,7 +198,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                 bounded_data.truncate(MAX_VALUE_SIZE as usize);
 
                 BOUNDED_VEC.with_borrow_mut(|stable_vec| {
-                    let _ = stable_vec.push(&BoundedFuzzStruct { data: bounded_data });
+                    stable_vec.push(&BoundedFuzzStruct { data: bounded_data });
                 });
             }
             StableStructOperation::VecPop => {

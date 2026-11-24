@@ -11,7 +11,7 @@ rust_fuzz_test_binary_afl(
     deps = [
         # Keep sorted.
         "@crate_index//:arbitrary",
-        "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:libfuzzer-sys",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

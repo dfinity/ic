@@ -23891,7 +23891,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk",
- "ic-stable-structures 0.6.9",
+ "ic-stable-structures 0.7.2",
 ]
 
 [[package]]
