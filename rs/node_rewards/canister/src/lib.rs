@@ -66,6 +66,10 @@ impl Storable for NaiveDateStorable {
         Cow::Owned(days.to_be_bytes().to_vec())
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
+    }
+
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         let mut arr = [0_u8; 4];
         arr.copy_from_slice(&bytes);
@@ -84,6 +88,10 @@ impl Storable for pb::v1::SubnetIdKey {
         Cow::Owned(self.encode_to_vec())
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
+    }
+
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
@@ -97,6 +105,10 @@ impl Storable for pb::v1::SubnetIdKey {
 impl Storable for pb::v1::SubnetMetricsKey {
     fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
     }
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
@@ -114,6 +126,10 @@ impl Storable for pb::v1::SubnetMetricsValue {
         Cow::Owned(self.encode_to_vec())
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
+    }
+
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
@@ -124,6 +140,9 @@ impl Storable for pb::v1::SubnetMetricsValue {
 impl Storable for pb::v1::NodeMetrics {
     fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
     }
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()

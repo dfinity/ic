@@ -303,7 +303,7 @@ fn setup_data_for_test_rewards_calculation(
             }],
         },
     );
-    LAST_DAY_SYNCED.with_borrow_mut(|cell| cell.set(Some(NaiveDateStorable(day2))).unwrap());
+    LAST_DAY_SYNCED.with_borrow_mut(|cell| cell.set(Some(NaiveDateStorable(day2))));
 }
 
 #[test]

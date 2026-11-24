@@ -34,9 +34,9 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     pub fn new(registry: Arc<dyn Registry>) -> Self {
         let timestamp_to_versions_map = S::with_registry_map(|local_registry| {
-            local_registry.iter().fold(
+            local_registry.keys().fold(
                 BTreeMap::new(),
-                |mut acc: std::collections::BTreeMap<u64, HashSet<RegistryVersion>>, (k, _)| {
+                |mut acc: std::collections::BTreeMap<u64, HashSet<RegistryVersion>>, k| {
                     acc.entry(k.timestamp_nanoseconds)
                         .or_default()
                         .insert(RegistryVersion::from(k.version));
@@ -112,13 +112,14 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
         let mut effective_records = BTreeMap::new();
         S::with_registry_map(|map| {
             let version = version.get();
-            for (key, value) in map
+            for entry in map
                 .range(start_range..)
-                .filter(|(k, _)| k.version <= version)
-                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+                .filter(|entry| entry.key().version <= version)
+                .take_while(|entry| entry.key().key.starts_with(key_prefix))
             {
                 // For each key, keep only the record values for the latest record versions. We rely upon
                 // the fact that for a fixed key, the records are sorted by version.
+                let (key, value) = entry.into_pair();
                 effective_records.insert(key.key, value.0);
             }
         });
@@ -155,11 +156,11 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         let result = S::with_registry_map(|map| {
             map.range(start_range..=end_range)
                 .rev()
-                .find(|(stored_key, _)| stored_key.key == key)
-                .map(|(_, value)| RegistryRecord {
+                .find(|entry| entry.key().key == key)
+                .map(|entry| RegistryRecord {
                     key: key.to_string(),
                     version,
-                    value: value.0,
+                    value: entry.value().0,
                 })
                 .unwrap_or_else(|| empty_zero_registry_record(key))
         });
@@ -190,8 +191,8 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         let mut latest = self.latest_version.load(AtomicOrdering::SeqCst);
         if latest == 0 {
             latest = S::with_registry_map(|map| {
-                map.range(..)
-                    .map(|(k, _)| k.version)
+                map.keys()
+                    .map(|k| k.version)
                     .max()
                     .unwrap_or(ZERO_REGISTRY_VERSION.get())
             });

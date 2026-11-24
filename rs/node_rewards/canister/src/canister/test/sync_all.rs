@@ -65,8 +65,8 @@ fn test_sync_zero_registry_version() {
     let got_subnets = metrics_manager
         .subnets_metrics
         .borrow()
-        .iter()
-        .map(|(k, _)| k.subnet_id.unwrap().into())
+        .keys()
+        .map(|k| k.subnet_id.unwrap().into())
         .collect::<Vec<_>>();
 
     assert_eq!(expected_version, registry_client.get_latest_version());
@@ -112,8 +112,8 @@ fn test_sync_non_zero_registry_version() {
     let got_subnets = metrics_manager
         .subnets_metrics
         .borrow()
-        .iter()
-        .map(|(k, _)| k.subnet_id.unwrap().into())
+        .keys()
+        .map(|k| k.subnet_id.unwrap().into())
         .collect::<Vec<_>>();
 
     assert_eq!(expected_subnets, got_subnets);

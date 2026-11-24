@@ -12945,6 +12945,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
  "ic-stable-structures 0.6.9",
+ "ic-stable-structures 0.7.2",
  "ic-types",
  "itertools 0.15.0",
  "maplit",
@@ -13366,7 +13367,7 @@ dependencies = [
  "ic-nervous-system-canisters",
  "ic-registry-keys",
  "ic-registry-transport",
- "ic-stable-structures 0.6.9",
+ "ic-stable-structures 0.7.2",
  "ic-types",
  "prost",
 ]

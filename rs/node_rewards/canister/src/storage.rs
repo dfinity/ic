@@ -45,7 +45,7 @@ thread_local! {
     };
 
     pub static LAST_DAY_SYNCED: RefCell<StableCell<Option<NaiveDateStorable>, VM>> = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
-            StableCell::init(mm.get(LAST_DAY_SYNCED_MEMORY_ID), None).expect("Could not initialize last_day_synced")
+            StableCell::init(mm.get(LAST_DAY_SYNCED_MEMORY_ID), None)
         ));
 
     static REGISTRY_DATA_STORE_BTREE_MAP: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>>
@@ -68,3 +68,6 @@ impl RegistryDataStableMemory for RegistryStoreStableMemoryBorrower {
         REGISTRY_DATA_STORE_BTREE_MAP.with_borrow_mut(f)
     }
 }
+
+#[cfg(test)]
+mod tests;
