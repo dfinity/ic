@@ -10,7 +10,8 @@ use ic_stable_structures_0_6::{BTreeMap as BTreeMap0_6, Cell as Cell0_6};
 use std::borrow::Cow;
 use std::ops::Range;
 
-/// Stores a `T` through ic-stable-structures 0.6, using `T`'s own `Storable` encoding.
+/// Stores a `T` through ic-stable-structures 0.6, using `T`'s own `Storable` encoding. Only types
+/// that implement their own encoding are wrapped: `u64` and `Option<_>` use 0.6's implementation.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct V0_6<T>(T);
 
@@ -86,20 +87,21 @@ fn stable_memory_is_compatible_with_ic_stable_structures_0_6() {
     // Write with 0.6, at the memory IDs the canister uses.
     {
         let mm = MemoryManager0_6::init(memory.clone());
-        let mut registry = BTreeMap0_6::init(mm.get(MemoryId0_6::new(0)));
+        // `StorableRegistryValue` is encoded as the `Option<Vec<u8>>` it wraps.
+        let mut registry: BTreeMap0_6<V0_6<StorableRegistryKey>, Option<Vec<u8>>, _> =
+            BTreeMap0_6::init(mm.get(MemoryId0_6::new(0)));
         for (key, version, timestamp, value) in registry_records(0..40) {
             registry.insert(
                 V0_6(StorableRegistryKey::new(key, version, timestamp)),
-                V0_6(StorableRegistryValue(value)),
+                value,
             );
         }
         BTreeMap0_6::init(mm.get(MemoryId0_6::new(1)))
             .insert(V0_6(metrics_key(100)), V0_6(metrics_value(5)));
-        BTreeMap0_6::init(mm.get(MemoryId0_6::new(2)))
-            .insert(V0_6(subnet_key.clone()), V0_6(100_u64));
-        Cell0_6::init(mm.get(MemoryId0_6::new(3)), V0_6(None))
+        BTreeMap0_6::init(mm.get(MemoryId0_6::new(2))).insert(V0_6(subnet_key.clone()), 100_u64);
+        Cell0_6::init(mm.get(MemoryId0_6::new(3)), None)
             .unwrap()
-            .set(V0_6(Some(NaiveDateStorable(day_1))))
+            .set(Some(V0_6(NaiveDateStorable(day_1))))
             .unwrap();
     }
 
@@ -110,7 +112,7 @@ fn stable_memory_is_compatible_with_ic_stable_structures_0_6() {
             StableBTreeMap::init(mm.get(REGISTRY_STORE_MEMORY_ID));
         let mut subnets_metrics: StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, VM> =
             StableBTreeMap::init(mm.get(SUBNETS_METRICS_MEMORY_ID));
-        let last_timestamp_per_subnet: StableBTreeMap<SubnetIdKey, u64, VM> =
+        let mut last_timestamp_per_subnet: StableBTreeMap<SubnetIdKey, u64, VM> =
             StableBTreeMap::init(mm.get(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID));
         let mut last_day_synced: StableCell<Option<NaiveDateStorable>, VM> =
             StableCell::init(mm.get(LAST_DAY_SYNCED_MEMORY_ID), None);
@@ -137,7 +139,7 @@ fn stable_memory_is_compatible_with_ic_stable_structures_0_6() {
                 .iter()
                 .map(|entry| entry.into_pair())
                 .collect::<Vec<_>>(),
-            vec![(subnet_key, 100)]
+            vec![(subnet_key.clone(), 100)]
         );
         assert_eq!(last_day_synced.get().as_ref().map(|d| d.0), Some(day_1));
 
@@ -148,22 +150,18 @@ fn stable_memory_is_compatible_with_ic_stable_structures_0_6() {
             );
         }
         subnets_metrics.insert(metrics_key(200), metrics_value(6));
+        last_timestamp_per_subnet.insert(subnet_key.clone(), 200);
         last_day_synced.set(Some(NaiveDateStorable(day_2)));
     }
 
     // Read with 0.6 what 0.7 wrote.
     let mm = MemoryManager0_6::init(memory);
-    let registry: BTreeMap0_6<V0_6<StorableRegistryKey>, V0_6<StorableRegistryValue>, _> =
+    let registry: BTreeMap0_6<V0_6<StorableRegistryKey>, Option<Vec<u8>>, _> =
         BTreeMap0_6::init(mm.get(MemoryId0_6::new(0)));
     assert_eq!(
         registry
             .iter()
-            .map(|(key, value)| (
-                key.0.key,
-                key.0.version,
-                key.0.timestamp_nanoseconds,
-                value.0.0
-            ))
+            .map(|(key, value)| (key.0.key, key.0.version, key.0.timestamp_nanoseconds, value))
             .collect::<Vec<_>>(),
         registry_records(0..80)
     );
@@ -179,7 +177,16 @@ fn stable_memory_is_compatible_with_ic_stable_structures_0_6() {
             (metrics_key(200), metrics_value(6)),
         ]
     );
-    let last_day_synced: Cell0_6<V0_6<Option<NaiveDateStorable>>, _> =
-        Cell0_6::init(mm.get(MemoryId0_6::new(3)), V0_6(None)).unwrap();
-    assert_eq!(last_day_synced.get().0.as_ref().map(|d| d.0), Some(day_2));
+    let last_timestamp_per_subnet: BTreeMap0_6<V0_6<SubnetIdKey>, u64, _> =
+        BTreeMap0_6::init(mm.get(MemoryId0_6::new(2)));
+    assert_eq!(
+        last_timestamp_per_subnet
+            .iter()
+            .map(|(key, value)| (key.0, value))
+            .collect::<Vec<_>>(),
+        vec![(subnet_key, 200)]
+    );
+    let last_day_synced: Cell0_6<Option<V0_6<NaiveDateStorable>>, _> =
+        Cell0_6::init(mm.get(MemoryId0_6::new(3)), None).unwrap();
+    assert_eq!(last_day_synced.get().as_ref().map(|d| d.0.0), Some(day_2));
 }

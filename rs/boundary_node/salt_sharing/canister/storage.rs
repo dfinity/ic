@@ -63,7 +63,8 @@ mod tests {
         MemoryId as MemoryId0_6, MemoryManager as MemoryManager0_6,
     };
 
-    /// Stores a `T` through ic-stable-structures 0.6, using `T`'s own `Storable` encoding.
+    /// Stores a `T` through ic-stable-structures 0.6, using `T`'s own `Storable` encoding. Only
+    /// types that implement their own encoding are wrapped: `()` uses 0.6's implementation.
     #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
     struct V0_6<T>(T);
 
@@ -98,7 +99,7 @@ mod tests {
         {
             let mm = MemoryManager0_6::init(memory.clone());
             BTreeMap0_6::init(mm.get(MemoryId0_6::new(0))).insert(
-                V0_6(()),
+                (),
                 V0_6(StorableSalt {
                     salt: vec![1, 2, 3],
                     salt_id: 7,
@@ -124,9 +125,9 @@ mod tests {
 
         // Read with 0.6 what 0.7 wrote.
         let mm = MemoryManager0_6::init(memory);
-        let salt: BTreeMap0_6<V0_6<()>, V0_6<StorableSalt>, _> =
+        let salt: BTreeMap0_6<(), V0_6<StorableSalt>, _> =
             BTreeMap0_6::init(mm.get(MemoryId0_6::new(0)));
-        let stored = salt.get(&V0_6(())).unwrap().0;
+        let stored = salt.get(&()).unwrap().0;
         assert_eq!((stored.salt, stored.salt_id), (vec![4, 5, 6], 8));
     }
 }
