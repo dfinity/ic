@@ -445,7 +445,7 @@ fn split_subnet_does_not_merge_fresh_ranges_with_last_range() {
             &mut routing_table,
             subnet_test_id(SOURCE),
             subnet_test_id(DESTINATION),
-            new_canister_id_ranges(migrated_ranges),
+            new_canister_id_ranges(migrated_ranges.clone()),
         );
 
         // Step 3: Verify result(s).
