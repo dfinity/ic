@@ -103,6 +103,19 @@ pub(crate) enum PayloadMessage {
     AsyncReceipt(CanisterHttpResponseShare),
 }
 
+impl PayloadMessage {
+    /// Whether the message counts towards the limit on responses per block, as in
+    /// [`CanisterHttpPayload::num_limited_responses`].
+    pub(crate) fn counts_towards_response_limit(&self) -> bool {
+        !matches!(
+            self,
+            Self::Timeout(_)
+                | Self::FlexibleError(FlexibleCanisterHttpError::Timeout { .. })
+                | Self::AsyncReceipt(_)
+        )
+    }
+}
+
 impl From<PayloadMessage> for CanisterHttpResponseMessage {
     fn from(message: PayloadMessage) -> Self {
         let message_type = match message {

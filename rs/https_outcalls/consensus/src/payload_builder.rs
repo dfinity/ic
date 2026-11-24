@@ -182,7 +182,6 @@ impl CanisterHttpPayloadBuilderImpl {
             &subnet_call_context_manager.delivered_canister_http_request_contexts;
 
         let mut budget = PayloadBudget::new(memory_limit, wire_limit);
-        let mut responses_included = 0;
 
         let mut messages = vec![];
 
@@ -255,7 +254,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                     continue;
                 }
-                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                if budget.responses() >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
                     // We use `continue` here and not `break` so that more
                     // timeouts can be included in the payload.
                     continue;
@@ -291,13 +290,11 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.metrics,
                         ) {
                             // Checks the size before cloning the response.
-                            if budget.fits(candidate.payload_size())
-                                && budget.try_push(
+                            if budget.fits(candidate.payload_size()) {
+                                budget.try_push(
                                     &mut messages,
                                     PayloadMessage::Response(candidate.into_response()),
-                                )
-                            {
-                                responses_included += 1;
+                                );
                             }
                         } else if grouped_shares_meet_divergence_criteria(
                             grouped_shares,
@@ -310,21 +307,15 @@ impl CanisterHttpPayloadBuilderImpl {
                                     .map(|share| (*share).clone())
                                     .collect(),
                             };
-                            if budget
-                                .try_push(&mut messages, PayloadMessage::Divergence(divergence))
-                            {
-                                responses_included += 1;
-                            }
+                            budget.try_push(&mut messages, PayloadMessage::Divergence(divergence));
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
                             grouped_shares,
                             &BTreeSet::from_iter(committee),
                             threshold,
                             request,
-                        ) && budget
-                            .try_push(&mut messages, PayloadMessage::OutOfCycles(error))
-                        {
-                            responses_included += 1;
+                        ) {
+                            budget.try_push(&mut messages, PayloadMessage::OutOfCycles(error));
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
@@ -337,13 +328,11 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.metrics,
                         ) {
                             // Checks the size before cloning the response.
-                            if budget.fits(candidate.payload_size())
-                                && budget.try_push(
+                            if budget.fits(candidate.payload_size()) {
+                                budget.try_push(
                                     &mut messages,
                                     PayloadMessage::Response(candidate.into_response()),
-                                )
-                            {
-                                responses_included += 1;
+                                );
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
@@ -353,10 +342,8 @@ impl CanisterHttpPayloadBuilderImpl {
                             &BTreeSet::from([*designated_node_id]),
                             /* threshold = */ 1,
                             request,
-                        ) && budget
-                            .try_push(&mut messages, PayloadMessage::OutOfCycles(error))
-                        {
-                            responses_included += 1;
+                        ) {
+                            budget.try_push(&mut messages, PayloadMessage::OutOfCycles(error));
                         }
                     }
                     Replication::Flexible {
@@ -375,17 +362,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     ) {
                         FlexibleFindResult::OkResponses(group) => {
                             // `find_flexible_result` only returns a group that fits.
-                            if budget
-                                .try_push(&mut messages, PayloadMessage::FlexibleResponses(group))
-                            {
-                                responses_included += 1;
-                            }
+                            budget
+                                .try_push(&mut messages, PayloadMessage::FlexibleResponses(group));
                         }
                         FlexibleFindResult::Error(error) => {
-                            if budget.try_push(&mut messages, PayloadMessage::FlexibleError(error))
-                            {
-                                responses_included += 1;
-                            }
+                            budget.try_push(&mut messages, PayloadMessage::FlexibleError(error));
                         }
                         FlexibleFindResult::Pending => {}
                     },
@@ -427,7 +408,7 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+        if budget.responses() >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
             warn!(
                 every_n_seconds => 15,
                 self.log,

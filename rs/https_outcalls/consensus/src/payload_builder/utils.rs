@@ -788,6 +788,8 @@ fn wire_savings<'a>(contents: impl IntoIterator<Item = &'a CanisterHttpResponseC
 pub(crate) struct PayloadBudget {
     taken: PayloadSize,
     limits: PayloadSize,
+    /// How many of the messages added count towards the limit on responses per block.
+    responses: usize,
 }
 
 impl PayloadBudget {
@@ -798,7 +800,13 @@ impl PayloadBudget {
                 memory: memory_limit.get() as usize,
                 wire: wire_limit.get() as usize,
             },
+            responses: 0,
         }
+    }
+
+    /// How many of the messages added count towards the limit on responses per block.
+    pub(crate) fn responses(&self) -> usize {
+        self.responses
     }
 
     /// Whether a part of the given size still fits into the payload.
@@ -819,6 +827,7 @@ impl PayloadBudget {
         if fits {
             self.taken.memory += size.memory;
             self.taken.wire += size.wire;
+            self.responses += usize::from(message.counts_towards_response_limit());
             messages.push(message);
         }
         fits
