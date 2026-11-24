@@ -34,15 +34,6 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
 pub(crate) fn canonical_bytes_to_messages(
     data: &[u8],
 ) -> Result<Vec<PayloadMessage>, ProxyDecodeError> {
-    slice_to_canonical_messages(data)?
-        .into_iter()
-        .map(PayloadMessage::try_from)
-        .collect()
-}
-
-fn slice_to_canonical_messages(
-    data: &[u8],
-) -> Result<Vec<CanisterHttpResponseMessage>, ProxyDecodeError> {
     let mut messages = vec![];
     let mut remaining = data;
     let mut encoding = vec![];
@@ -62,7 +53,7 @@ fn slice_to_canonical_messages(
                 "The canister http message at byte {start} is not canonically encoded"
             )));
         }
-        messages.push(message);
+        messages.push(PayloadMessage::try_from(message)?);
     }
 
     Ok(messages)
@@ -253,6 +244,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types_cycles::Cycles;
     use prost::encoding::{WireType, encode_key, encode_varint};
 
     fn bytes_field(tag: u32, value: &[u8]) -> Vec<u8> {
@@ -280,8 +272,17 @@ mod tests {
         framed
     }
 
+    fn response() -> Vec<u8> {
+        let content = bytes_field(3, b"body");
+        bytes_field(1, &[varint_field(1, 4), bytes_field(3, &content)].concat())
+    }
+
     fn hash() -> Vec<u8> {
         bytes_field(2, &[7; 32])
+    }
+
+    fn replica_version() -> Vec<u8> {
+        bytes_field(8, b"1")
     }
 
     fn content_size() -> Vec<u8> {
@@ -292,16 +293,37 @@ mod tests {
         varint_field(10, value)
     }
 
+    fn initial_spent() -> Vec<u8> {
+        bytes_field(11, &bytes_field(2, &[0; 16]))
+    }
+
     fn canonical() -> Vec<u8> {
-        response_message(&[hash(), content_size(), is_reject(1)])
+        response_message(&[
+            response(),
+            hash(),
+            replica_version(),
+            content_size(),
+            is_reject(1),
+            initial_spent(),
+        ])
     }
 
     #[test]
     fn canonical_messages_are_accepted_test() {
         let with_consensus = pb::CanisterHttpResponseWithConsensus {
+            response: Some(pb::CanisterHttpResponse {
+                id: 4,
+                content: Some(pb::CanisterHttpResponseContent {
+                    status: Some(pb::canister_http_response_content::Status::Success(
+                        b"body".to_vec(),
+                    )),
+                }),
+            }),
             hash: vec![7; 32],
+            replica_version: "1".to_string(),
             content_size: 5,
             is_reject: true,
+            initial_spent: Some(Cycles::new(0).into()),
             ..Default::default()
         };
         let canonical = canonical();
@@ -323,9 +345,11 @@ mod tests {
             )
         );
         let payload = [canonical, timeout].concat();
+        let messages = canonical_bytes_to_messages(&payload).unwrap();
+        assert_eq!(messages.len(), 2);
         assert_eq!(
-            slice_to_canonical_messages(&payload).unwrap(),
-            slice_to_messages::<CanisterHttpResponseMessage>(&payload).unwrap()
+            messages_to_payload(messages),
+            bytes_to_payload(&payload).unwrap()
         );
     }
 
@@ -340,22 +364,52 @@ mod tests {
         for (name, non_canonical, same_length) in [
             (
                 "fields out of tag order",
-                response_message(&[content_size(), hash(), is_reject(1)]),
+                response_message(&[
+                    response(),
+                    content_size(),
+                    hash(),
+                    replica_version(),
+                    is_reject(1),
+                    initial_spent(),
+                ]),
                 true,
             ),
             (
                 "a bool other than 0 and 1",
-                response_message(&[hash(), content_size(), is_reject(2)]),
+                response_message(&[
+                    response(),
+                    hash(),
+                    replica_version(),
+                    content_size(),
+                    is_reject(2),
+                    initial_spent(),
+                ]),
                 true,
             ),
             (
                 "an unknown field",
-                response_message(&[hash(), content_size(), is_reject(1), varint_field(15, 0)]),
+                response_message(&[
+                    response(),
+                    hash(),
+                    replica_version(),
+                    content_size(),
+                    is_reject(1),
+                    initial_spent(),
+                    varint_field(15, 0),
+                ]),
                 false,
             ),
             (
                 "a repeated field",
-                response_message(&[hash(), content_size(), is_reject(1), content_size()]),
+                response_message(&[
+                    response(),
+                    hash(),
+                    replica_version(),
+                    content_size(),
+                    is_reject(1),
+                    initial_spent(),
+                    content_size(),
+                ]),
                 false,
             ),
             ("a non-minimal length prefix", non_minimal_length, false),
@@ -372,7 +426,7 @@ mod tests {
             );
             assert!(
                 matches!(
-                    slice_to_canonical_messages(&non_canonical),
+                    canonical_bytes_to_messages(&non_canonical),
                     Err(ProxyDecodeError::Other(_))
                 ),
                 "{name}"
@@ -383,7 +437,7 @@ mod tests {
     #[test]
     fn undecodable_payloads_are_rejected_test() {
         assert!(matches!(
-            slice_to_canonical_messages(&[0xff; 16]),
+            canonical_bytes_to_messages(&[0xff; 16]),
             Err(ProxyDecodeError::DecodeError(_))
         ));
     }
