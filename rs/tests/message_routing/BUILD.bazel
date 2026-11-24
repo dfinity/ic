@@ -166,6 +166,7 @@ system_test_nns(
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:strum",
