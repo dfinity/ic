@@ -1269,6 +1269,7 @@ async fn wait_until_canister_migration_is_completable(
         Duration::from_secs(5),
         || async {
             let period_start = Instant::now();
+            let mut is_misrouted_messages_metric_reported = false;
             while period_start.elapsed() < NO_MISROUTED_MESSAGES_PERIOD {
                 let metrics = metrics_fetcher
                     .fetch::<u64>()
@@ -1283,15 +1284,26 @@ async fn wait_until_canister_migration_is_completable(
                 let misrouted_message_counts: BTreeMap<&String, &Vec<u64>> = metrics
                     .iter()
                     .filter(|(name, _)| name.starts_with(MISROUTED_MESSAGES_METRIC))
-                    .filter(|(_, counts)| counts.iter().any(|count| *count > 0))
                     .collect();
-                if !misrouted_message_counts.is_empty() {
+                is_misrouted_messages_metric_reported |= !misrouted_message_counts.is_empty();
+                let streams_with_misrouted_messages: BTreeMap<&String, &Vec<u64>> =
+                    misrouted_message_counts
+                        .into_iter()
+                        .filter(|(_, counts)| counts.iter().any(|count| *count > 0))
+                        .collect();
+                if !streams_with_misrouted_messages.is_empty() {
                     bail!(
-                        "Some streams still hold misrouted messages: {misrouted_message_counts:?}"
+                        "Some streams still hold misrouted messages: \
+                        {streams_with_misrouted_messages:?}"
                     );
                 }
 
                 tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+
+            // Otherwise the absence of misrouted messages would be vacuous.
+            if !is_misrouted_messages_metric_reported {
+                bail!("No replica reported {MISROUTED_MESSAGES_METRIC}");
             }
             Ok(())
         }
