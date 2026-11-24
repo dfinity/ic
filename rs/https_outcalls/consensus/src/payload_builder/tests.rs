@@ -6,7 +6,7 @@
 use super::CanisterHttpPayloadBuilderImpl;
 use crate::payload_builder::{
     divergence_response_into_reject,
-    parse::{bytes_to_payload, messages_to_bytes, payload_to_messages},
+    parse::{PayloadMessage, bytes_to_payload, messages_to_bytes},
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
@@ -8724,7 +8724,39 @@ fn build_and_validate_and_parse_payload_with_context(
 
 /// Serializes the payload, one message type after the other.
 fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
-    messages_to_bytes(payload_to_messages(payload), max_size)
+    let CanisterHttpPayload {
+        timeouts,
+        divergence_responses,
+        out_of_cycles,
+        responses,
+        flexible_responses,
+        flexible_errors,
+        async_receipts,
+    } = payload;
+
+    let messages = timeouts
+        .into_iter()
+        .map(PayloadMessage::Timeout)
+        .chain(
+            divergence_responses
+                .into_iter()
+                .map(PayloadMessage::Divergence),
+        )
+        .chain(responses.into_iter().map(PayloadMessage::Response))
+        .chain(
+            flexible_responses
+                .into_iter()
+                .map(PayloadMessage::FlexibleResponses),
+        )
+        .chain(
+            flexible_errors
+                .into_iter()
+                .map(PayloadMessage::FlexibleError),
+        )
+        .chain(out_of_cycles.into_iter().map(PayloadMessage::OutOfCycles))
+        .chain(async_receipts.into_iter().map(PayloadMessage::AsyncReceipt));
+
+    messages_to_bytes(messages, max_size)
 }
 
 fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {

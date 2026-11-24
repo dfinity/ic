@@ -1,4 +1,3 @@
-use crate::payload_builder::utils::PayloadSize;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::{
@@ -22,15 +21,23 @@ use prost::Message;
 use std::collections::{BTreeMap, HashSet};
 
 pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, ProxyDecodeError> {
-    messages_to_payload(slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?)
+    slice_to_messages::<CanisterHttpResponseMessage>(data)
+        .map_err(ProxyDecodeError::DecodeError)?
+        .into_iter()
+        .map(PayloadMessage::try_from)
+        .collect::<Result<_, _>>()
+        .map(messages_to_payload)
 }
 
-/// Like [`bytes_to_payload`], but fails unless every message encodes to the very bytes
-/// it was decoded from, as [`messages_to_bytes`] writes it.
-pub(crate) fn canonical_bytes_to_payload(
+/// Decodes the messages of a payload, and fails unless every message encodes to the very
+/// bytes it was decoded from, as [`messages_to_bytes`] writes it.
+pub(crate) fn canonical_bytes_to_messages(
     data: &[u8],
-) -> Result<CanisterHttpPayload, ProxyDecodeError> {
-    messages_to_payload(slice_to_canonical_messages(data)?)
+) -> Result<Vec<PayloadMessage>, ProxyDecodeError> {
+    slice_to_canonical_messages(data)?
+        .into_iter()
+        .map(PayloadMessage::try_from)
+        .collect()
 }
 
 fn slice_to_canonical_messages(
@@ -61,35 +68,21 @@ fn slice_to_canonical_messages(
     Ok(messages)
 }
 
-fn messages_to_payload(
-    messages: Vec<CanisterHttpResponseMessage>,
-) -> Result<CanisterHttpPayload, ProxyDecodeError> {
+/// The payload made up of the given messages.
+pub(crate) fn messages_to_payload(messages: Vec<PayloadMessage>) -> CanisterHttpPayload {
     let mut payload = CanisterHttpPayload::default();
-
     for message in messages {
-        match message.message_type {
-            Some(MessageType::Timeout(timeout)) => payload.timeouts.push(CallbackId::new(timeout)),
-            Some(MessageType::Response(response)) => payload.responses.push(response.try_into()?),
-            Some(MessageType::DivergenceResponse(response)) => {
-                payload.divergence_responses.push(response.try_into()?)
-            }
-            Some(MessageType::FlexibleResponses(flex_responses)) => payload
-                .flexible_responses
-                .push(FlexibleCanisterHttpResponses::try_from(flex_responses)?),
-            Some(MessageType::FlexibleError(flex_error)) => payload
-                .flexible_errors
-                .push(FlexibleCanisterHttpError::try_from(flex_error)?),
-            Some(MessageType::OutOfCycles(out_of_cycles)) => payload
-                .out_of_cycles
-                .push(CanisterHttpOutOfCycles::try_from(out_of_cycles)?),
-            Some(MessageType::AsyncReceipt(share)) => payload
-                .async_receipts
-                .push(CanisterHttpResponseShare::try_from(share)?),
-            None => return Err(ProxyDecodeError::MissingField("message_type")),
+        match message {
+            PayloadMessage::Timeout(callback_id) => payload.timeouts.push(callback_id),
+            PayloadMessage::Divergence(divergence) => payload.divergence_responses.push(divergence),
+            PayloadMessage::Response(response) => payload.responses.push(response),
+            PayloadMessage::FlexibleResponses(group) => payload.flexible_responses.push(group),
+            PayloadMessage::FlexibleError(error) => payload.flexible_errors.push(error),
+            PayloadMessage::OutOfCycles(error) => payload.out_of_cycles.push(error),
+            PayloadMessage::AsyncReceipt(share) => payload.async_receipts.push(share),
         }
     }
-
-    Ok(payload)
+    payload
 }
 
 /// A message of a canister http payload.
@@ -124,6 +117,29 @@ impl PayloadMessage {
     }
 }
 
+impl TryFrom<CanisterHttpResponseMessage> for PayloadMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(message: CanisterHttpResponseMessage) -> Result<Self, Self::Error> {
+        Ok(
+            match message
+                .message_type
+                .ok_or(ProxyDecodeError::MissingField("message_type"))?
+            {
+                MessageType::Timeout(callback_id) => Self::Timeout(CallbackId::new(callback_id)),
+                MessageType::Response(response) => Self::Response(response.try_into()?),
+                MessageType::DivergenceResponse(divergence) => {
+                    Self::Divergence(divergence.try_into()?)
+                }
+                MessageType::FlexibleResponses(group) => Self::FlexibleResponses(group.try_into()?),
+                MessageType::FlexibleError(error) => Self::FlexibleError(error.try_into()?),
+                MessageType::OutOfCycles(error) => Self::OutOfCycles(error.try_into()?),
+                MessageType::AsyncReceipt(share) => Self::AsyncReceipt(share.try_into()?),
+            },
+        )
+    }
+}
+
 impl From<PayloadMessage> for CanisterHttpResponseMessage {
     fn from(message: PayloadMessage) -> Self {
         let message_type = match message {
@@ -155,52 +171,6 @@ pub(crate) fn messages_to_bytes(
         messages.into_iter().map(CanisterHttpResponseMessage::from),
         max_size,
     )
-}
-
-/// The messages of the payload, one message type after the other.
-pub(crate) fn payload_to_messages(
-    payload: CanisterHttpPayload,
-) -> impl Iterator<Item = PayloadMessage> {
-    let CanisterHttpPayload {
-        timeouts,
-        divergence_responses,
-        out_of_cycles,
-        responses,
-        flexible_responses,
-        flexible_errors,
-        async_receipts,
-    } = payload;
-
-    timeouts
-        .into_iter()
-        .map(PayloadMessage::Timeout)
-        .chain(
-            divergence_responses
-                .into_iter()
-                .map(PayloadMessage::Divergence),
-        )
-        .chain(responses.into_iter().map(PayloadMessage::Response))
-        .chain(
-            flexible_responses
-                .into_iter()
-                .map(PayloadMessage::FlexibleResponses),
-        )
-        .chain(
-            flexible_errors
-                .into_iter()
-                .map(PayloadMessage::FlexibleError),
-        )
-        .chain(out_of_cycles.into_iter().map(PayloadMessage::OutOfCycles))
-        .chain(async_receipts.into_iter().map(PayloadMessage::AsyncReceipt))
-}
-
-/// The estimated size of the payload in a block proposal sent to peers: the sum of the
-/// [`PayloadSize`] estimates of its messages, as the payload builder adds them up.
-pub(crate) fn wire_size(payload: CanisterHttpPayload) -> NumBytes {
-    let size: usize = payload_to_messages(payload)
-        .map(|message| PayloadSize::of(&message).wire())
-        .sum();
-    NumBytes::new(size as u64)
 }
 
 /// Relevant data of payloads between the certified height and the block being built.

@@ -5,7 +5,7 @@ use crate::{
     payload_builder::{
         parse::{PayloadMessage, bytes_to_payload},
         utils::{
-            FlexibleFindResult, PayloadBudget, RefundedNodes, ResponseShareSigInput,
+            FlexibleFindResult, PayloadBudget, PayloadSize, RefundedNodes, ResponseShareSigInput,
             find_async_receipts, find_flexible_result, find_fully_replicated_response,
             find_non_flexible_out_of_cycles, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
@@ -1237,19 +1237,24 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         }
 
         let past_payloads = parse::parse_past_payloads(past_payloads, &self.log);
-        let payload = parse::canonical_bytes_to_payload(payload).map_err(|e| {
+        let messages = parse::canonical_bytes_to_messages(payload).map_err(|e| {
             ValidationError::InvalidArtifact(
                 consensus::InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::DecodeError(e),
                 ),
             )
         })?;
+        // Counts the messages on the wire as the payload builder does.
+        let wire_size: usize = messages
+            .iter()
+            .map(|message| PayloadSize::of(message).wire())
+            .sum();
         self.validate_canister_http_payload_impl(
-            &payload,
+            &parse::messages_to_payload(messages),
             proposal_context.validation_context,
             past_payloads,
         )?;
-        Ok(parse::wire_size(payload))
+        Ok(NumBytes::new(wire_size as u64))
     }
 }
 
