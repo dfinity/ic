@@ -390,3 +390,67 @@ pub fn check_tla_code_link_raw(
     // fs::remove_file(new_module);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn available_permit_count(semaphore: &Semaphore) -> usize {
+        *semaphore.available_permit_count.lock().unwrap()
+    }
+
+    #[test]
+    fn test_semaphore_permits_are_taken_and_returned() {
+        let semaphore = Semaphore::new(2);
+
+        let first_permit = semaphore.acquire();
+        let second_permit = semaphore.acquire();
+        assert_eq!(available_permit_count(&semaphore), 0);
+
+        drop(first_permit);
+        assert_eq!(available_permit_count(&semaphore), 1);
+        drop(second_permit);
+        assert_eq!(available_permit_count(&semaphore), 2);
+    }
+
+    #[test]
+    fn test_semaphore_waiter_wakes_up_when_a_permit_is_released() {
+        let semaphore = Semaphore::new(1);
+        let permit = semaphore.acquire();
+
+        std::thread::scope(|scope| {
+            let (acquired_sender, acquired_receiver) = mpsc::channel();
+            let semaphore = &semaphore;
+            scope.spawn(move || {
+                let _permit = semaphore.acquire();
+                acquired_sender.send(()).unwrap();
+            });
+
+            // The waiter can't take a permit while the only one is held.
+            assert_eq!(
+                acquired_receiver.recv_timeout(Duration::from_millis(100)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            );
+
+            drop(permit);
+            acquired_receiver.recv().unwrap();
+        });
+
+        assert_eq!(available_permit_count(&semaphore), 1);
+    }
+
+    #[test]
+    fn test_semaphore_permit_is_released_when_its_holder_panics() {
+        let semaphore = Semaphore::new(1);
+
+        let result = std::panic::catch_unwind(|| {
+            let _permit = semaphore.acquire();
+            panic!("the holder of the permit panics");
+        });
+
+        assert!(result.is_err());
+        assert_eq!(available_permit_count(&semaphore), 1);
+    }
+}
