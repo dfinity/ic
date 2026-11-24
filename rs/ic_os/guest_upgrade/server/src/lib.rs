@@ -205,3 +205,38 @@ impl DiskEncryptionKeyExchangeServerAgent {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rcgen::{CertificateParams, KeyPair};
+    use x509_parser::parse_x509_certificate;
+
+    /// An ECDSA P-256 key, the key type that `rcgen::generate_simple_self_signed` generates.
+    const KEY_PKCS8_PEM: &str = "-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgTW3oNh4fZ2BdQbRD
+4LVbwRzBBCnnAvby+G+8cRHJYh+hRANCAASgQi7qTaVwu34yXsj6IOQGjuH6Riip
+5nnWney+4BN4ZozF96gIwwKdn7B4xYv15Vcz8o8pSUtWaOLZc7Yv7lsE
+-----END PRIVATE KEY-----";
+
+    /// The SubjectPublicKeyInfo of `KEY_PKCS8_PEM`, as encoded by OpenSSL.
+    const PUBLIC_KEY_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004a0422eea4da570bb7e325ec8fa20e4068ee1fa4628a9e679d69decbee01378668cc5f7a808c3029d9fb078c58bf5e55733f28f29494b5668e2d973b62fee5b04";
+
+    /// Each party of the key exchange puts two public keys into the custom data of its
+    /// attestation report: its own, from `KeyPair::public_key_der`, and its peer's, from the
+    /// peer's certificate. The custom data of the two parties match only if `public_key_der`
+    /// returns exactly the SubjectPublicKeyInfo that the certificate contains.
+    #[test]
+    fn own_public_key_is_the_subject_public_key_info_of_the_certificate() {
+        let key_pair = KeyPair::from_pem(KEY_PKCS8_PEM).unwrap();
+        let certificate = CertificateParams::new(vec!["localhost".to_string()])
+            .unwrap()
+            .self_signed(&key_pair)
+            .unwrap();
+        let (_, x509) = parse_x509_certificate(certificate.der()).unwrap();
+
+        let public_key_der = key_pair.public_key_der();
+
+        assert_eq!(hex::encode(&public_key_der), PUBLIC_KEY_DER_HEX);
+        assert_eq!(public_key_der, x509.public_key().raw);
+    }
+}

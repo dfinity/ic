@@ -29,3 +29,6 @@ rustls = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true, features = ["add-extension", "util"] }
 http-body-util = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
