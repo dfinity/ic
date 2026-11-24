@@ -2198,19 +2198,38 @@ mod tests {
         );
     }
 
-    /// Pins the node that a non-replicated outcall is delegated to, for fixed
-    /// RNG seeds. All replicas of a subnet draw the node from the same RNG, so
-    /// a change in this choice (for example from a new `rand` version) changes
-    /// the replicated state.
+    /// Pins the node that a non-replicated outcall is delegated to, and how many
+    /// words drawing it takes from the RNG, for fixed RNG seeds. All replicas of
+    /// a subnet draw the node from the same RNG, which the rest of the execution
+    /// round keeps drawing from, so a change in either (for example from a new
+    /// `rand` version) changes the replicated state.
     #[test]
     fn non_replicated_delegated_node_is_stable() {
         let node_ids: BTreeSet<NodeId> = (0..13).map(node_test_id).collect();
 
-        // Index `i` of the delegated node `node_test_id(i)`, for the RNG seeds
-        // 0, 1, 2, ...
-        let expected_nodes = [7, 1, 8, 8, 1, 11, 5, 6, 9, 6, 0, 10, 1, 9, 9, 7];
+        // (index `i` of the delegated node `node_test_id(i)`, number of 32-bit
+        // words drawn from the RNG), for the RNG seeds 0, 1, 2, ...
+        let expected = [
+            (7, 2),
+            (1, 1),
+            (8, 1),
+            (8, 1),
+            (1, 1),
+            (11, 1),
+            (5, 2),
+            (6, 1),
+            (9, 1),
+            (6, 1),
+            (0, 1),
+            (10, 1),
+            (1, 1),
+            (9, 1),
+            (9, 2),
+            (7, 1),
+        ];
 
-        for (seed, expected_node) in (0..).zip(expected_nodes) {
+        for (seed, (expected_node, expected_words_drawn)) in (0..).zip(expected) {
+            let mut rng = ReproducibleRng::from_seed_for_debugging([seed; 32]);
             let context = CanisterHttpRequestContext::generate_from_args(
                 UNIX_EPOCH,
                 &dummy_request(),
@@ -2218,7 +2237,7 @@ mod tests {
                 &node_ids,
                 RegistryVersion::from(1),
                 CanisterCyclesCostSchedule::Normal,
-                &mut ReproducibleRng::from_seed_for_debugging([seed; 32]),
+                &mut rng,
                 /* pay_as_you_go_enabled = */ false,
             )
             .unwrap();
@@ -2228,28 +2247,38 @@ mod tests {
                 Replication::NonReplicated(node_test_id(expected_node)),
                 "RNG seed {seed}"
             );
+            assert_eq!(
+                words_drawn(&mut rng, seed),
+                expected_words_drawn,
+                "RNG seed {seed}"
+            );
         }
     }
 
-    /// Pins the committee of a flexible outcall, for fixed RNG seeds and
-    /// committee sizes. All replicas of a subnet draw the committee from the
-    /// same RNG, so a change in this choice (for example from a new `rand`
-    /// version) changes the replicated state.
+    /// Pins the committee of a flexible outcall, and how many words drawing it
+    /// takes from the RNG, for fixed RNG seeds and committee sizes. All replicas
+    /// of a subnet draw the committee from the same RNG, which the rest of the
+    /// execution round keeps drawing from, so a change in either (for example
+    /// from a new `rand` version) changes the replicated state.
     #[test]
     fn flexible_committee_is_stable() {
         let node_ids: BTreeSet<NodeId> = (0..13).map(node_test_id).collect();
 
-        // (RNG seed, committee size, indices `i` of the committee members `node_test_id(i)`)
-        let cases: [(u8, u32, &[u64]); 6] = [
-            (0, 1, &[3]),
-            (1, 2, &[1, 4]),
-            (2, 4, &[0, 1, 5, 9]),
-            (3, 7, &[1, 2, 6, 8, 9, 11, 12]),
-            (4, 9, &[0, 1, 2, 4, 5, 6, 9, 10, 11]),
-            (5, 12, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]),
+        // (RNG seed, committee size, indices `i` of the committee members
+        // `node_test_id(i)`, number of 32-bit words drawn from the RNG)
+        let cases: [(u8, u32, &[u64], usize); 7] = [
+            (0, 1, &[3], 15),
+            (1, 2, &[1, 4], 15),
+            (2, 4, &[0, 1, 5, 9], 9),
+            (3, 7, &[1, 2, 6, 8, 9, 11, 12], 11),
+            (4, 9, &[0, 1, 2, 4, 5, 6, 9, 10, 11], 7),
+            (5, 12, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12], 1),
+            // All nodes: the committee of a flexible outcall without replication counts.
+            (6, 13, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 0),
         ];
 
-        for (seed, total_requests, expected_committee) in cases {
+        for (seed, total_requests, expected_committee, expected_words_drawn) in cases {
+            let mut rng = ReproducibleRng::from_seed_for_debugging([seed; 32]);
             let context = CanisterHttpRequestContext::generate_from_flexible_args(
                 UNIX_EPOCH,
                 &dummy_request(),
@@ -2261,7 +2290,7 @@ mod tests {
                 &node_ids,
                 RegistryVersion::from(1),
                 CanisterCyclesCostSchedule::Normal,
-                &mut ReproducibleRng::from_seed_for_debugging([seed; 32]),
+                &mut rng,
                 PricingVersion::PayAsYouGo,
             )
             .unwrap();
@@ -2279,7 +2308,28 @@ mod tests {
                 },
                 "RNG seed {seed}, committee size {total_requests}"
             );
+            assert_eq!(
+                words_drawn(&mut rng, seed),
+                expected_words_drawn,
+                "RNG seed {seed}, committee size {total_requests}"
+            );
         }
+    }
+
+    /// Returns the number of 32-bit words that `rng`, seeded with `[seed; 32]`,
+    /// has drawn: the offset, in words, at which its next `u64` occurs in the
+    /// output of a fresh RNG with the same seed.
+    fn words_drawn(rng: &mut ReproducibleRng, seed: u8) -> usize {
+        let next_u64 = rng.next_u64();
+        (0..1_000)
+            .find(|&words| {
+                let mut fresh_rng = ReproducibleRng::from_seed_for_debugging([seed; 32]);
+                for _ in 0..words {
+                    fresh_rng.next_u32();
+                }
+                fresh_rng.next_u64() == next_u64
+            })
+            .expect("the RNG has drawn fewer than 1000 words")
     }
 
     #[test]
