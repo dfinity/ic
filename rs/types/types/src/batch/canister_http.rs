@@ -33,10 +33,6 @@ pub const MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize =
 /// The smallest response content that P2P strips from block proposals sent to peers.
 pub const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
 
-/// The bytes that declaring one stripped response content costs in a stripped block
-/// proposal.
-pub const STRIPPED_RESPONSE_DECLARATION_BYTES: usize = 36;
-
 /// The bytes that stripping saves on a response with the given content, estimated by the
 /// content's [`CountBytes`]: everything above the largest content that is not stripped, so
 /// that a larger content never counts for less on the wire.

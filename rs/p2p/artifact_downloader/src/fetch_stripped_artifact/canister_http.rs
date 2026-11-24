@@ -30,10 +30,9 @@
 //! `ic-https-outcalls-consensus`): every block an honest node holds, and thus
 //! strips, carries a canonically encoded payload.
 //!
-//! Declaring a stripped response costs
-//! [`STRIPPED_RESPONSE_DECLARATION_BYTES`](ic_types::batch::STRIPPED_RESPONSE_DECLARATION_BYTES)
-//! in the stripped block proposal, and a response is only stripped when its content is at
-//! least [`MIN_STRIPPED_CONTENT_BYTES`], so stripping a response never adds bytes.
+//! Declaring a stripped response costs 36 bytes in the stripped block proposal,
+//! and a response is only stripped when its content is at least
+//! [`MIN_STRIPPED_CONTENT_BYTES`], so stripping a response never adds bytes.
 
 use std::collections::{BTreeMap, BTreeSet};
 
