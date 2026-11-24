@@ -2203,8 +2203,8 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "0.0.45"
-source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
+version = "0.0.47"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "build-info-common",
  "build-info-proc",
@@ -2213,8 +2213,8 @@ dependencies = [
 
 [[package]]
 name = "build-info-build"
-version = "0.0.45"
-source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
+version = "0.0.47"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "anyhow",
  "build-info-common",
@@ -2223,13 +2223,13 @@ dependencies = [
  "rustc_version 0.4.1",
  "serde_json",
  "z85",
- "zstd 0.13.5",
+ "zstd 0.14.4",
 ]
 
 [[package]]
 name = "build-info-common"
-version = "0.0.45"
-source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
+version = "0.0.47"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "derive_more",
  "semver 1.0.28",
@@ -2238,8 +2238,8 @@ dependencies = [
 
 [[package]]
 name = "build-info-proc"
-version = "0.0.45"
-source = "git+https://github.com/dfinity-lab/build-info?rev=27ba16a68aa312de66f2ebd0f16665f1429eee36#27ba16a68aa312de66f2ebd0f16665f1429eee36"
+version = "0.0.47"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "build-info-common",
  "ciborium",
@@ -2249,9 +2249,9 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde_json",
- "syn 2.0.119",
+ "syn 3.0.10",
  "z85",
- "zstd 0.13.5",
+ "zstd 0.14.4",
 ]
 
 [[package]]
@@ -17839,21 +17839,21 @@ dependencies = [
 
 [[package]]
 name = "manyhow"
-version = "0.11.4"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b33efb3ca6d3b07393750d4030418d594ab1139cee518f0dc88db70fec873587"
+checksum = "f1704b073316272a6785b70599f91f73b49022c2e290b065591ee6b9109ed8c7"
 dependencies = [
  "manyhow-macros",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
 name = "manyhow-macros"
-version = "0.11.4"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46fce34d199b78b6e6073abf984c9cf5fd3e9330145a93ee0738a7443e371495"
+checksum = "31601db71f1f5fb6f831a18aa3052d13a62528ee4f2cba7e8c9a5e258d953725"
 dependencies = [
  "proc-macro-utils",
  "proc-macro2",

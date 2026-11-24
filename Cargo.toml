@@ -643,8 +643,8 @@ bitcoin = { package = "bitcoin-dogecoin", version = "0.32.7-doge.0", features = 
 ] }
 # build-info and build-info-build MUST be kept in sync!
 bs58 = "^0.5.0"
-build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "27ba16a68aa312de66f2ebd0f16665f1429eee36" }
-build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "27ba16a68aa312de66f2ebd0f16665f1429eee36", default-features = false }
+build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "b96be92274ec232fedba53a0c9c4b807b96ff17e" }
+build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "b96be92274ec232fedba53a0c9c4b807b96ff17e", default-features = false }
 bytes = "1.12.1"
 canbench-rs = "0.7.0"
 candid = { version = "0.10.37" }

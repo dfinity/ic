@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "89f26b57754f2a697ceb1e9aafa205cb806cb25bd35f0ceda63e47471adcd363",
+  "checksum": "6374deced9de36dc99dfe6a18a4c341394d8d1a6fe1030d19662b270f7c7fd3e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -9266,7 +9266,7 @@
       ],
       "version": "1.13.1"
     },
-    "build-info 0.0.45": {
+    "build-info 0.0.47": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -9274,7 +9274,7 @@
         ],
         "deps": [
           {
-            "id": "build-info-common 0.0.45",
+            "id": "build-info-common 0.0.47",
             "target": "build_info_common"
           },
           {
@@ -9285,7 +9285,7 @@
         "edition": "2024",
         "proc_macro_deps": [
           {
-            "id": "build-info-proc 0.0.45",
+            "id": "build-info-proc 0.0.47",
             "target": "build_info_proc"
           }
         ]
@@ -9301,7 +9301,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "27ba16a68aa312de66f2ebd0f16665f1429eee36"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info"
@@ -9315,9 +9315,9 @@
           }
         }
       ],
-      "version": "0.0.45"
+      "version": "0.0.47"
     },
-    "build-info-build 0.0.45": {
+    "build-info-build 0.0.47": {
       "common_attrs": {
         "deps": [
           {
@@ -9325,7 +9325,7 @@
             "target": "anyhow"
           },
           {
-            "id": "build-info-common 0.0.45",
+            "id": "build-info-common 0.0.47",
             "target": "build_info_common"
           },
           {
@@ -9349,7 +9349,7 @@
             "target": "z85"
           },
           {
-            "id": "zstd 0.13.5",
+            "id": "zstd 0.14.4",
             "target": "zstd"
           }
         ],
@@ -9366,7 +9366,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "27ba16a68aa312de66f2ebd0f16665f1429eee36"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info-build"
@@ -9380,9 +9380,9 @@
           }
         }
       ],
-      "version": "0.0.45"
+      "version": "0.0.47"
     },
-    "build-info-common 0.0.45": {
+    "build-info-common 0.0.47": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -9415,7 +9415,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "27ba16a68aa312de66f2ebd0f16665f1429eee36"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info-common"
@@ -9429,9 +9429,9 @@
           }
         }
       ],
-      "version": "0.0.45"
+      "version": "0.0.47"
     },
-    "build-info-proc 0.0.45": {
+    "build-info-proc 0.0.47": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -9439,7 +9439,7 @@
         ],
         "deps": [
           {
-            "id": "build-info-common 0.0.45",
+            "id": "build-info-common 0.0.47",
             "target": "build_info_common"
           },
           {
@@ -9447,7 +9447,7 @@
             "target": "ciborium"
           },
           {
-            "id": "manyhow 0.11.4",
+            "id": "manyhow 0.14.1",
             "target": "manyhow"
           },
           {
@@ -9471,7 +9471,7 @@
             "target": "serde_json"
           },
           {
-            "id": "syn 2.0.119",
+            "id": "syn 3.0.10",
             "target": "syn"
           },
           {
@@ -9479,7 +9479,7 @@
             "target": "z85"
           },
           {
-            "id": "zstd 0.13.5",
+            "id": "zstd 0.14.4",
             "target": "zstd"
           }
         ],
@@ -9496,7 +9496,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "27ba16a68aa312de66f2ebd0f16665f1429eee36"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info-proc"
@@ -9510,7 +9510,7 @@
           }
         }
       ],
-      "version": "0.0.45"
+      "version": "0.0.47"
     },
     "bumpalo 3.20.4": {
       "common_attrs": {
@@ -17558,11 +17558,11 @@
             "target": "bs58"
           },
           {
-            "id": "build-info 0.0.45",
+            "id": "build-info 0.0.47",
             "target": "build_info"
           },
           {
-            "id": "build-info-build 0.0.45",
+            "id": "build-info-build 0.0.47",
             "target": "build_info_build"
           },
           {
@@ -34815,13 +34815,12 @@
       ],
       "version": "0.2.0"
     },
-    "manyhow 0.11.4": {
+    "manyhow 0.14.1": {
       "common_attrs": {
         "crate_features": [
           "default",
           "macros",
-          "syn",
-          "syn2"
+          "syn"
         ],
         "deps": [
           {
@@ -34833,8 +34832,7 @@
             "target": "quote"
           },
           {
-            "alias": "syn2",
-            "id": "syn 2.0.119",
+            "id": "syn 3.0.10",
             "target": "syn"
           }
         ],
@@ -34842,7 +34840,7 @@
         "proc_macro_deps": [
           {
             "alias": "macros",
-            "id": "manyhow-macros 0.11.4",
+            "id": "manyhow-macros 0.14.1",
             "target": "manyhow_macros"
           }
         ]
@@ -34858,8 +34856,8 @@
       "package_url": "https://github.com/ModProg/manyhow",
       "repository": {
         "Http": {
-          "sha256": "b33efb3ca6d3b07393750d4030418d594ab1139cee518f0dc88db70fec873587",
-          "url": "https://static.crates.io/crates/manyhow/0.11.4/download"
+          "sha256": "f1704b073316272a6785b70599f91f73b49022c2e290b065591ee6b9109ed8c7",
+          "url": "https://static.crates.io/crates/manyhow/0.14.1/download"
         }
       },
       "targets": [
@@ -34870,9 +34868,9 @@
           }
         }
       ],
-      "version": "0.11.4"
+      "version": "0.14.1"
     },
-    "manyhow-macros 0.11.4": {
+    "manyhow-macros 0.14.1": {
       "common_attrs": {
         "deps": [
           {
@@ -34901,8 +34899,8 @@
       "package_url": "https://github.com/ModProg/manyhow",
       "repository": {
         "Http": {
-          "sha256": "46fce34d199b78b6e6073abf984c9cf5fd3e9330145a93ee0738a7443e371495",
-          "url": "https://static.crates.io/crates/manyhow-macros/0.11.4/download"
+          "sha256": "31601db71f1f5fb6f831a18aa3052d13a62528ee4f2cba7e8c9a5e258d953725",
+          "url": "https://static.crates.io/crates/manyhow-macros/0.14.1/download"
         }
       },
       "targets": [
@@ -34913,7 +34911,7 @@
           }
         }
       ],
-      "version": "0.11.4"
+      "version": "0.14.1"
     },
     "maplit 1.0.2": {
       "common_attrs": {
@@ -66709,8 +66707,8 @@
     "bitcoin 0.28.2",
     "bitcoin-dogecoin 0.32.7-doge.0",
     "bs58 0.5.1",
-    "build-info 0.0.45",
-    "build-info-build 0.0.45",
+    "build-info 0.0.47",
+    "build-info-build 0.0.47",
     "bytes 1.12.2",
     "canbench-rs 0.7.0",
     "candid 0.10.40",
