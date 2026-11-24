@@ -10,8 +10,8 @@ downloads their states (the one of its own node locally), merges them on the
 node, reroutes the canister ID ranges, proposes the recovery CUP of the
 destination subnet at the merged state, replaces the state of its own node
 with the merged state, from which the replica on the node then starts, waits
-until its own node reports the recovery CUP, and unhalts the destination
-subnet.
+until its own node reports the recovery CUP, unhalts the destination subnet,
+and deletes the subnet that is merged away.
 
 The subnet that is merged away is called `S`, and the Application subnet it is
 merged into is called `D`.
@@ -20,13 +20,14 @@ Runbook::
 0. Set up an IC with a System subnet and two Application subnets `S` and `D`,
    and install the NNS canisters.
 1. Install a universal canister on each of `S` and `D`.
-2. Run the subnet merging tool on a node of `D`, over SSH, with all its steps
-   up to `UnhaltDestinationSubnet` and without prompts: it downloads the state of `S` from a node of `S` over
-   SSH and the state of `D` locally, merges them on the node, replaces the
+2. Run the subnet merging tool on a node of `D`, over SSH, without prompts and
+   with all its steps but `Cleanup`, which would delete the working directory
+   the checks below inspect: it downloads the state of `S` from a node of `S`
+   over SSH and the state of `D` locally, merges them on the node, replaces the
    state of its own node with the merged state, waits until its own node
-   reports the recovery CUP, and unhalts `D`. The steps deleting `S` and the
-   working directory of the tool are skipped: `subnet_cooling_down_test`
-   covers them, and the checks below inspect that working directory.
+   reports the recovery CUP, unhalts `D`, waits until every subnet other than
+   `S` routes the canisters of `S` to `D`, deletes `S`, and waits until the
+   registry no longer holds `S`.
 3. Check that the merged state on the node of `D` is a single checkpoint
    holding the canisters of both `S` and `D`, and that the registry holds the
    recovery CUP of `D` at the height of that checkpoint.
@@ -35,10 +36,9 @@ Runbook::
    the replica runs at or above the height of the merged checkpoint. `D` is
    unhalted by then, so the replica may have created newer checkpoints.
 
-Success:: The tool completes all its steps up to `UnhaltDestinationSubnet` on
-the node of `D`, the recovery
-CUP of `D` is at the merged state it assembled there, and the replica on that
-node runs on the merged state.
+Success:: The tool completes all its steps but `Cleanup` on the node of `D`,
+deleting `S`, the recovery CUP of `D` is at the merged state it assembled
+there, and the replica on that node runs on the merged state.
 
 end::catalog[] */
 
@@ -117,8 +117,9 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// forever when prompts are skipped, so this is what ends a run that fails.
 /// Above the sum of the timeouts of its steps, including the wait of
 /// `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls 15s apart,
-/// about 525s).
-const TOOL_TIMEOUT: Duration = Duration::from_secs(2400);
+/// about 525s) and the waits of `CheckRegistryVersionOnAllSubnets` and
+/// `CheckRegistryForSourceSubnetDeletion` (`REGISTRY_TIMEOUT` each).
+const TOOL_TIMEOUT: Duration = Duration::from_secs(3000);
 
 /// Timeouts of the test itself, above `TOOL_TIMEOUT` plus the checks after the
 /// tool. These find what they wait for (the recovery CUP contents of `D` in the
@@ -126,8 +127,8 @@ const TOOL_TIMEOUT: Duration = Duration::from_secs(2400);
 /// tool has already waited until the node of `D` reports the recovery CUP.
 /// The overall timeout additionally covers the setup and has to stay below the
 /// 3600s of the `eternal` timeout of the Bazel target.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2900);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3400);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3100);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3550);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -138,6 +139,13 @@ fn main() -> Result<()> {
         // The nodes of `D` restart their replicas once they see the recovery
         // CUP of `D` in the registry.
         .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
+        // Deleting `S` deletes its subnet record, and the replicas of `S` that
+        // are still running panic if they notice before their orchestrator stops
+        // them (as in `delete_subnet_test`).
+        .add_unallowed_log_pattern_except(
+            "panicked",
+            "rs/consensus/src/consensus/allowed_panics.rs",
+        )
         .execute_from_args()?;
     Ok(())
 }
@@ -243,8 +251,7 @@ pub fn test(env: TestEnv) {
 }
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
-/// of `S`, through all its steps up to `UnhaltDestinationSubnet` and without
-/// prompts.
+/// of `S`, through all its steps but `Cleanup` and without prompts.
 fn run_tool_on_node(
     env: &TestEnv,
     s_node: &IcNodeSnapshot,
@@ -302,9 +309,6 @@ fn run_tool_on_node(
          --halt-timeout-secs {halt_timeout} \
          --registry-timeout-secs {registry_timeout} \
          --poll-interval-secs {poll_interval} \
-         --skip check-registry-version-on-all-subnets \
-         --skip delete-source-subnet \
-         --skip check-registry-for-source-subnet-deletion \
          --skip cleanup \
          2>&1",
         tool_timeout = TOOL_TIMEOUT.as_secs(),
@@ -323,8 +327,8 @@ fn run_tool_on_node(
 
     info!(
         logger,
-        "Step 2 done: the subnet merging tool ran through all its steps up to \
-         UnhaltDestinationSubnet on node {d_node_ip}"
+        "Step 2 done: the subnet merging tool ran through all its steps but Cleanup on node \
+         {d_node_ip}, and S is deleted"
     );
 }
 
