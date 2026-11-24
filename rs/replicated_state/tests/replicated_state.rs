@@ -2068,6 +2068,57 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
     );
 }
 
+/// Pins the rotation that `output_into_iter()` applies to the order of the
+/// canisters: a pseudorandom offset, seeded with the batch time. The rotation
+/// decides which canister's output is routed first, so all replicas of a subnet
+/// must compute the same one, and a change in it (for example from a new `rand`
+/// version) changes the replicated state.
+#[test]
+fn output_into_iter_rotation_is_stable() {
+    // (number of canisters, batch time in nanoseconds since the Unix epoch, rotation)
+    let cases = [
+        (2, 0, 0),
+        (2, 1, 1),
+        (3, 42, 1),
+        (10, 1_620_328_630_000_000_000, 3),
+        (10, 1_620_328_631_000_000_000, 0),
+        (50, 1_764_000_000_123_456_789, 13),
+        (50, 1_764_000_001_123_456_789, 40),
+        (7, u64::MAX, 1),
+    ];
+
+    for (canister_count, batch_time_nanos, expected_rotation) in cases {
+        let canister_ids: Vec<_> = (1..=canister_count).map(CanisterId::from_u64).collect();
+        let mut fixture = ReplicatedStateFixture::with_canisters(&canister_ids);
+        for canister_id in &canister_ids {
+            let request = OutputRequestBuilder::default()
+                .sender(*canister_id)
+                .receiver(CanisterId::from_u64(1_000))
+                .build();
+            fixture
+                .state
+                .canister_state_make_mut(canister_id)
+                .unwrap()
+                .push_output_request(request, UNIX_EPOCH)
+                .unwrap();
+        }
+        fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_nanos);
+
+        let senders: Vec<_> = fixture
+            .state
+            .output_into_iter()
+            .map(|message| message.sender())
+            .collect();
+
+        let mut expected_senders = canister_ids;
+        expected_senders.rotate_left(expected_rotation);
+        assert_eq!(
+            senders, expected_senders,
+            "{canister_count} canisters, batch time {batch_time_nanos}"
+        );
+    }
+}
+
 #[test_strategy::proptest]
 fn peek_and_next_consistent(
     #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]

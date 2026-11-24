@@ -299,8 +299,17 @@ pub fn get_notarization_threshold_for_subnet_of_size(subnet_size: usize) -> Thre
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use ic_test_utilities_types::ids::node_test_id;
-    use ic_types::consensus::*;
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::{
+        ReplicaVersion,
+        consensus::*,
+        crypto::{
+            CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
+            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        },
+        signature::ThresholdSignature,
+    };
 
     #[test]
     fn test_sufficient_block_makers_elected() {
@@ -358,6 +367,86 @@ pub mod test {
                 "The thresholds violate the liveness property of consensus. \
                     committee_size = {c}, f = {f}, t_not = t_fin = {t_not}"
             );
+        }
+    }
+
+    /// Pins the output of `get_shuffled_nodes`, which ranks the block makers and
+    /// samples the notarization committee. All replicas of a subnet must compute
+    /// the same order, so a change in this output (for example from a new
+    /// `rand` version) changes the consensus protocol.
+    #[test]
+    fn get_shuffled_nodes_is_stable() {
+        // (subnet size, purpose, indices `i` of the shuffled nodes `node_test_id(i)`)
+        let cases: [(u64, RandomnessPurpose, &[u64]); 4] = [
+            (
+                13,
+                RandomnessPurpose::BlockmakerRanking,
+                &[7, 1, 5, 2, 4, 12, 11, 6, 8, 9, 0, 3, 10],
+            ),
+            (
+                13,
+                RandomnessPurpose::CommitteeSampling,
+                &[5, 11, 10, 4, 12, 8, 3, 7, 0, 6, 9, 1, 2],
+            ),
+            (
+                40,
+                RandomnessPurpose::BlockmakerRanking,
+                &[
+                    28, 19, 9, 4, 36, 15, 8, 24, 30, 20, 33, 17, 26, 18, 22, 29, 21, 5, 16, 12, 14,
+                    34, 7, 38, 1, 13, 27, 25, 0, 23, 37, 35, 32, 39, 10, 2, 3, 11, 6, 31,
+                ],
+            ),
+            (
+                40,
+                RandomnessPurpose::CommitteeSampling,
+                &[
+                    18, 8, 13, 24, 17, 15, 35, 14, 36, 12, 1, 28, 4, 34, 9, 32, 29, 22, 16, 10, 6,
+                    2, 5, 30, 3, 7, 11, 27, 25, 31, 19, 26, 20, 37, 21, 38, 39, 23, 0, 33,
+                ],
+            ),
+        ];
+
+        for (subnet_size, purpose, expected_order) in cases {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let Dependencies { membership, .. } =
+                    DependenciesBuilder::new(pool_config, subnet_size).build();
+
+                let shuffled_nodes = membership
+                    .get_shuffled_nodes(Height::new(1), &fixed_random_beacon(), &purpose)
+                    .unwrap();
+
+                assert_eq!(
+                    shuffled_nodes,
+                    expected_order
+                        .iter()
+                        .copied()
+                        .map(node_test_id)
+                        .collect::<Vec<_>>(),
+                    "subnet size {subnet_size}, purpose {purpose:?}"
+                );
+            });
+        }
+    }
+
+    /// A random beacon at height 0 built from fixed values, so that the
+    /// randomness derived from it does not depend on how the test consensus
+    /// pool creates its genesis beacon.
+    fn fixed_random_beacon() -> RandomBeacon {
+        Signed {
+            content: RandomBeaconContent::new(
+                Height::new(0),
+                CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                ReplicaVersion::try_from("0.9.0").unwrap(),
+            ),
+            signature: ThresholdSignature {
+                signer: NiDkgId {
+                    start_block_height: Height::new(0),
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::LowThreshold,
+                    target_subnet: NiDkgTargetSubnet::Local,
+                },
+                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![0; 48])),
+            },
         }
     }
 }

@@ -1495,6 +1495,8 @@ mod tests {
         HttpMethod, ReplicationCounts, TransformFunc,
     };
     use ic_types_test_utils::ids::node_test_id;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
     use rstest::rstest;
     use std::str::FromStr;
     use strum::IntoEnumIterator;
@@ -2196,6 +2198,89 @@ mod tests {
                 && max_responses == 4
                 && committee.is_subset(&node_ids)
         );
+    }
+
+    /// Pins the node that a non-replicated outcall is delegated to, for fixed
+    /// RNG seeds. All replicas of a subnet draw the node from the same RNG, so
+    /// a change in this choice (for example from a new `rand` version) changes
+    /// the replicated state.
+    #[test]
+    fn non_replicated_delegated_node_is_stable() {
+        let node_ids: BTreeSet<NodeId> = (0..13).map(node_test_id).collect();
+
+        // (RNG seed, index `i` of the delegated node `node_test_id(i)`)
+        let cases = [(0, 7), (1, 1), (2, 8), (3, 8), (4, 1), (5, 11)];
+
+        for (seed, expected_node) in cases {
+            let context = CanisterHttpRequestContext::generate_from_args(
+                UNIX_EPOCH,
+                &dummy_request(),
+                dummy_args(HttpMethod::GET, Some(false)),
+                &node_ids,
+                RegistryVersion::from(1),
+                CanisterCyclesCostSchedule::Normal,
+                &mut ChaCha20Rng::from_seed([seed; 32]),
+                /* pay_as_you_go_enabled = */ false,
+            )
+            .unwrap();
+
+            assert_eq!(
+                context.replication,
+                Replication::NonReplicated(node_test_id(expected_node)),
+                "RNG seed {seed}"
+            );
+        }
+    }
+
+    /// Pins the committee of a flexible outcall, for fixed RNG seeds and
+    /// committee sizes. All replicas of a subnet draw the committee from the
+    /// same RNG, so a change in this choice (for example from a new `rand`
+    /// version) changes the replicated state.
+    #[test]
+    fn flexible_committee_is_stable() {
+        let node_ids: BTreeSet<NodeId> = (0..13).map(node_test_id).collect();
+
+        // (RNG seed, committee size, indices `i` of the committee members `node_test_id(i)`)
+        let cases: [(u8, u32, &[u64]); 6] = [
+            (0, 1, &[3]),
+            (1, 2, &[1, 4]),
+            (2, 4, &[0, 1, 5, 9]),
+            (3, 7, &[1, 2, 6, 8, 9, 11, 12]),
+            (4, 9, &[0, 1, 2, 4, 5, 6, 9, 10, 11]),
+            (5, 12, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]),
+        ];
+
+        for (seed, total_requests, expected_committee) in cases {
+            let context = CanisterHttpRequestContext::generate_from_flexible_args(
+                UNIX_EPOCH,
+                &dummy_request(),
+                dummy_flexible_args(Some(ReplicationCounts {
+                    total_requests,
+                    min_responses: 1,
+                    max_responses: total_requests,
+                })),
+                &node_ids,
+                RegistryVersion::from(1),
+                CanisterCyclesCostSchedule::Normal,
+                &mut ChaCha20Rng::from_seed([seed; 32]),
+                PricingVersion::PayAsYouGo,
+            )
+            .unwrap();
+
+            assert_eq!(
+                context.replication,
+                Replication::Flexible {
+                    committee: expected_committee
+                        .iter()
+                        .copied()
+                        .map(node_test_id)
+                        .collect(),
+                    min_responses: 1,
+                    max_responses: total_requests,
+                },
+                "RNG seed {seed}, committee size {total_requests}"
+            );
+        }
     }
 
     #[test]
