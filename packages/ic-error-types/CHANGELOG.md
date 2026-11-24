@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `SubnetCoolingDown`
 
+### Changed
+- Bumped `strum` and `strum_macros` to v0.28. `RejectCode` and `ErrorCode` implement `IntoEnumIterator` of strum v0.28, so code that iterates over them through `strum::IntoEnumIterator` has to use strum v0.28 too. This is a breaking change.
+
 # 0.2.0 - 2025-05-14
 
 ### Added

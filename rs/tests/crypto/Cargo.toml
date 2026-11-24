@@ -30,6 +30,7 @@ ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-secp256r1 = { path = "../../../packages/ic-secp256r1" }
 leb128 = { workspace = true }
 rand = { workspace = true }
+rand_0_10 = { workspace = true }
 reqwest = { workspace = true }
 rsa = { workspace = true }
 simple_asn1 = { workspace = true }
