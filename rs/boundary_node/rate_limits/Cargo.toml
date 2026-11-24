@@ -15,7 +15,7 @@ ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-stable-structures = { workspace = true }
+ic-stable-structures = "0.7.2"
 mockall = { workspace = true }
 prometheus.workspace = true
 rand_chacha = { workspace = true }
@@ -29,6 +29,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+ic-stable-structures-0-6 = { package = "ic-stable-structures", version = "0.6.8" }
 
 [lib]
 crate-type = ["cdylib"]

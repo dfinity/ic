@@ -18,7 +18,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
-        "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
@@ -30,6 +30,9 @@ rust_canister(
 rust_test(
     name = "unit_tests",
     srcs = glob(["canister/**/*.rs"]),
+    aliases = {
+        "@crate_index//:ic-stable-structures": "ic_stable_structures_0_6",
+    },
     crate_name = "salt_sharing_canister",
     crate_root = "canister/lib.rs",
     data = ["canister/salt_sharing_canister.did"],
@@ -44,6 +47,7 @@ rust_test(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
