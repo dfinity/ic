@@ -10,8 +10,8 @@ use der::asn1::OctetStringRef;
 
 #[derive(der::Sequence, Debug, Eq, PartialEq)]
 pub struct GetDiskEncryptionKeyTokenCustomData<'a> {
-    pub client_tls_public_key: OctetStringRef<'a>,
-    pub server_tls_public_key: OctetStringRef<'a>,
+    pub client_tls_public_key: &'a OctetStringRef,
+    pub server_tls_public_key: &'a OctetStringRef,
 }
 
 impl DerEncodedCustomData for GetDiskEncryptionKeyTokenCustomData<'_> {

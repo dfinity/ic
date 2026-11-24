@@ -3940,7 +3940,7 @@ dependencies = [
  "curve25519-dalek",
  "darling 0.24.1",
  "dashmap",
- "der 0.7.10",
+ "der 0.8.3",
  "derive-new",
  "devicemapper",
  "dialoguer",
