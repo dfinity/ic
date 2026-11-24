@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* When a subnet is split, the subnet being split (the source subnet) is now assigned a fresh range of
+  canister IDs, just like the newly created subnet.
+
 ## Deprecated
 
 ## Removed
