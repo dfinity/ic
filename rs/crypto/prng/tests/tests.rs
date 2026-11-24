@@ -89,11 +89,13 @@ fn should_continue_one_output_stream_when_alternating_between_rand_0_8_and_rand_
     let expected = [
         draw_through_rand_0_8(&mut rng_0_8),
         draw_through_rand_0_8(&mut rng_0_8),
+        draw_through_rand_0_8(&mut rng_0_8),
     ]
     .concat();
     let alternating = [
         draw_through_rand_0_8(&mut rng_alternating),
         draw_through_rand_0_10(&mut rng_alternating),
+        draw_through_rand_0_8(&mut rng_alternating),
     ]
     .concat();
 

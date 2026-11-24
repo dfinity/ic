@@ -51,11 +51,13 @@ fn alternating_between_rand_0_8_and_rand_0_10_traits_continues_one_output_stream
     let expected = [
         draw_through_rand_0_8(rng_0_8),
         draw_through_rand_0_8(rng_0_8),
+        draw_through_rand_0_8(rng_0_8),
     ]
     .concat();
     let alternating = [
         draw_through_rand_0_8(rng_alternating),
         draw_through_rand_0_10(rng_alternating),
+        draw_through_rand_0_8(rng_alternating),
     ]
     .concat();
 
