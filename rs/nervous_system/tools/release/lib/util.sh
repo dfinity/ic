@@ -46,6 +46,71 @@ check_or_set_dfx_hsm_pin() {
     fi
 }
 
+# Asks the user to confirm what was just shown (e.g. proposals that are about
+# to be submitted) by entering their HSM PIN. To decline, the user presses
+# Ctrl+C (or enters nothing). Either way, this exits the script. On success,
+# DFX_HSM_PIN is set and exported.
+#
+# If DFX_HSM_PIN is already set, there is no PIN to ask for. In that case,
+# this falls back to asking the user to type "yes", so that there is still a
+# deliberate step before anything gets submitted.
+confirm_by_entering_dfx_hsm_pin() {
+    if [ -n "${DFX_HSM_PIN:-}" ]; then
+        # This explodes (doesn't just return 1) if the user does not give an
+        # affirmative response.
+        confirm
+        return
+    fi
+
+    # Calm the user down when the stakes are low right before a scary-looking
+    # prompt.
+    if [ "${DRY_RUN:-false}" = true ]; then
+        print_yellow "(This is just a dry run.)"
+    fi
+
+    prompt "If the above seems right, enter your HSM PIN now (otherwise, press Ctrl+C):"
+    read_secret_showing_asterisks
+    DFX_HSM_PIN="$SECRET"
+    unset SECRET
+    echo
+
+    if [ -z "$DFX_HSM_PIN" ]; then
+        echo "No PIN entered. Aborting..."
+        exit 1
+    fi
+
+    export DFX_HSM_PIN
+}
+
+# Reads a line from the user without showing it. Stores the result in SECRET.
+#
+# Prints one * instead of what the user typed in. Backspace works.
+read_secret_showing_asterisks() {
+    SECRET=""
+    local CHARACTER
+    while IFS= read -r -s -n 1 CHARACTER; do
+        # Enter (read gives an empty string for the newline).
+        if [ -z "$CHARACTER" ]; then
+            break
+        fi
+
+        # Backspace (^? or ^H).
+        if [ "$CHARACTER" = $'\x7f' ] || [ "$CHARACTER" = $'\b' ]; then
+            if [ -n "$SECRET" ]; then
+                # Pop one character from the end of SECRET.
+                SECRET="${SECRET%?}"
+
+                # Delete one asterisk from the output.
+                echo -n $'\b \b'
+            fi
+            continue
+        fi
+
+        SECRET+="$CHARACTER"
+        echo -n '*'
+    done
+}
+
 #### File interaction helpers
 
 # Cross platform Sha256 file helper
