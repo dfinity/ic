@@ -12,8 +12,8 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 
-pub fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
-    let mut reject_signals = vec![
+pub fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
+    let reject_signals = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
         RejectSignal::new(RejectReason::CanisterNotFound, 200.into()),
         RejectSignal::new(RejectReason::OutOfMemory, 250.into()),
@@ -21,14 +21,8 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
         RejectSignal::new(RejectReason::CanisterStopped, 252.into()),
         RejectSignal::new(RejectReason::QueueFull, 253.into()),
         RejectSignal::new(RejectReason::Unknown, 254.into()),
+        RejectSignal::new(RejectReason::EngineNotAllowed, 255.into()),
     ];
-    // `EngineNotAllowed` signals are only encodable starting at V26.
-    if certification_version >= CertificationVersion::V26 {
-        reject_signals.push(RejectSignal::new(
-            RejectReason::EngineNotAllowed,
-            255.into(),
-        ));
-    }
     let flags = StreamFlags {
         deprecated_responses_only: true,
     };
@@ -85,7 +79,6 @@ pub fn reject_response(_certification_version: CertificationVersion) -> StreamMe
     .into()
 }
 
-pub fn anonymous_refund(certification_version: CertificationVersion) -> StreamMessage {
-    assert!(certification_version >= CertificationVersion::V22);
+pub fn anonymous_refund(_certification_version: CertificationVersion) -> StreamMessage {
     Refund::anonymous(canister_test_id(7), Cycles::new(8)).into()
 }

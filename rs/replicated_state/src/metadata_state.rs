@@ -557,13 +557,9 @@ impl SubnetMetrics {
     /// Computes the subnet-level aggregate of the consumed cycles, i.e. the part
     /// of the total that is not held by the canisters that still exist.
     ///
-    /// This is the current computation, which avoids double counting the cycles
-    /// consumed by deleted canisters, as the legacy
-    /// [`Self::consumed_cycles_total_v28`] does. It is one of the two summands of
+    /// It is one of the two summands of
     /// [`Self::consumed_cycles_total_including_canisters`] and of
-    /// [`Self::consumed_cycles_total_including_canisters_monotonic`], which are
-    /// what the canonical state consumer reports for certification version `V29`
-    /// and from certification version `V30` on, respectively.
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`].
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -602,9 +598,6 @@ impl SubnetMetrics {
     /// still-existing canisters: [`Self::consumed_cycles_total`] plus the sum of
     /// `CanisterMetrics::consumed_cycles()` over the canisters that currently
     /// exist, as of the end of the last committed round.
-    ///
-    /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
-    /// reports at certification version `V29`.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total_including_canisters
     }
@@ -618,7 +611,7 @@ impl SubnetMetrics {
     /// last committed round.
     ///
     /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
-    /// reports from certification version `V30` on, what the `subnet_metrics`
+    /// reports, what the `subnet_metrics`
     /// management canister endpoint reports, and what the
     /// `replicated_state_consumed_cycles_since_replica_started` gauge reports, so
     /// they cannot drift apart.
@@ -647,49 +640,6 @@ impl SubnetMetrics {
             consumed_cycles_total + consumed_by_canisters;
         self.consumed_cycles_total_including_canisters_monotonic =
             consumed_cycles_total + consumed_by_canisters_monotonic;
-    }
-
-    /// Legacy computation of the total consumed cycles, used by the canonical
-    /// state consumer for certification versions up to and including `V28`.
-    ///
-    /// This version double counts the cycles consumed by deleted canisters: at
-    /// deletion, a canister's per-use-case consumption is added both to
-    /// `consumed_cycles_by_deleted_canisters` and to the
-    /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
-    /// unchanged to preserve the certified state for certification versions up
-    /// to and including `V28`; from `V29` on the consumer reports
-    /// [`Self::consumed_cycles_total_including_canisters`] (`V29`) or
-    /// [`Self::consumed_cycles_total_including_canisters_monotonic`] (from `V30`
-    /// on), which do not double count.
-    pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
-        let mut total = NominalCycles::zero();
-
-        total += self.consumed_cycles_by_deleted_canisters;
-
-        for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
-            match use_case {
-                // For deleted canisters, skip updating the total using the use
-                // case specific metric as the update above should be sufficient
-                // (the old metric is a superset).
-                CyclesUseCase::DeletedCanisters => {}
-                // For the remaining use cases simply add the values to the total.
-                CyclesUseCase::ECDSAOutcalls
-                | CyclesUseCase::HTTPOutcalls
-                | CyclesUseCase::Memory
-                | CyclesUseCase::ComputeAllocation
-                | CyclesUseCase::IngressInduction
-                | CyclesUseCase::Instructions
-                | CyclesUseCase::RequestAndResponseTransmission
-                | CyclesUseCase::Uninstall
-                | CyclesUseCase::CanisterCreation
-                | CyclesUseCase::SchnorrOutcalls
-                | CyclesUseCase::VetKd
-                | CyclesUseCase::DroppedMessages
-                | CyclesUseCase::BurnedCycles => total += *cycles,
-            }
-        }
-
-        total
     }
 }
 
