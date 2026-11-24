@@ -17,6 +17,9 @@ on the process that this file is part of, see
   encoded). With the `MakeProposal` command, this limits the size of the
   nested proposal.
 
+* Enabled `SplitSubnet` proposals (topic: Subnet Management). They were previously
+  rejected at submission time.
+
 ## Changed
 
 * Limit decoded `payload` of `ExecuteNnsFunction` proposals. If the result is
