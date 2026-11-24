@@ -513,7 +513,7 @@ impl CheckpointLoader {
                 .push(snapshot_id);
         }
         let results = maybe_parallel_map(thread_pool, canister_ids.iter(), 1, |canister_id| {
-            load_canister_state_from_checkpoint(
+            let (canister_state, durations) = load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
                 snapshot_ids_per_canister
@@ -522,7 +522,13 @@ impl CheckpointLoader {
                     .unwrap_or_default(),
                 Arc::clone(&self.fd_factory),
                 &self.metrics,
-            )
+            )?;
+
+            // Fill the log store's caches in parallel: `ReplicatedState::new_from_checkpoint`
+            // sequentially reads every cold canister's header (for its memory usage), and the
+            // retention metric requires every store's first timestamp.
+            canister_state.system_state.log_memory_store.fill_caches();
+            Ok::<_, CheckpointError>((canister_state, durations))
         });
 
         for result in results.into_iter() {

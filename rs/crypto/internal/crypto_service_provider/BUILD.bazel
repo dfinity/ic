@@ -17,7 +17,6 @@ rust_library(
     crate_name = "ic_crypto_internal_csp",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:educe",
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
@@ -81,6 +80,9 @@ rust_library(
 
 rust_test(
     name = "crypto_service_provider_test",
+    aliases = {
+        "@crate_index//:rand_0_10": "rand_0_10",
+    },
     crate = ":crypto_service_provider",
     data = [
         "test_resources/public_keys.pb",
@@ -116,6 +118,7 @@ rust_test(
         "@crate_index//:assert_matches",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
+        "@crate_index//:rand_0_10",
         "@crate_index//:rsa",
         "@crate_index//:slog-async",
         "@crate_index//:tracing-subscriber",
@@ -134,7 +137,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:educe",
         "@crate_index//:proptest-derive",
         "@crate_index//:strum_macros",
     ],

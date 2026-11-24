@@ -63,6 +63,7 @@ pub fn enforce_file_permissions(attr: TokenStream, item: TokenStream) -> TokenSt
         vis,
         sig,
         block,
+        ..
     } = item_fn;
 
     quote! {

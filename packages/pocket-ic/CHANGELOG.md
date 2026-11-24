@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bumped `ic-management-canister-types` to v0.11.0, so the reexported `CanisterSettings` has the new fields `minimum_incoming_canister_call_cycles` and `status_visibility`.
+- Bumped `strum` and `strum_macros` to v0.28. `ErrorCode`, `RejectCode`, `common::rest::SubnetKind` and `common::rest::NamedSubnet` implement `IntoEnumIterator` of strum v0.28, so code that iterates over them through `strum::IntoEnumIterator` has to use strum v0.28 too. This is a breaking change.
 
 ## 16.1.0 - 2026-10-08
 

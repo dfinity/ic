@@ -30,5 +30,4 @@ bip32 = { workspace = true }
 bitcoin = { workspace = true }
 hex = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
-secp256k1 = { workspace = true, features = ["global-context", "std", "rand"] }
 wycheproof = { workspace = true, features = ["ecdsa"] }

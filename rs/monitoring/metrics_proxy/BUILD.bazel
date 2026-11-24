@@ -21,7 +21,6 @@ DEPENDENCIES = [
     "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:rustls",
-    "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",
     "@crate_index//:serde_yaml",
     "@crate_index//:tokio",
@@ -67,5 +66,6 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:pretty_assertions",
+        "@crate_index//:tempfile",
     ],
 )

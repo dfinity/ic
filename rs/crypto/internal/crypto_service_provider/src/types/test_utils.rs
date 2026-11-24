@@ -114,10 +114,12 @@ prop_compose! {
     pub fn arbitrary_rsa_public_key()(
         random_bytes in proptest::array::uniform32(any::<u8>())
     ) -> CspPublicKey {
-        use ::rsa::{RsaPrivateKey, RsaPublicKey, pkcs8::EncodePublicKey};
-        let rng = &mut ChaCha20Rng::from_seed(random_bytes);
-        let priv_key = RsaPrivateKey::new(rng, 2048).expect("failed to generate a key");
-        let pub_key = RsaPublicKey::from(&priv_key);
+        use ::rsa::{PrivateKey, PublicKey, pkcs8::EncodePublicKey};
+        use rand_0_10::SeedableRng as _;
+        // `rsa` takes a rand 0.10 RNG.
+        let rng = &mut rand_0_10::rngs::StdRng::from_seed(random_bytes);
+        let priv_key = PrivateKey::new(rng, 2048).expect("failed to generate a key");
+        let pub_key = PublicKey::from(&priv_key);
         CspPublicKey::RsaSha256(
             IcRsaPublicKey::from_der_spki(
                 pub_key.to_public_key_der().expect("failed to convert to DER").as_ref()

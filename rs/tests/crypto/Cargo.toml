@@ -32,6 +32,7 @@ k256 = { workspace = true }
 leb128 = { workspace = true }
 p256 = { workspace = true }
 rand = { workspace = true }
+rand_0_10 = { workspace = true }
 reqwest = { workspace = true }
 rsa = { workspace = true }
 simple_asn1 = { workspace = true }

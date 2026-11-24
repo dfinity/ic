@@ -23,7 +23,10 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use rstest::rstest;
-    use rustls::ServerConfig;
+    use rustls::{
+        ServerConfig,
+        pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+    };
     use std::{
         convert::TryFrom,
         env,
@@ -887,14 +890,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     let key_path = key_path(cert_dir);
 
                     let cert_file = tokio::fs::read(cert_path).await.unwrap();
-                    let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
+                    let certs = CertificateDer::pem_slice_iter(&cert_file)
                         .collect::<Result<Vec<_>, _>>()
                         .unwrap();
 
                     let key_file = tokio::fs::read(key_path).await.unwrap();
-                    let key = rustls_pemfile::private_key(&mut key_file.as_ref())
-                        .unwrap()
-                        .unwrap();
+                    let key = PrivateKeyDer::from_pem_slice(&key_file).unwrap();
 
                     let mut server_config = ServerConfig::builder()
                         .with_no_client_auth()

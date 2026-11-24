@@ -1,14 +1,14 @@
 use crate::manifest::{
-    BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript,
-    FileWithSize, MANIFEST_SPAN_CHUNKS, MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4,
-    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion,
-    build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest, compute_manifest,
-    diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
+    AlignedBuffer, BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE,
+    DIRECT_IO_ALIGN, DiffScript, FileWithSize, MANIFEST_SPAN_CHUNKS, MAX_FILE_SIZE_TO_GROUP_V3,
+    MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics, ManifestValidationError, RehashManifest,
+    StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest,
+    compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
     filter_out_zero_chunks,
     hash::{ManifestHash, chunk_hasher},
     hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
-    validate_chunk, validate_manifest, validate_manifest_internal_consistency,
-    validate_meta_manifest, validate_sub_manifest,
+    observe_file_sizes, open_for_hashing, read_chunk, validate_chunk, validate_manifest,
+    validate_manifest_internal_consistency, validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
     ChunkInfo, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo, Manifest, MetaManifest,
@@ -18,7 +18,9 @@ use crate::state_sync::types::{
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CANISTER_FILE, CheckpointLayout, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_state_layout::{
+    BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, UNVERIFIED_CHECKPOINT_MARKER,
+};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
@@ -1244,6 +1246,110 @@ fn test_hash_plan() {
     }
     assert!(seen_used as f64 >= 0.4 * repetitions as f64);
     assert!(seen_used as f64 <= 0.6 * repetitions as f64);
+}
+
+#[test]
+fn aligned_buffer_is_aligned_and_never_shrinks() {
+    let mut buffer = AlignedBuffer::with_capacity(5000);
+    let start = buffer.get(1).as_ptr() as usize;
+    assert_eq!(start % DIRECT_IO_ALIGN, 0);
+    assert_eq!(buffer.get(1).len(), DIRECT_IO_ALIGN);
+    // Up to its capacity, rounded up, it doesn't reallocate.
+    assert_eq!(buffer.get(5000).len(), 2 * DIRECT_IO_ALIGN);
+    assert_eq!(buffer.get(5000).as_ptr() as usize, start);
+
+    // Beyond, it grows, keeping its contents, and stays aligned.
+    buffer.get(5000)[5000] = 7;
+    let grown = buffer.get(3 * DIRECT_IO_ALIGN + 1);
+    assert_eq!(grown.len(), 4 * DIRECT_IO_ALIGN);
+    assert_eq!(grown.as_ptr() as usize % DIRECT_IO_ALIGN, 0);
+    assert_eq!(grown[5000], 7);
+    // It doesn't shrink.
+    assert_eq!(buffer.get(1).len(), DIRECT_IO_ALIGN);
+    assert_eq!(buffer.0.len(), 4);
+}
+
+/// Returns whether `file` was opened with `O_DIRECT`.
+#[cfg(target_os = "linux")]
+fn opened_with_o_direct(file: &fs::File) -> bool {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    let flags = fcntl(file, FcntlArg::F_GETFL).unwrap();
+    OFlag::from_bits_truncate(flags).contains(OFlag::O_DIRECT)
+}
+
+/// Returns whether the file system holding the file at `path` supports
+/// `O_DIRECT`.
+#[cfg(target_os = "linux")]
+fn supports_o_direct(path: &Path) -> bool {
+    use std::os::unix::fs::OpenOptionsExt;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_DIRECT)
+        .open(path)
+        .is_ok()
+}
+
+#[test]
+fn read_chunk_reads_whole_and_partial_chunks() {
+    let dir = tmpdir("read_chunk");
+    for name in ["file", CANISTER_FILE] {
+        let path = dir.path().join(name);
+        let data: Vec<u8> = (0..3 * 4096 + 123).map(|i| (i % 251) as u8).collect();
+        fs::write(&path, &data).unwrap();
+        let file = open_for_hashing(&path).unwrap();
+        // A protobuf is opened buffered, anything else with `O_DIRECT` where
+        // the file system supports it.
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            opened_with_o_direct(&file),
+            name != CANISTER_FILE && supports_o_direct(&path),
+            "{name}"
+        );
+        let mut buffer = AlignedBuffer::with_capacity(8192);
+
+        assert_eq!(
+            read_chunk(&file, &mut buffer, 0, 8192).unwrap(),
+            &data[..8192]
+        );
+        // The last chunk, ending before the end of its last block.
+        assert_eq!(
+            read_chunk(&file, &mut buffer, 8192, 4096 + 123).unwrap(),
+            &data[8192..]
+        );
+        // The file ends before the chunk does.
+        assert_eq!(
+            read_chunk(&file, &mut buffer, 8192, 8192)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::UnexpectedEof
+        );
+    }
+}
+
+#[test]
+fn observe_file_sizes_by_file_type() {
+    let metrics_registry = MetricsRegistry::new();
+    let metrics = ManifestMetrics::new(&metrics_registry);
+    let file_table = [
+        "canister_states/00000000000000010101/canister.pbuf",
+        "canister_states/00000000000000010101/vmemory_0.bin",
+        "canister_states/00000000000000010101/0000000000000064_0000_vmemory_0.overlay",
+        "system_metadata.pbuf",
+    ]
+    .map(|path| FileInfo {
+        relative_path: path.into(),
+        size_bytes: 1,
+        hash: [0; 32],
+    })
+    .to_vec();
+    let manifest = Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, vec![]);
+
+    observe_file_sizes(&manifest, &manifest, &metrics);
+
+    for file_type in [CANISTER_FILE, BIN_FILE, OVERLAY, "other"] {
+        let histogram = metrics.file_size_bytes.with_label_values(&[file_type]);
+        assert_eq!(histogram.get_sample_count(), 1, "{file_type}");
+    }
 }
 
 #[test]
