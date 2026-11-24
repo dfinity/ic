@@ -79,6 +79,28 @@ fn should_have_stable_representation_of_certificate() {
 }
 
 #[test]
+fn should_have_stable_representation_of_node_certificate() {
+    // Like the certificates that nodes generate: the node ID as common name and
+    // notAfter 99991231235959Z, the RFC 5280 value for "no well-defined
+    // expiration date", which is encoded as GeneralizedTime rather than UTCTime.
+    let seed = Seed::from_bytes(&[0x42_u8; 32]);
+    let not_after = datetime!(9999-12-31 23:59:59 UTC).unix_timestamp() as u64;
+
+    let (cert, _secret_key) = generate_tls_key_pair_der(
+        seed,
+        node_id(4242).get().to_string().as_str(),
+        not_before(),
+        not_after,
+    )
+    .expect("failed to generate TLS keys");
+
+    assert_eq!(
+        hex::encode(cert.bytes),
+        "3082010c3081bfa003020102021307fb88ace68cf502daaa70fb8a85a24bc4174d300506032b657030263124302206035504030c1b6c716135332d6e6d7363612d61616161612d61616161702d3261693020170d3231303530363139313731305a180f39393939313233313233353935395a30263124302206035504030c1b6c716135332d6e6d7363612d61616161612d61616161702d326169302a300506032b6570032100baffcb2b09492ea50f6b0ca9b4d0fd7cd330ae289b4a5276e92027196b80d2dc300506032b657003410022bc3e8ab165bb1a1f300f39357ec6df51ea3ecea3f03e33195ca783432c040cd8e2c5ba8039494b29d5dc96dc39b882711a7561bef304c0520b73019e3f010b"
+    );
+}
+
+#[test]
 fn should_generate_self_signed_certificate() {
     let rng = &mut reproducible_rng();
     let (cert, _secret_key) = generate_tls_key_pair_der(
