@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Condvar, Mutex, PoisonError};
 use uuid::Uuid;
 
 use crate::ResolvedStatePair;
@@ -145,6 +146,60 @@ fn unique_tmp_dir() -> String {
         .to_string()
 }
 
+/// The maximum number of Apalache processes that run at the same time in this process.
+///
+/// Each Apalache process is a JVM that holds a few hundred MiB of memory. Test binaries check the
+/// traces of many tests in parallel, so without this limit they can start dozens of JVMs at once.
+const MAX_CONCURRENT_APALACHE_PROCESSES: usize = 8;
+
+static APALACHE_PROCESS_PERMITS: Semaphore = Semaphore::new(MAX_CONCURRENT_APALACHE_PROCESSES);
+
+/// A counting semaphore: at most `permit_count` permits are held at the same time.
+struct Semaphore {
+    available_permit_count: Mutex<usize>,
+    permit_released: Condvar,
+}
+
+impl Semaphore {
+    const fn new(permit_count: usize) -> Self {
+        Self {
+            available_permit_count: Mutex::new(permit_count),
+            permit_released: Condvar::new(),
+        }
+    }
+
+    /// Blocks until a permit is available and takes it. Dropping the permit releases it.
+    fn acquire(&self) -> SemaphorePermit<'_> {
+        let mut available_permit_count = self
+            .available_permit_count
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        while *available_permit_count == 0 {
+            available_permit_count = self
+                .permit_released
+                .wait(available_permit_count)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+        *available_permit_count -= 1;
+        SemaphorePermit { semaphore: self }
+    }
+}
+
+struct SemaphorePermit<'a> {
+    semaphore: &'a Semaphore,
+}
+
+impl Drop for SemaphorePermit<'_> {
+    fn drop(&mut self) {
+        *self
+            .semaphore
+            .available_permit_count
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) += 1;
+        self.semaphore.permit_released.notify_one();
+    }
+}
+
 /* Check whether Apalache complains about deadlocks with traces of length one */
 fn run_apalache(
     apalache_binary: &Path,
@@ -166,6 +221,8 @@ fn run_apalache(
         .arg("--length=1")
         .arg(tla_module)
         .env("TEST_TMPDIR", &tmp_subdir_str);
+    // Held until Apalache exits, so that at most MAX_CONCURRENT_APALACHE_PROCESSES run at once.
+    let _permit = APALACHE_PROCESS_PERMITS.acquire();
     cmd.status()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {
@@ -239,6 +296,9 @@ fn sha256_hex(input: Vec<u8>) -> String {
  *
  * Returns an error if Apalache returns one, or if there's something wrong with
  * the setup.
+ *
+ * Before starting Apalache, waits until fewer than `MAX_CONCURRENT_APALACHE_PROCESSES`
+ * Apalache processes are running in this process.
  */
 pub fn check_tla_code_link_raw(
     apalache: &Path,
