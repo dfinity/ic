@@ -750,7 +750,8 @@ _base_validate_version_wasm_sha() {
 #
 #     https://dashboard.internetcomputer.org/proposal/123456
 #
-# In a dry run, there is no new proposal, so this line is not printed.
+# which submit-governance-upgrade-proposals.sh looks for. In a dry run, there
+# is no new proposal, so this line is not printed.
 submit_proposal_using_ic_admin() {
     local IC_ADMIN_OUTPUT_FILE
     IC_ADMIN_OUTPUT_FILE=$(mktemp -t ic-admin-output.XXXXXX)

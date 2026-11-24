@@ -20,6 +20,9 @@ Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
   This script will create a proposal on mainnet from a given proposal text. It
   outputs the values for confirmation, and ensures that the target version
   matches the target hash.
+
+  To submit several proposals while entering your HSM PIN only once, use
+  submit-governance-upgrade-proposals.sh.
   "
     exit 1
 }
