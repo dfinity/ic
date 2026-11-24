@@ -107,12 +107,20 @@ impl PayloadMessage {
     /// Whether the message counts towards the limit on responses per block, as in
     /// [`CanisterHttpPayload::num_limited_responses`].
     pub(crate) fn counts_towards_response_limit(&self) -> bool {
-        !matches!(
-            self,
+        match self {
+            Self::Response(_)
+            | Self::Divergence(_)
+            | Self::OutOfCycles(_)
+            | Self::FlexibleResponses(_)
+            | Self::FlexibleError(
+                FlexibleCanisterHttpError::TooManyRejects { .. }
+                | FlexibleCanisterHttpError::ResponsesTooLarge { .. }
+                | FlexibleCanisterHttpError::OutOfCycles { .. },
+            ) => true,
             Self::Timeout(_)
-                | Self::FlexibleError(FlexibleCanisterHttpError::Timeout { .. })
-                | Self::AsyncReceipt(_)
-        )
+            | Self::FlexibleError(FlexibleCanisterHttpError::Timeout { .. })
+            | Self::AsyncReceipt(_) => false,
+        }
     }
 }
 
