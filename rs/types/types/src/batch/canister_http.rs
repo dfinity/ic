@@ -37,15 +37,13 @@ pub const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
 /// proposal.
 pub const STRIPPED_RESPONSE_DECLARATION_BYTES: usize = 36;
 
-/// The bytes that stripping saves on a response with the given content, net of
-/// declaring it, estimated by the content's [`CountBytes`].
+/// The bytes that stripping saves on a response with the given content, estimated by the
+/// content's [`CountBytes`]: everything above the largest content that is not stripped, so
+/// that a larger content never counts for less on the wire.
 pub fn stripping_savings(content: &CanisterHttpResponseContent) -> usize {
-    let size = content.count_bytes();
-    if size >= MIN_STRIPPED_CONTENT_BYTES {
-        size - STRIPPED_RESPONSE_DECLARATION_BYTES
-    } else {
-        0
-    }
+    content
+        .count_bytes()
+        .saturating_sub(MIN_STRIPPED_CONTENT_BYTES - 1)
 }
 
 /// Payload that contains CanisterHttpPayload messages.
@@ -863,6 +861,28 @@ mod tests {
     use crate::exhaustive::ExhaustiveSet;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_types_cycles::Cycles;
+
+    /// A larger content never counts for less on the wire, also not across the threshold
+    /// for stripping it.
+    #[test]
+    fn wire_size_of_content_never_shrinks() {
+        let wire_size = |size: usize| {
+            let content = CanisterHttpResponseContent::Success(vec![0; size]);
+            content.count_bytes() - stripping_savings(&content)
+        };
+        for size in 0..2 * MIN_STRIPPED_CONTENT_BYTES {
+            assert!(wire_size(size) <= wire_size(size + 1), "size {size}");
+        }
+        // Stripping still saves bytes on contents above the threshold.
+        assert_eq!(
+            wire_size(MIN_STRIPPED_CONTENT_BYTES),
+            MIN_STRIPPED_CONTENT_BYTES - 1
+        );
+        assert_eq!(
+            wire_size(10 * MIN_STRIPPED_CONTENT_BYTES),
+            MIN_STRIPPED_CONTENT_BYTES - 1
+        );
+    }
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.

@@ -6883,7 +6883,7 @@ fn flexible_response_group_delivers_only_as_many_responses_as_fit() {
         callback_id.get(),
         CanisterHttpResponseContent::Success(content.clone()),
     );
-    // The body is stripped on the wire, so it takes up no block space.
+    // The body is stripped on the wire, so only what is left of it takes up block space.
     let entry_size = FlexibleCanisterHttpResponseWithProof::count_bytes(
         &response,
         &metadata_to_share(0, &metadata),
@@ -6937,7 +6937,7 @@ fn flexible_response_group_counts_extra_shares_against_the_block_space() {
         CanisterHttpResponseContent::Success(content.clone()),
     );
     let share = metadata_to_share(0, &metadata);
-    // The body is stripped on the wire, so it takes up no block space.
+    // The body is stripped on the wire, so only what is left of it takes up block space.
     let entry_size = FlexibleCanisterHttpResponseWithProof::count_bytes(&response, &share)
         - stripping_savings(&response.content);
     let base = FlexibleCanisterHttpResponses::base_count_bytes();
