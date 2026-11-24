@@ -22,10 +22,13 @@ printf "    %-12s := %s\n" \
 
 TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 
-# Run the benchmark and capture its output in the `LOG_FILE`.
+# Run the benchmark and capture its output in the `LOG_FILE`. The `sed` removes
+# the thousands separators from the numbers in the bencher output format
+# (`bench:   3,333,486 ns/iter (+/- 78,821)`), so they can be used in arithmetic.
 bash -c "set -o pipefail; \
     ${CMD} \
-        2>&1 | tee '${LOG_FILE}' | egrep '^(test .* )?bench:' --line-buffered \
+        2>&1 | sed -u -E -e :a -e 's/(bench: .*[0-9]),([0-9][0-9][0-9])/\1\2/' -e ta \
+        | tee '${LOG_FILE}' | egrep '^(test .* )?bench:' --line-buffered \
         | awk -W interactive '{
                 split(\$0, r, /^test | ... bench: +| ns\/iter.*/)
                 printf \"> %s %.2f ms\n\", r[2], r[3] / 1000 / 1000; fflush();
