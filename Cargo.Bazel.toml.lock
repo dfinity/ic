@@ -2092,7 +2092,7 @@ dependencies = [
 [[package]]
 name = "build-info"
 version = "0.0.47"
-source = "git+https://github.com/dfinity-lab/build-info?rev=1eb19a1b8e63d58fdaa8f5883dd9611c5312d027#1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "build-info-common",
  "build-info-proc",
@@ -2102,7 +2102,7 @@ dependencies = [
 [[package]]
 name = "build-info-build"
 version = "0.0.47"
-source = "git+https://github.com/dfinity-lab/build-info?rev=1eb19a1b8e63d58fdaa8f5883dd9611c5312d027#1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "anyhow",
  "build-info-common",
@@ -2117,7 +2117,7 @@ dependencies = [
 [[package]]
 name = "build-info-common"
 version = "0.0.47"
-source = "git+https://github.com/dfinity-lab/build-info?rev=1eb19a1b8e63d58fdaa8f5883dd9611c5312d027#1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "derive_more",
  "semver 1.0.28",
@@ -2127,7 +2127,7 @@ dependencies = [
 [[package]]
 name = "build-info-proc"
 version = "0.0.47"
-source = "git+https://github.com/dfinity-lab/build-info?rev=1eb19a1b8e63d58fdaa8f5883dd9611c5312d027#1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+source = "git+https://github.com/dfinity-lab/build-info?rev=b96be92274ec232fedba53a0c9c4b807b96ff17e#b96be92274ec232fedba53a0c9c4b807b96ff17e"
 dependencies = [
  "build-info-common",
  "ciborium",

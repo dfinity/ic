@@ -55,7 +55,7 @@ rust.toolchain(
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
-BUILD_INFO_REV = "1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+BUILD_INFO_REV = "b96be92274ec232fedba53a0c9c4b807b96ff17e"
 
 # Fork of `comparable` migrated to syn 2 (upstream still uses syn 1).
 COMPARABLE_REV = "8338f595496454f9e770389e2edc0d96e137a4e9"

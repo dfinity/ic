@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "287376859be663146c1c3fccd50b8a4a6fd743f34d52acfd21b39ce742432944",
+  "checksum": "6374deced9de36dc99dfe6a18a4c341394d8d1a6fe1030d19662b270f7c7fd3e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -9301,7 +9301,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info"
@@ -9366,7 +9366,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info-build"
@@ -9415,7 +9415,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info-common"
@@ -9496,7 +9496,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "1eb19a1b8e63d58fdaa8f5883dd9611c5312d027"
+            "Rev": "b96be92274ec232fedba53a0c9c4b807b96ff17e"
           },
           "remote": "https://github.com/dfinity-lab/build-info",
           "strip_prefix": "build-info-proc"
