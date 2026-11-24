@@ -3966,8 +3966,9 @@ dependencies = [
  "hex",
  "hex-literal 1.1.0",
  "hickory-resolver",
- "hkdf",
- "hmac 0.12.1",
+ "hkdf 0.12.4",
+ "hkdf 0.13.0",
+ "hmac 0.13.0",
  "hpke",
  "http 1.5.0",
  "http-body",
@@ -4129,6 +4130,7 @@ dependencies = [
  "serde_yaml",
  "sev",
  "sha2 0.10.9",
+ "sha2 0.11.1",
  "sha3 0.10.9",
  "signal-hook 0.4.6",
  "signature 3.0.0",
@@ -4488,7 +4490,7 @@ dependencies = [
  "ff 0.13.1",
  "generic-array",
  "group 0.13.0",
- "hkdf",
+ "hkdf 0.12.4",
  "pem-rfc7468 0.7.0",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
@@ -5586,6 +5588,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hkdf"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4aaa26c720c68b866f2c96ef5c1264b3e6f473fe5d4ce61cd44bbe913e553018"
+dependencies = [
+ "hmac 0.13.0",
+]
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5625,7 +5636,7 @@ dependencies = [
  "chacha20poly1305",
  "digest 0.10.7",
  "generic-array",
- "hkdf",
+ "hkdf 0.12.4",
  "hmac 0.12.1",
  "p384 0.13.1",
  "rand_core 0.9.5",
@@ -6342,7 +6353,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
  "hex-literal 0.4.1",
- "hkdf",
+ "hkdf 0.12.4",
  "ic_principal",
  "pem 3.0.6",
  "rand 0.8.8",
@@ -6695,7 +6706,7 @@ dependencies = [
  "candid",
  "futures",
  "hex-literal 1.1.0",
- "hkdf",
+ "hkdf 0.12.4",
  "ic-cdk",
  "ic-cdk-management-canister",
  "ic-stable-structures 0.7.2",

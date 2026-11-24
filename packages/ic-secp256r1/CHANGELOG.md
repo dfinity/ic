@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Upgrade the `p256` dependency from `0.13` to `0.14`. The public API is unchanged.
+- Upgrade the `sha2` dependency from `0.10` to `0.11` and the `hmac` dependency from `0.12` to `0.13`. The public API is unchanged.
 - `PrivateKey::generate_using_rng` draws 32 bytes from the RNG until they encode a valid secret key, as `p256::ecdsa::SigningKey::random` did, so the same RNG state still yields the same key, and `PrivateKey::generate_insecure_key_for_testing` the same key for the same seed.
 
 ### Fixed

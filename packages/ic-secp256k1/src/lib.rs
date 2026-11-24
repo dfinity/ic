@@ -108,7 +108,7 @@ impl DerivationPath {
     }
 
     fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use k256::elliptic_curve::ops::Reduce;
         use sha2::Sha512;
 
