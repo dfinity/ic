@@ -10,7 +10,7 @@
 //!   in the past payloads, and the user signature is checked eventually, and
 //!   the message validates successfully
 
-use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use dkg::DkgDataPayload;
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
@@ -60,6 +60,7 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use std::{
+    hint::black_box,
     sync::{Arc, RwLock},
     time::Duration,
 };

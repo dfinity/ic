@@ -1,6 +1,4 @@
-use criterion::{
-    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
-};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use ic_crypto_tree_hash::{
     FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*, MixedHashTree,
     WitnessGenerator, flatmap, lookup_path,
@@ -8,6 +6,7 @@ use ic_crypto_tree_hash::{
 use ic_crypto_tree_hash_test_utils::{
     hash_tree_builder_from_labeled_tree, mixed_hash_tree_digest_recursive,
 };
+use std::hint::black_box;
 
 // Do something similar to what ic_types_test_utils::ids::message_test_id() does
 // because it compiles *much* faster than importing the function.

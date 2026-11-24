@@ -1,8 +1,9 @@
-use criterion::{BatchSize, BenchmarkId, Criterion, black_box};
+use criterion::{BatchSize, BenchmarkId, Criterion};
 use criterion_time::ProcessTime;
 
 use ic_replicated_state::page_map::int_map::{AsInt, IntMap, MutableIntMap};
 use std::collections::{BTreeMap, HashMap};
+use std::hint::black_box;
 use std::sync::Arc;
 
 type Value = Arc<Vec<u8>>;

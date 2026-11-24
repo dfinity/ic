@@ -1,9 +1,8 @@
-use criterion::{
-    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
-};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use ic_ed25519::{PrivateKey, PublicKey};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use std::hint::black_box;
 
 fn rng() -> ChaCha20Rng {
     ChaCha20Rng::seed_from_u64(0xBEEF)

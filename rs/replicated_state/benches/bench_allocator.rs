@@ -1,7 +1,8 @@
 use std::cell::Cell;
+use std::hint::black_box;
 use std::sync::Arc;
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_replicated_state::PageIndex;
 use ic_replicated_state::page_map::PageAllocator;
 use ic_sys::{PAGE_SIZE, PageBytes};
