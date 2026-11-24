@@ -47,4 +47,26 @@ mod tests {
             ]
         );
     }
+
+    /// The client and server TLS public keys are DER-encoded P-256 SubjectPublicKeyInfos of 91
+    /// bytes each, so the SEQUENCE that holds both is encoded with a long-form length.
+    #[test]
+    fn test_get_disk_encryption_key_token_custom_data_with_p256_sized_keys_is_stable() {
+        let client_tls_public_key = [1_u8; 91];
+        let server_tls_public_key = [2_u8; 91];
+        let custom_data = GetDiskEncryptionKeyTokenCustomData {
+            client_tls_public_key: OctetStringRef::new(&client_tls_public_key).unwrap(),
+            server_tls_public_key: OctetStringRef::new(&server_tls_public_key).unwrap(),
+        };
+
+        assert_eq!(
+            &custom_data.encode_for_sev().unwrap().to_bytes(),
+            // As above, these bytes must stay stable.
+            &[
+                2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 7, 144, 179, 97, 147, 57, 92, 165, 146, 56, 108, 36, 147, 182, 11, 56,
+                125, 79, 142, 107, 23, 146, 164, 14, 93, 138, 146, 185, 68, 185, 236, 22
+            ]
+        );
+    }
 }
