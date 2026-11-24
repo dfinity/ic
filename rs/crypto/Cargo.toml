@@ -91,6 +91,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 maplit = { workspace = true }
 proptest = { workspace = true }
 prost = { workspace = true }
+rand_0_10 = { workspace = true }
 rsa = { workspace = true }
 
 [[bench]]

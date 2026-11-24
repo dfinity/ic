@@ -589,9 +589,15 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
 
 impl ExhaustiveSet for CryptoHash {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut data = [0; 32];
-        rng.fill_bytes(&mut data);
-        vec![Self(data.to_vec())]
+        let mut random = vec![0; 32];
+        rng.fill_bytes(&mut random);
+
+        // The empty hash stands in for hashes that don't exist: genesis, recovery and post-split
+        // CUPs use it as the parent of their summary block and of their random beacon, and genesis
+        // CUPs also as their state hash.
+        let empty = vec![];
+
+        vec![Self(random), Self(empty)]
     }
 }
 
@@ -1070,7 +1076,11 @@ mod tests {
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-    use crate::{canister_http::CanisterHttpResponse, consensus::ConsensusMessage};
+    use crate::{
+        canister_http::CanisterHttpResponse,
+        consensus::{ConsensusMessage, catchup::CatchUpContentProtobufBytes},
+        crypto::Signable,
+    };
 
     use super::*;
 
@@ -1116,6 +1126,18 @@ mod tests {
                         cup.block.as_ref().payload.as_ref()
                     );
                 }
+
+                // Consensus verifies a CUP's signature over its re-encoded content, so decoding
+                // must reproduce the signed bytes.
+                let received = pb::CatchUpPackage {
+                    content: bytes,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    cup.as_signed_bytes(),
+                    CatchUpContentProtobufBytes::from(&received).as_signed_bytes(),
+                    "Signed bytes of file {path:?} changed after deserialization"
+                );
             }
         }
     }

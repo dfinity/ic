@@ -11,11 +11,35 @@ sns_mainnet_canister_wasm_hash_versions() {
     echo "$MAINNET_CANISTER_WASM_HASH_VERSIONS" | $IDL2JSON | jq -c ".steps[$VERSION_INDEX] | .pretty_version[0]"
 }
 
+# Prints the hash of the WASM that SNS-W on mainnet currently uses for new SNSs
+# (i.e. the latest published version) of the given type. SNS_CANISTER_TYPE is
+# one of the names in SNS_CANISTERS (e.g. root, governance, index).
 sns_mainnet_wasm_hash() {
-    local SNS_CANISTER_TYPE=$1
-    local VERSION_INDEX=${2:--1} # default to latest
+    ensure_variable_set IDL2JSON
 
-    sns_wasm_hash_for_canister $(sns_mainnet_canister_wasm_hash_versions "$VERSION_INDEX") $SNS_CANISTER_TYPE
+    local SNS_CANISTER_TYPE=$1
+
+    # Map from the name we use to the names used by the SNS-WASM canister.
+    local CANISTER_TYPE_IN_SNS_WASM
+    case "$SNS_CANISTER_TYPE" in
+        root) CANISTER_TYPE_IN_SNS_WASM="Root" ;;
+        governance) CANISTER_TYPE_IN_SNS_WASM="Governance" ;;
+        swap) CANISTER_TYPE_IN_SNS_WASM="Swap" ;;
+        ledger) CANISTER_TYPE_IN_SNS_WASM="Ledger" ;;
+        index) CANISTER_TYPE_IN_SNS_WASM="Ledger Index" ;;
+        archive) CANISTER_TYPE_IN_SNS_WASM="Ledger Archive" ;;
+        *)
+            print_red "Unknown SNS canister type: ${SNS_CANISTER_TYPE}" >&2
+            return 1
+            ;;
+    esac
+
+    sns_w_latest_version ic \
+        | $IDL2JSON \
+        | jq --raw-output \
+            --exit-status \
+            --arg canister_type_in_sns_wasm "$CANISTER_TYPE_IN_SNS_WASM" \
+            '.[] | select(.["0"] == $canister_type_in_sns_wasm) | .["1"]'
 }
 
 sns_wasm_hash_for_canister() {

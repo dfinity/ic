@@ -51,7 +51,7 @@ use ic_types::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
-        ValidationContext, slice_to_messages,
+        ValidationContext, iterator_to_bytes, slice_to_messages,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -1264,6 +1264,58 @@ fn validate_payload_rejects_a_non_canonical_encoding_of_a_valid_payload() {
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::DecodeError(ProxyDecodeError::Other(_)),
+                ),
+            ))
+        );
+    });
+}
+
+/// The signers of a response's proof must be distinct, so a payload whose proof
+/// repeats a signer is rejected.
+#[test]
+fn validate_payload_rejects_a_proof_that_repeats_a_signer() {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(77);
+        let request_context = CanisterHttpRequestContext {
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
+            ..request_context(Replication::NonReplicated(delegated_node_id))
+        };
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        add_signer_to_proof(&mut proof, delegated_node_id);
+        proof.initial_spent =
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+        let mut proof = pb::CanisterHttpResponseWithConsensus::from(proof);
+        let validate = |proof: &pb::CanisterHttpResponseWithConsensus| {
+            let message = pb::CanisterHttpResponseMessage {
+                message_type: Some(pb::canister_http_response_message::MessageType::Response(
+                    proof.clone(),
+                )),
+            };
+            let payload = iterator_to_bytes(std::iter::once(message), NumBytes::new(u64::MAX));
+            payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload,
+                &[],
+            )
+        };
+        assert!(validate(&proof).is_ok());
+
+        let mut repeated = proof.signatures[0].clone();
+        repeated.signature = vec![0xAB; 64];
+        proof.signatures.insert(0, repeated);
+
+        assert_matches!(
+            validate(&proof),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DecodeError(
+                        ProxyDecodeError::DuplicateEntry { .. }
+                    ),
                 ),
             ))
         );

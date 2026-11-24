@@ -140,11 +140,6 @@ impl BareMetalIpmiSession {
         self.mgmt_mac
     }
 
-    /// Process ID of the ipmitool process that keeps the SOL session active
-    pub fn process_id(&self) -> i32 {
-        self.session.process.child_pid.as_raw()
-    }
-
     /// Injects the provided SSH public key into the baremetal host by logging in via IPMI SOL
     /// The key must be provided in OpenSSH format (e.g. "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAr...")
     pub fn inject_ssh_key(&mut self, ssh_public_key: &str) -> Result<()> {
