@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "3cce7ec76e584b8765a36e7c781684e1f1c151bf1e3e62eb89b879a61128078c",
+  "checksum": "93855ece32a67246ce8787dab3b93a5139aaae41ac693b70e8b0fed2792606b6",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7309,6 +7309,39 @@
       ],
       "version": "0.11.1"
     },
+    "bech32 0.12.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "bech32",
+      "license": "MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "bech32",
+      "package_url": "https://github.com/rust-bitcoin/rust-bech32",
+      "repository": {
+        "Http": {
+          "sha256": "efbd3e1070bbdf4cd88a75264e18e8a26f7cb5c6949eadf0ceb85fb159cf08f8",
+          "url": "https://static.crates.io/crates/bech32/0.12.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bech32",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.12.0"
+    },
     "bech32 0.8.1": {
       "common_attrs": {
         "crate_features": [
@@ -7338,37 +7371,6 @@
         }
       ],
       "version": "0.8.1"
-    },
-    "bech32 0.9.1": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "bech32",
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "bech32",
-      "package_url": "https://github.com/rust-bitcoin/rust-bech32",
-      "repository": {
-        "Http": {
-          "sha256": "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445",
-          "url": "https://static.crates.io/crates/bech32/0.9.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bech32",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.9.1"
     },
     "beef 0.5.2": {
       "common_attrs": {
@@ -17526,7 +17528,7 @@
             "target": "base64"
           },
           {
-            "id": "bech32 0.9.1",
+            "id": "bech32 0.12.0",
             "target": "bech32"
           },
           {
@@ -66651,7 +66653,7 @@
     "axum-server 0.7.3",
     "backon 1.6.0",
     "base64 0.23.1",
-    "bech32 0.9.1",
+    "bech32 0.12.0",
     "bincode 1.3.3",
     "bip32 0.5.3",
     "bit-vec 0.10.2",
