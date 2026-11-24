@@ -16,16 +16,6 @@ ic-validator-http-request-arbitrary = { path = "../http_request_arbitrary" }
 ic-validator-ingress-message = { path = "../ingress_message" }
 libfuzzer-sys = { workspace = true }
 
-[dependencies.ic-validator]
-path = ".."
-
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
-
-[profile.release]
-debug = 1
-
 [[bin]]
 name = "validate_request"
 path = "fuzz_targets/validate_request.rs"
