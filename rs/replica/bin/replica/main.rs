@@ -4,7 +4,7 @@ use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_async_utils::{abort_on_panic, shutdown_signal};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_logger::{info, new_replica_logger_from_config};
+use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
@@ -39,6 +39,14 @@ use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
 
+/// How long shutting down may take after `SIGTERM` or `SIGINT`, before the
+/// replica exits with an error. Long enough to wait for the latest checkpoint's
+/// verification, which took up to 39 s with 200k canisters under heavy load;
+/// shorter than both the orchestrator's grace period before escalating to
+/// `SIGKILL` (60 s) and systemd's default stop timeout at reboot (90 s), so that
+/// the replica exits on its own.
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(55);
+
 /// Determine sha256 hash of the current replica binary
 ///
 /// Returns tuple (path of the replica binary, hex encoded sha256 of binary)
@@ -62,6 +70,19 @@ fn available_parallelism() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
+}
+
+/// Spawns a thread that exits the process with an error after
+/// `SHUTDOWN_TIMEOUT`.
+fn spawn_shutdown_watchdog(log: ReplicaLogger) {
+    std::thread::spawn(move || {
+        std::thread::sleep(SHUTDOWN_TIMEOUT);
+        error!(
+            log,
+            "Shutdown did not complete within {:?}, exiting", SHUTDOWN_TIMEOUT
+        );
+        std::process::exit(1);
+    });
 }
 
 fn main() -> io::Result<()> {
@@ -258,7 +279,7 @@ fn main() -> io::Result<()> {
     //   2. Layers for generating flamegraphs
     //   3. Jeager exporter if enabled
 
-    let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
+    let (logging, logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
     // TARPC is way too verbose. Turn it off for now.
     let logging = logging.with_filter(filter_fn(|metadata| metadata.target() != "tarpc::client"));
 
@@ -298,7 +319,7 @@ fn main() -> io::Result<()> {
     );
 
     info!(logger, "Constructing IC stack");
-    let (_, _, _, _p2p_thread_joiner, _xnet_endpoint) =
+    let (state_manager, _, _, _p2p_thread_joiner, _xnet_endpoint) =
         ic_replica::setup_ic_stack::construct_ic_stack(
             &logger,
             &metrics_registry,
@@ -336,22 +357,36 @@ fn main() -> io::Result<()> {
         });
     }
 
-    let save_logger = logger.clone();
     rt_main.block_on(async move {
         let _drop_async_log_guard = async_log_guard;
         let _drop_sigpipe_handler = sigpipe_handler;
         info!(logger, "IC Replica Running");
         // Blocking on `SIGINT` or `SIGTERM`.
-        shutdown_signal(logger.clone()).await
+        shutdown_signal(logger.clone()).await;
+        spawn_shutdown_watchdog(logger.clone());
+        // So that a restart neither archives the latest checkpoint nor recomputes its
+        // manifest.
+        if let Err(err) =
+            tokio::task::spawn_blocking(move || state_manager.wait_for_latest_checkpoint()).await
+        {
+            error!(logger, "Waiting for the latest checkpoint failed: {}", err);
+        }
+        info!(logger, "IC Replica Terminating");
     });
-    info!(save_logger, "IC Replica Terminating");
 
     #[cfg(feature = "profiler")]
     finalize_report(&guard);
     // Ensure cleanup of the temporary directory is triggered; error
     // otherwise.
     tmpdir.close()?;
-    Ok(())
+    // Flush what the non-blocking log writer still buffers, as exiting below runs
+    // no destructors.
+    drop(logging_drop_guard);
+
+    // Exit without dropping the IC stack: its teardown would wait for the tip
+    // thread's queued work (resetting the tip, merging), which a restart redoes
+    // anyway, and stop the artifact processors while P2P still delivers to them.
+    std::process::exit(0)
 }
 
 #[cfg(feature = "profiler")]

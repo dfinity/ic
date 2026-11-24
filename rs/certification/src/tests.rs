@@ -687,6 +687,32 @@ fn should_fail_on_unexpected_tree() {
     );
 }
 
+#[rstest]
+#[case::empty(vec![])]
+#[case::incomplete(vec![0x80])]
+fn should_fail_on_malformed_time_leaf(#[case] time_leaf: Vec<u8>) {
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CustomTree(LabeledTree::SubTree(flatmap![
+            Label::from("time") => LabeledTree::Leaf(time_leaf)
+        ])),
+        rng,
+    )
+    .build();
+
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &canister_id(1),
+        &pk,
+        Digest([1; 32]).as_bytes(),
+    );
+
+    assert_matches!(
+        verification_result,
+        Err(CertificateValidationError::DeserError { .. })
+    );
+}
+
 #[test]
 fn should_validate_delegation_cert() {
     let rng = &mut reproducible_rng();

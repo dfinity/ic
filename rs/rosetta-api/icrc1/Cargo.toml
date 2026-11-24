@@ -42,7 +42,7 @@ reqwest = { workspace = true }
 rolling-file = { workspace = true }
 rosetta-core = { path = "../common/rosetta_core" }
 rusqlite = { workspace = true, features = ["bundled"] }
-tokio-rusqlite = "0.7"
+tokio-rusqlite = "0.10"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

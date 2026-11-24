@@ -2,12 +2,18 @@ use crate::{BitcoinPayloadBuilder, payload_builder::parse};
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network,
+    SendTransactionRequest, SendTransactionResponse,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
-    self_validating_payload::SelfValidatingPayloadBuilder,
+    consensus::InvalidPayloadReason,
+    self_validating_payload::{
+        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadBuilder,
+        SelfValidatingPayloadValidationFailure,
+    },
+    validation::ValidationError,
 };
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
 use ic_interfaces_registry::RegistryValue;
@@ -22,8 +28,10 @@ use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     Height, NumBytes, RegistryVersion, SubnetId,
-    batch::ValidationContext,
+    batch::{SelfValidatingPayload, ValidationContext},
     crypto::{CryptoHash, CryptoHashOf},
+    messages::CallbackId,
+    state_manager::StateManagerError,
     time::UNIX_EPOCH,
 };
 use mockall::mock;
@@ -461,6 +469,242 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
                 1,
             );
             assert!(!payload.is_empty());
+        },
+    );
+}
+
+// Returns requests that end up as a pending `get_successors` request with
+// callback ID 0 and a pending `send_transaction` request with callback ID 1.
+fn get_successors_and_send_transaction_requests() -> Vec<BitcoinAdapterRequestWrapper> {
+    vec![
+        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+            processed_block_hashes: vec![vec![10; 32]],
+            anchor: vec![10; 32],
+            network: Network::BitcoinTestnet,
+        }),
+        BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
+            network: Network::BitcoinTestnet,
+            transaction: vec![],
+        }),
+    ]
+}
+
+fn get_successors_response() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::GetSuccessorsResponse(GetSuccessorsResponseComplete {
+        blocks: vec![],
+        next: vec![],
+    })
+}
+
+fn get_successors_reject() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::GetSuccessorsReject(BitcoinReject {
+        reject_code: RejectCode::SysTransient,
+        message: "ConnectionBroken".to_string(),
+    })
+}
+
+fn send_transaction_response() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::SendTransactionResponse(SendTransactionResponse {})
+}
+
+fn send_transaction_reject() -> BitcoinAdapterResponseWrapper {
+    BitcoinAdapterResponseWrapper::SendTransactionReject(BitcoinReject {
+        reject_code: RejectCode::SysTransient,
+        message: "ConnectionBroken".to_string(),
+    })
+}
+
+fn payload_with(responses: Vec<(BitcoinAdapterResponseWrapper, u64)>) -> SelfValidatingPayload {
+    SelfValidatingPayload::new(
+        responses
+            .into_iter()
+            .map(|(response, callback_id)| BitcoinAdapterResponse {
+                response,
+                callback_id,
+            })
+            .collect(),
+    )
+}
+
+#[test]
+fn validation_accepts_responses_to_pending_requests_of_matching_type() {
+    bitcoin_payload_builder_test(
+        MockAdapterClient::new(),
+        MockAdapterClient::new(),
+        mock_state_manager(get_successors_and_send_transaction_requests()),
+        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE),
+        |proposal_context, bitcoin_payload_builder| {
+            for payload in [
+                payload_with(vec![
+                    (get_successors_response(), 0),
+                    (send_transaction_response(), 1),
+                ]),
+                payload_with(vec![
+                    (get_successors_reject(), 0),
+                    (send_transaction_reject(), 1),
+                ]),
+            ] {
+                let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
+                    &payload,
+                    proposal_context.validation_context,
+                    &[],
+                );
+                assert!(
+                    validation_result.is_ok(),
+                    "validation did not pass {validation_result:?}"
+                );
+            }
+        },
+    );
+}
+
+#[test]
+fn validation_rejects_responses_without_pending_request_of_matching_type() {
+    bitcoin_payload_builder_test(
+        MockAdapterClient::new(),
+        MockAdapterClient::new(),
+        mock_state_manager(get_successors_and_send_transaction_requests()),
+        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE),
+        |proposal_context, bitcoin_payload_builder| {
+            for (response, callback_id) in [
+                // There is no pending request with callback ID 2.
+                (get_successors_response(), 2),
+                (send_transaction_reject(), 2),
+                // Responses of the wrong type.
+                (send_transaction_response(), 0),
+                (send_transaction_reject(), 0),
+                (get_successors_response(), 1),
+                (get_successors_reject(), 1),
+            ] {
+                let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
+                    &payload_with(vec![(response.clone(), callback_id)]),
+                    proposal_context.validation_context,
+                    &[],
+                );
+                assert!(
+                    matches!(
+                        validation_result,
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidSelfValidatingPayloadReason::NonMatchingResponse(id)
+                        )) if id == CallbackId::from(callback_id)
+                    ),
+                    "{response:?} for callback ID {callback_id}: unexpected result {validation_result:?}"
+                );
+            }
+        },
+    );
+}
+
+#[test]
+fn validation_rejects_duplicate_responses() {
+    bitcoin_payload_builder_test(
+        MockAdapterClient::new(),
+        MockAdapterClient::new(),
+        mock_state_manager(get_successors_and_send_transaction_requests()),
+        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE),
+        |proposal_context, bitcoin_payload_builder| {
+            // Two responses for the same request in one payload.
+            let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
+                &payload_with(vec![
+                    (get_successors_response(), 0),
+                    (get_successors_reject(), 0),
+                ]),
+                proposal_context.validation_context,
+                &[],
+            );
+            assert!(
+                matches!(
+                    validation_result,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidSelfValidatingPayloadReason::DuplicateResponse(id)
+                    )) if id == CallbackId::from(0)
+                ),
+                "unexpected result {validation_result:?}"
+            );
+
+            // A response for a request that a past payload already answered.
+            let past_payload = payload_with(vec![(send_transaction_reject(), 1)]);
+            let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
+                &payload_with(vec![(send_transaction_response(), 1)]),
+                proposal_context.validation_context,
+                &[&past_payload],
+            );
+            assert!(
+                matches!(
+                    validation_result,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidSelfValidatingPayloadReason::DuplicateResponse(id)
+                    )) if id == CallbackId::from(1)
+                ),
+                "unexpected result {validation_result:?}"
+            );
+
+            // The same, through `BatchPayloadBuilder::validate_payload()`.
+            let past_payload = parse::payload_to_bytes(
+                &past_payload,
+                SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                &no_op_logger(),
+            );
+            let payload = parse::payload_to_bytes(
+                &payload_with(vec![(send_transaction_response(), 1)]),
+                SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                &no_op_logger(),
+            );
+            let validation_result = bitcoin_payload_builder.validate_payload(
+                Height::new(1),
+                &proposal_context,
+                &payload,
+                &[PastPayload {
+                    height: Height::from(0),
+                    time: UNIX_EPOCH,
+                    block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                    payload: &past_payload,
+                }],
+            );
+            assert!(
+                matches!(
+                    validation_result,
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidPayloadReason::InvalidSelfValidatingPayload(
+                            InvalidSelfValidatingPayloadReason::DuplicateResponse(id)
+                        )
+                    )) if id == CallbackId::from(1)
+                ),
+                "unexpected result {validation_result:?}"
+            );
+        },
+    );
+}
+
+#[test]
+fn validation_fails_if_state_is_unavailable() {
+    let mut state_manager = MockStateManager::new();
+    state_manager
+        .expect_get_state_at()
+        .return_const(Err(StateManagerError::StateNotCommittedYet(
+            CERTIFIED_HEIGHT,
+        )));
+
+    bitcoin_payload_builder_test(
+        MockAdapterClient::new(),
+        MockAdapterClient::new(),
+        state_manager,
+        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE),
+        |proposal_context, bitcoin_payload_builder| {
+            let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
+                &payload_with(vec![(get_successors_response(), 0)]),
+                proposal_context.validation_context,
+                &[],
+            );
+            assert!(
+                matches!(
+                    validation_result,
+                    Err(ValidationError::ValidationFailed(
+                        SelfValidatingPayloadValidationFailure::StateUnavailable
+                    ))
+                ),
+                "unexpected result {validation_result:?}"
+            );
         },
     );
 }

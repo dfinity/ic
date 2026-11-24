@@ -1,7 +1,7 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
-    Recovery,
+    Recovery, STATES_METADATA,
     admin_helper::IcAdmin,
     cli::consent_given,
     command_helper::{confirm_exec_cmd, exec_cmd},
@@ -22,7 +22,39 @@ use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, ReplicaVersion, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+};
+
+/// Stops ic-replica, then the crypto vault (`ic-crypto-csp`) and its socket.
+///
+/// The vault keeps running when only ic-replica is stopped, and may still be rewriting its key
+/// store for a request ic-replica sent before stopping, which creates and deletes temporary
+/// files in `/var/lib/ic/crypto`. Steps that stop the replica use this command, so that a node
+/// they stopped is in the state [CMD_RESTART_REPLICA] expects. The vault's socket is stopped as
+/// well, so that a connection to it can't start the vault again. The two commands are joined by
+/// `&&`, so that the vault, which ic-replica uses, is only stopped once ic-replica has stopped,
+/// and the command fails if ic-replica can't be stopped.
+pub const CMD_STOP_REPLICA: &str = "\
+    sudo systemctl stop ic-replica && \
+    sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service;";
+
+/// Re-runs `setup-permissions`, then starts the crypto vault and ic-replica. Expects
+/// [CMD_STOP_REPLICA] to have run.
+///
+/// `setup-permissions` aborts if a file disappears while it walks `/var/lib/ic`, leaving the
+/// directories it hasn't reached yet, such as a replaced `ic_state`, with the wrong owner. So,
+/// as at boot, it must not run while the crypto vault is running. The commands are joined by `;`
+/// so that the vault and ic-replica are started even if `setup-permissions` fails.
+pub const CMD_RESTART_REPLICA: &str = "\
+    sudo systemctl restart setup-permissions;\n\
+    sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service;\n\
+    sudo systemctl start ic-replica;\n\
+    sudo systemctl status ic-replica;";
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -280,9 +312,11 @@ impl Step for MergeCertificationPoolsStep {
 pub struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_helper: SshHelper,
-    pub backup_dir: PathBuf,
+    /// If given, the data is downloaded into this directory, and then copied
+    /// into `working_dir`, so that a pristine copy of the downloaded data is
+    /// kept. Otherwise, the data is downloaded straight into `working_dir`.
+    pub backup_dir: Option<PathBuf>,
     pub working_dir: PathBuf,
-    pub keep_downloaded_data: bool,
     pub data_includes: Vec<PathBuf>,
     pub include_config: bool,
 }
@@ -304,25 +338,20 @@ impl Step for DownloadIcDataStep {
             let config_src = self.ssh_helper.remote_path(IC_JSON5_PATH);
             descr.push_str(&format!(" and config from {}", config_src));
         }
-        if self.keep_downloaded_data {
-            descr.push_str(&format!(
+        match &self.backup_dir {
+            Some(backup_dir) => descr.push_str(&format!(
                 " to {}. Then copy to {}.",
-                self.backup_dir.display(),
+                backup_dir.display(),
                 self.working_dir.display()
-            ));
-        } else {
-            descr.push_str(&format!(" to {}.", self.working_dir.display()));
+            )),
+            None => descr.push_str(&format!(" to {}.", self.working_dir.display())),
         }
 
         descr
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let target = if self.keep_downloaded_data {
-            &self.backup_dir
-        } else {
-            &self.working_dir
-        };
+        let target = self.backup_dir.as_ref().unwrap_or(&self.working_dir);
 
         if !self.data_includes.is_empty() {
             self.ssh_helper.rsync_includes(
@@ -331,7 +360,7 @@ impl Step for DownloadIcDataStep {
                 target.join("data").join(""),
             )?;
 
-            if self.keep_downloaded_data {
+            if self.backup_dir.is_some() {
                 rsync_includes(
                     &self.logger,
                     &self.data_includes,
@@ -352,7 +381,7 @@ impl Step for DownloadIcDataStep {
             self.ssh_helper
                 .rsync(self.ssh_helper.remote_path(IC_JSON5_PATH), target.join(""))?;
 
-            if self.keep_downloaded_data {
+            if self.backup_dir.is_some() {
                 rsync(
                     &self.logger,
                     target.join(PathBuf::from(IC_JSON5_PATH).file_name().unwrap()),
@@ -367,21 +396,22 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub(crate) struct CopyLocalIcStateStep {
+pub struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
     pub data_includes: Vec<PathBuf>,
+    pub include_config: bool,
 }
 
 impl Step for CopyLocalIcStateStep {
     fn descr(&self) -> String {
-        format!(
-            "Copy node state from {} and config from {} to {}.",
-            IC_DATA_PATH,
-            IC_JSON5_PATH,
-            self.working_dir.display()
-        )
+        let mut descr = format!("Copy node state from {IC_DATA_PATH}");
+        if self.include_config {
+            descr.push_str(&format!(" and config from {IC_JSON5_PATH}"));
+        }
+        descr.push_str(&format!(" to {}.", self.working_dir.display()));
+        descr
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -410,9 +440,11 @@ impl Step for CopyLocalIcStateStep {
         }
 
         // Config
-        let mut cp = Command::new("cp");
-        cp.arg(IC_JSON5_PATH).arg(&self.working_dir);
-        confirm_exec_cmd(&mut cp, log)?;
+        if self.include_config {
+            let mut cp = Command::new("cp");
+            cp.arg(IC_JSON5_PATH).arg(&self.working_dir);
+            confirm_exec_cmd(&mut cp, log)?;
+        }
 
         Ok(())
     }
@@ -623,26 +655,29 @@ pub struct UploadStateAndRestartStep {
 }
 
 impl UploadStateAndRestartStep {
-    const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
-    const CMD_RESTART_REPLICA: &str = "\
-        sudo systemctl restart setup-permissions;\
-        sudo systemctl start ic-replica;\
-        sudo systemctl status ic-replica;";
-}
-impl Step for UploadStateAndRestartStep {
-    fn descr(&self) -> String {
-        let replica = match self.upload_method {
-            DataLocation::Remote(ip) => &format!("replica {ip}"),
-            DataLocation::Local => "local replica",
-        };
+    fn node(&self) -> ExecutionMode {
+        match self.upload_method {
+            DataLocation::Remote(ip) => ExecutionMode::Remote(SshHelper::new(
+                self.logger.clone(),
+                self.ssh_user.clone(),
+                ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            )),
+            DataLocation::Local => ExecutionMode::Local,
+        }
+    }
+
+    pub fn upload_description(&self) -> String {
         format!(
-            "Stopping {replica}, uploading and replacing state from {}, set access \
-            rights, restart replica.",
+            "Stop the replica and its crypto vault on {} and replace the state with the one from {}.",
+            self.node(),
             self.data_src.display()
         )
     }
 
-    fn exec(&self) -> RecoveryResult<()> {
+    /// Install the state and leave the replica stopped.
+    pub fn upload_state(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -668,15 +703,7 @@ impl Step for UploadStateAndRestartStep {
         let ic_state_path = PathBuf::from(IC_DATA_PATH).join(IC_STATE);
 
         // Decide: remote or local recovery
-        if let DataLocation::Remote(node_ip) = self.upload_method {
-            let ssh_helper = SshHelper::new(
-                self.logger.clone(),
-                self.ssh_user.clone(),
-                node_ip,
-                self.require_confirmation,
-                self.key_file.clone(),
-            );
-
+        if let ExecutionMode::Remote(ssh_helper) = self.node() {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
@@ -684,7 +711,7 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                ExecutionMode::Remote(&ssh_helper)
+                ExecutionMode::Remote(ssh_helper.clone())
                     .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
                     .unwrap_or_default()
                     .0,
@@ -709,31 +736,50 @@ impl Step for UploadStateAndRestartStep {
             );
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
+            // The states metadata is only a cache that the state manager
+            // rebuilds if it is missing, so it is uploaded only if present.
+            // If it is absent, any copy left in the upload directory by an
+            // interrupted upload is removed. This is a command of its own, so
+            // that a failure stops the upload.
+            let has_states_metadata = self.data_src.join(STATES_METADATA).exists();
+            if !has_states_metadata {
+                info!(
+                    self.logger,
+                    "Removing stale states metadata from the remote upload directory..."
+                );
+                ssh_helper.ssh(format!(
+                    "rm -f {}",
+                    upload_dir.join(STATES_METADATA).display()
+                ))?;
+            }
+
             info!(self.logger, "Uploading state...");
-            let includes = Recovery::get_state_includes_with_given_checkpoint(max_checkpoint);
+            let includes: Vec<_> =
+                Recovery::get_state_includes_with_given_checkpoint(max_checkpoint)
+                    .into_iter()
+                    .filter(|path| has_states_metadata || path != Path::new(STATES_METADATA))
+                    .collect();
             ssh_helper.rsync_includes(
                 &includes,
                 &self.data_src,
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
+            // With `-T`, the move fails if the state in place could not be
+            // removed, instead of moving the uploaded state inside it.
             let cmd_replace_state = format!(
-                "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};",
+                "sudo rm -r {ic_state_path}; sudo mv -T {upload_dir} {ic_state_path};",
                 ic_state_path = ic_state_path.display(),
                 upload_dir = upload_dir.display()
             );
 
-            info!(self.logger, "Restarting replica...");
-            ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
+            info!(self.logger, "Stopping replica and crypto vault...");
+            ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
             ssh_helper.ssh(cmd_replace_state)?;
-            ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
         } else {
             let log = self.require_confirmation.then_some(&self.logger);
-            info!(self.logger, "Stopping replica...");
-            confirm_exec_cmd(
-                Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA),
-                log,
-            )?;
+            info!(self.logger, "Stopping replica and crypto vault...");
+            confirm_exec_cmd(Command::new("bash").arg("-c").arg(CMD_STOP_REPLICA), log)?;
 
             // For local recoveries we first backup the original state, and
             // then simply `mv` the new state to the upload directory. No
@@ -744,27 +790,42 @@ impl Step for UploadStateAndRestartStep {
                 "Moving original state into {}...",
                 backup_path.display()
             );
+            // With `-T`, the move fails if the backup already holds a state,
+            // e.g. from an earlier run, instead of moving the original state
+            // inside it.
             let mut cmd_backup_state = Command::new("sudo");
-            cmd_backup_state.arg("mv");
+            cmd_backup_state.arg("mv").arg("-T");
             cmd_backup_state.arg(&ic_state_path);
             cmd_backup_state.arg(backup_path);
             confirm_exec_cmd(&mut cmd_backup_state, log)?;
 
             info!(self.logger, "Moving state locally...");
+            // `-T` never moves the new state inside a state in place.
             let mut mv_to_target = Command::new("sudo");
-            mv_to_target.arg("mv");
+            mv_to_target.arg("mv").arg("-T");
             mv_to_target.arg(&self.data_src);
             mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
-
-            info!(self.logger, "Restarting replica...");
-            confirm_exec_cmd(
-                Command::new("bash")
-                    .arg("-c")
-                    .arg(Self::CMD_RESTART_REPLICA),
-                log,
-            )?;
         }
+        Ok(())
+    }
+}
+
+impl Step for UploadStateAndRestartStep {
+    fn descr(&self) -> String {
+        format!(
+            "{} Set access rights and restart the crypto vault and replica.",
+            self.upload_description()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        self.upload_state()?;
+        info!(self.logger, "Restarting replica...");
+        self.node().execute(
+            CMD_RESTART_REPLICA.to_string(),
+            self.require_confirmation.then_some(&self.logger),
+        )?;
         Ok(())
     }
 }
@@ -821,7 +882,7 @@ pub(crate) struct StopReplicaStep {
 
 impl Step for StopReplicaStep {
     fn descr(&self) -> String {
-        format!("Stopping replica on {}.", self.node_ip)
+        format!("Stopping replica and crypto vault on {}.", self.node_ip)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -832,7 +893,7 @@ impl Step for StopReplicaStep {
             self.require_confirmation,
             self.key_file.clone(),
         );
-        ssh_helper.ssh("sudo systemctl stop ic-replica".to_string())?;
+        ssh_helper.ssh(CMD_STOP_REPLICA.to_string())?;
         Ok(())
     }
 }
@@ -955,12 +1016,10 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
 sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
-sudo systemctl stop ic-replica;
+{CMD_STOP_REPLICA}
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions;
-sudo systemctl start ic-replica;
-sudo systemctl status ic-replica;
+{CMD_RESTART_REPLICA}
 "#,
             UploadCUPAndTarStep::get_upload_dir_name().display(),
         )

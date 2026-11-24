@@ -3,10 +3,10 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use super::{CanisterHttpPayloadBuilderImpl, parse};
+use super::CanisterHttpPayloadBuilderImpl;
 use crate::payload_builder::{
     divergence_response_into_reject,
-    parse::{bytes_to_payload, payload_to_bytes},
+    parse::{PayloadMessage, bytes_to_payload, messages_to_bytes},
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
@@ -31,8 +31,8 @@ use ic_interfaces::{
 use ic_interfaces_mocks::crypto::MockCrypto;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, FlexibleHttpGlobalError, FlexibleHttpRequestResult, HttpHeader,
-    HttpRequestResourceReport,
+    BoundedHttpHeaders, CanisterHttpResponsePayload, FlexibleHttpGlobalError,
+    FlexibleHttpRequestResult, HttpHeader, HttpRequestResourceReport,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -46,11 +46,12 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
+    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, PrincipalId, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext, slice_to_messages,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        ValidationContext, iterator_to_bytes, slice_to_messages,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -68,7 +69,7 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::Rng;
@@ -89,7 +90,7 @@ const TEST_MAX_PAYLOAD_BYTES: NumBytes = NumBytes::new(2 * MAX_CANISTER_HTTP_PAY
 
 #[test]
 fn default_payload_serializes_to_empty_vec() {
-    let bytes = parse::payload_to_bytes(
+    let bytes = payload_to_bytes(
         CanisterHttpPayload::default(),
         NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
     );
@@ -918,6 +919,47 @@ fn divergence_oversized_share_rejected() {
     });
 }
 
+#[test]
+fn divergence_share_with_content_hash_of_wrong_length_rejected() {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        inject_request_contexts(&mut payload_builder, fully_replicated_contexts([0]));
+        let (_, metadata) = test_response_and_metadata(0);
+        // Shares whose content hash is one byte longer than a SHA-256 digest, among an
+        // otherwise valid divergence of two equal halves.
+        let other_metadata = CanisterHttpResponseMetadata {
+            content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 33])),
+            ..metadata.clone()
+        };
+        let payload = CanisterHttpPayload {
+            divergence_responses: vec![CanisterHttpResponseDivergence {
+                shares: (0..subnet_size / 2)
+                    .map(|node| metadata_to_share(node as u64, &metadata))
+                    .chain(
+                        (subnet_size / 2..subnet_size)
+                            .map(|node| metadata_to_share(node as u64, &other_metadata)),
+                    )
+                    .collect(),
+            }],
+            ..Default::default()
+        };
+
+        assert_matches!(
+            payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES),
+                &[],
+            ),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::InvalidContentHashLength { length: 33, .. },
+                ),
+            ))
+        );
+    });
+}
+
 /// Check that the divergence error message is constructed correctly and readable
 #[test]
 fn divergence_error_message() {
@@ -1222,6 +1264,58 @@ fn validate_payload_rejects_a_non_canonical_encoding_of_a_valid_payload() {
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::DecodeError(ProxyDecodeError::Other(_)),
+                ),
+            ))
+        );
+    });
+}
+
+/// The signers of a response's proof must be distinct, so a payload whose proof
+/// repeats a signer is rejected.
+#[test]
+fn validate_payload_rejects_a_proof_that_repeats_a_signer() {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(77);
+        let request_context = CanisterHttpRequestContext {
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
+            ..request_context(Replication::NonReplicated(delegated_node_id))
+        };
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        add_signer_to_proof(&mut proof, delegated_node_id);
+        proof.initial_spent =
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+        let mut proof = pb::CanisterHttpResponseWithConsensus::from(proof);
+        let validate = |proof: &pb::CanisterHttpResponseWithConsensus| {
+            let message = pb::CanisterHttpResponseMessage {
+                message_type: Some(pb::canister_http_response_message::MessageType::Response(
+                    proof.clone(),
+                )),
+            };
+            let payload = iterator_to_bytes(std::iter::once(message), NumBytes::new(u64::MAX));
+            payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload,
+                &[],
+            )
+        };
+        assert!(validate(&proof).is_ok());
+
+        let mut repeated = proof.signatures[0].clone();
+        repeated.signature = vec![0xAB; 64];
+        proof.signatures.insert(0, repeated);
+
+        assert_matches!(
+            validate(&proof),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DecodeError(
+                        ProxyDecodeError::DuplicateEntry { .. }
+                    ),
                 ),
             ))
         );
@@ -2336,8 +2430,9 @@ fn flexible_build_delivers_ok_with_fewer_than_max_when_size_limited() {
     let max = 4_u32;
 
     setup_test_with_flexible_context(num_nodes, callback_id, committee, min, max, |pb, pool| {
-        // For responses just under half of MAX_CANISTER_HTTP_PAYLOAD_SIZE, only exactly 2 fit.
-        let content_size = MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2 - 1000;
+        // For responses just under half of MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE, only
+        // exactly 2 fit.
+        let content_size = MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 - 1000;
         {
             let mut pool_access = pool.write().unwrap();
             for node_idx in 0..num_nodes as u64 {
@@ -2355,6 +2450,199 @@ fn flexible_build_delivers_ok_with_fewer_than_max_when_size_limited() {
         assert_eq!(parsed.flexible_responses.len(), 1);
         assert_eq!(parsed.flexible_responses[0].responses.len(), 2);
     });
+}
+
+/// The responses a flexible outcall delivers must be within
+/// `MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`, even where they would fit into the payload.
+#[test]
+fn flexible_responses_over_the_group_limit_are_too_large() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 2, |pb, pool| {
+        // Any two of the responses exceed the limit, but not the payload.
+        let content = vec![0xAB; MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 + 1000];
+        add_flexible_ok_shares(&pool, callback_id, 0..num_nodes as u64, &content);
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert!(parsed.flexible_responses.is_empty());
+        assert_matches!(
+            parsed.flexible_errors.as_slice(),
+            [FlexibleCanisterHttpError::ResponsesTooLarge { callback_id: id, .. }]
+                if *id == callback_id
+        );
+    });
+}
+
+/// Messages are serialized in the order in which they are selected, by callback id, so
+/// that a message can only be crowded out of the payload by those selected before it.
+#[test]
+fn payload_messages_are_serialized_in_the_order_selected() {
+    use pb::canister_http_response_message::MessageType;
+
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let flexible_cb = CallbackId::from(1);
+    let regular_cb = CallbackId::from(2);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![
+            (flexible_cb, flexible_request_context(committee, 1, 1)),
+            (regular_cb, request_context(Replication::FullyReplicated)),
+        ],
+        |payload_builder, pool| {
+            add_flexible_shares_to_pool(&pool, flexible_cb, 0..num_nodes as u64);
+            {
+                let mut pool_access = pool.write().unwrap();
+                let (response, metadata) = test_response_and_metadata(regular_cb.get());
+                let shares = metadata_to_shares(num_nodes, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                add_received_shares_to_pool(pool_access.deref_mut(), shares[1..].to_vec());
+            }
+
+            let context = default_validation_context();
+            let payload = payload_builder.build_payload(
+                Height::new(1),
+                NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+                &[],
+                &context,
+            );
+
+            let callback_ids: Vec<_> =
+                slice_to_messages::<pb::CanisterHttpResponseMessage>(&payload)
+                    .unwrap()
+                    .into_iter()
+                    .map(|message| match message.message_type {
+                        Some(MessageType::FlexibleResponses(group)) => group.callback_id,
+                        Some(MessageType::Response(response)) => response.response.unwrap().id,
+                        other => panic!("unexpected message {other:?}"),
+                    })
+                    .collect();
+            // The older flexible group comes first, ahead of the plain response.
+            assert_eq!(callback_ids, vec![flexible_cb.get(), regular_cb.get()]);
+        },
+    );
+}
+
+/// A group at the limit fits into the payload, with node ids and signatures of production
+/// size and an extra share of every other member of the committee.
+#[test]
+fn flexible_responses_at_the_group_limit_fit_into_the_payload() {
+    let num_nodes = MAX_SUBNET_SIZE;
+    let nodes: Vec<_> = (0..num_nodes as u64).map(full_size_node_id).collect();
+    let callback_id = CallbackId::from(42);
+    let response_of = |node: NodeId, content_size: usize| {
+        let (response, metadata) = test_response_and_metadata_with_content(
+            callback_id.get(),
+            CanisterHttpResponseContent::Success(vec![0xAB; content_size]),
+        );
+        let share = full_size_share(node, &metadata);
+        (response, share)
+    };
+
+    // The two smallest responses are exactly at the limit.
+    let (response, share) = response_of(nodes[0], 0);
+    let empty_size = FlexibleCanisterHttpResponseWithProof::count_bytes(&response, &share);
+    let content_size = MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 - empty_size;
+    let responses: Vec<_> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, node)| response_of(*node, content_size + usize::from(i >= 2)))
+        .collect();
+    // Their cost is only covered by the allowances of all members together.
+    let cost = flexible_initial_spent(
+        responses[..2].iter().map(|(_, share)| share),
+        std::iter::empty(),
+        NumberOfNodes::from(num_nodes as u32),
+        2,
+    );
+    let context = flexible_request_context_with_allowance(
+        nodes.iter().copied().collect(),
+        2,
+        2,
+        Cycles::new(cost.get().div_ceil(num_nodes as u128)),
+    );
+
+    setup_test_with_contexts(num_nodes, vec![(callback_id, context)], |pb, pool| {
+        {
+            let mut pool_access = pool.write().unwrap();
+            for (response, share) in &responses {
+                add_own_share_to_pool(pool_access.deref_mut(), share, response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        let [group] = parsed.flexible_responses.as_slice() else {
+            panic!(
+                "expected one group, got {:?}",
+                parsed.flexible_responses.len()
+            );
+        };
+        assert_eq!(
+            group
+                .responses
+                .iter()
+                .map(|r| r.count_bytes())
+                .sum::<usize>(),
+            MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE
+        );
+        assert_eq!(group.extra_shares.len(), num_nodes - 2);
+    });
+}
+
+/// Messages that fit into the payload by the builder's estimate may not all fit once
+/// encoded. It is then the newer message that is left out, not the older one.
+#[test]
+fn older_message_is_not_crowded_out_by_a_newer_one() {
+    let committee: Vec<_> = (0..4).map(full_size_node_id).collect();
+    let designated = full_size_node_id(4);
+    let flexible_cb = CallbackId::from(1);
+    let regular_cb = CallbackId::from(2);
+
+    setup_test_with_contexts(
+        4,
+        vec![
+            (
+                flexible_cb,
+                flexible_request_context(committee.iter().copied().collect(), 2, 2),
+            ),
+            (
+                regular_cb,
+                request_context(Replication::NonReplicated(designated)),
+            ),
+        ],
+        |pb, pool| {
+            {
+                let mut pool_access = pool.write().unwrap();
+                for (callback_id, node) in [
+                    (flexible_cb, committee[0]),
+                    (flexible_cb, committee[1]),
+                    (regular_cb, designated),
+                ] {
+                    let (response, metadata) = test_response_and_metadata(callback_id.get());
+                    let share = full_size_share(node, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+                }
+            }
+
+            // With node ids and signatures of production size, both messages encode to
+            // more than their estimates.
+            let all = build_and_validate_and_parse_payload(&pb);
+            let estimate = all.flexible_responses[0].count_bytes() + all.responses[0].count_bytes();
+
+            let parsed = build_and_validate_and_parse_payload_with_max_size(
+                &pb,
+                NumBytes::new(estimate as u64 + 1),
+            );
+
+            assert_eq!(parsed.flexible_responses.len(), 1);
+            assert!(parsed.responses.is_empty());
+        },
+    );
 }
 
 #[test]
@@ -3308,15 +3596,15 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
 
     let payload_a = CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![HttpHeader {
+        headers: BoundedHttpHeaders::new(vec![HttpHeader {
             name: "content-type".to_string(),
             value: "text/plain".to_string(),
-        }],
+        }]),
         body: b"hello from node A".to_vec(),
     };
     let payload_b = CanisterHttpResponsePayload {
         status: 201,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: b"hello from node B".to_vec(),
     };
 
@@ -3367,7 +3655,7 @@ fn into_messages_emits_initial_spend_reports() {
     let flex_callback = CallbackId::from(42);
     let content = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -3531,7 +3819,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
 
     let good_payload = CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: b"ok".to_vec(),
     };
     let success_entry = flexible_response(99, 0, &Encode!(&good_payload).unwrap());
@@ -3576,7 +3864,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
 fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
     let payload_data = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -3616,7 +3904,7 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
 
     let valid_data = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -3876,10 +4164,10 @@ fn flexible_build_responses_too_large() {
     let callback_id = CallbackId::from(42);
 
     // min_responses = 2; all 4 nodes submit OK responses each >1 MiB so that
-    // the smallest 2 exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE when summed.
+    // the smallest 2 exceed MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE when summed.
     // All members must respond so that num_unseen=0, otherwise the check
     // correctly stays Pending (unseen members could still send small responses).
-    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2) + 100_000;
+    let body_size = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
@@ -3925,7 +4213,7 @@ fn flexible_build_responses_too_large_stays_pending_when_unseen_members_could_he
     // min_responses=3, committee=6. We submit 3 large OK shares that individually exceed
     // MAX/3, making their sum exceed MAX. But 3 committee members are still unseen and
     // could submit small responses, so the result should be Pending, not ResponsesTooLarge.
-    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 3) + 100_000;
+    let body_size = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 3) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 6, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
@@ -3958,7 +4246,7 @@ fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
     // 3 large OK shares (sum > MAX) from nodes 0..3.
     // 2 rejects from nodes 3..5 → only 1 unseen member remains.
     // min_minus_unseen = 3 - 1 = 2, and even the 2 smallest known OK shares exceed MAX.
-    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2) + 100_000;
+    let body_size = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 6, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
@@ -4023,7 +4311,7 @@ fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
     // 2 rejects from nodes 3..5 → only 1 unseen member remains.
     // min_known_ok_needed = 4 - 1 = 3, and we have exactly 3 OK shares whose sum exceeds MAX.
     // Even though num_ok (3) < min_responses (4), we can already prove impossibility.
-    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 3) + 100_000;
+    let body_size = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 3) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 4, 6, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
@@ -4343,6 +4631,140 @@ fn flexible_error_timeout_invalid_non_flexible_request() {
     });
 }
 
+/// Turns `context` into one for a bounded-wait call with the given deadline.
+fn with_deadline(
+    mut context: CanisterHttpRequestContext,
+    deadline: CoarseTime,
+) -> CanisterHttpRequestContext {
+    Arc::make_mut(&mut context.request).deadline = deadline;
+    context
+}
+
+/// A bounded-wait request times out once a second past its deadline has passed, long
+/// before the protocol timeout that still applies to a guaranteed-response request.
+#[test]
+fn bounded_wait_request_times_out_a_second_after_its_deadline() {
+    let deadline = CoarseTime::from_secs_since_unix_epoch(10);
+    let contexts = vec![
+        (
+            CallbackId::new(0),
+            request_context(Replication::FullyReplicated),
+        ),
+        (
+            CallbackId::new(1),
+            with_deadline(request_context(Replication::FullyReplicated), deadline),
+        ),
+    ];
+
+    setup_test_with_contexts(4, contexts, |payload_builder, _pool| {
+        let validation_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + Duration::from_secs(12),
+        };
+        assert!(validation_context.time < UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL);
+
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            TEST_MAX_PAYLOAD_BYTES,
+            &[],
+            &validation_context,
+        );
+        let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(parsed.timeouts, vec![CallbackId::new(1)]);
+
+        payload_builder
+            .validate_payload(
+                Height::new(1),
+                &test_proposal_context(&validation_context),
+                &payload,
+                &[],
+            )
+            .unwrap();
+    });
+}
+
+/// A bounded-wait request has not timed out yet a second after its deadline.
+#[test]
+fn bounded_wait_request_timeout_invalid_a_second_after_deadline() {
+    let callback_id = CallbackId::new(1);
+    let contexts = vec![(
+        callback_id,
+        with_deadline(
+            request_context(Replication::FullyReplicated),
+            CoarseTime::from_secs_since_unix_epoch(10),
+        ),
+    )];
+
+    setup_test_with_contexts(4, contexts, |pb, _pool| {
+        let validation_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + Duration::from_secs(11),
+        };
+        let payload = CanisterHttpPayload {
+            timeouts: vec![callback_id],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&validation_context),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotTimedOut(id)
+                )
+            )) if id == callback_id
+        );
+    });
+}
+
+/// A flexible bounded-wait request may be timed out once a second past its deadline has
+/// passed.
+#[test]
+fn flexible_bounded_wait_request_times_out_a_second_after_its_deadline() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let context = with_deadline(
+        flexible_request_context(committee, 2, 4),
+        CoarseTime::from_secs_since_unix_epoch(10),
+    );
+
+    setup_test_with_contexts(num_nodes, vec![(callback_id, context)], |pb, _pool| {
+        let validate_at = |secs| {
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + Duration::from_secs(secs),
+            };
+            let payload = CanisterHttpPayload {
+                flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+                ..Default::default()
+            };
+            pb.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&validation_context),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            )
+        };
+        assert_matches!(
+            validate_at(11),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotTimedOut(id)
+                )
+            )) if id == callback_id
+        );
+        assert_matches!(validate_at(12), Ok(()));
+    });
+}
+
 #[test]
 fn flexible_error_duplicate_callback_id() {
     let num_nodes = 4;
@@ -4426,8 +4848,8 @@ fn flexible_error_responses_too_large_valid() {
     let callback_id = CallbackId::from(42);
 
     // min_responses=2, all 4 committee members responded with huge OK →
-    // num_unseen=0, min_known_ok_needed=2, smallest 2 × ~1.1 MiB > 2 MiB.
-    let huge_content_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    // num_unseen=0, min_known_ok_needed=2, smallest 2 × ~1.1 MB > MAX.
+    let huge_content_size = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let all_seen_shares: Vec<_> = (0..4)
             .map(|i| metadata_share_with_content_size(callback_id.get(), i, huge_content_size))
@@ -4460,7 +4882,7 @@ fn flexible_error_responses_too_large_valid_with_unseen_members() {
 
     // min_responses=4, committee=6. 4 huge OK + 1 reject = 5 seen, 1 unseen.
     // min_known_ok_needed = 4 - 1 = 3. Sum of smallest 3 OK > MAX → valid.
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 3) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 3) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 4, 6, |pb, _pool| {
         let ok_shares: Vec<_> = (0..4)
             .map(|i| metadata_share_with_content_size(callback_id.get(), i, huge))
@@ -4497,7 +4919,7 @@ fn flexible_error_responses_too_large_valid_with_mixed_ok_and_reject() {
 
     // min_responses=2, committee=4. 2 huge OK + 2 reject → all 4 seen,
     // num_unseen=0, min_known_ok_needed=2, sum of 2 OK > MAX → valid.
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let ok_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
         let ok_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
@@ -4529,7 +4951,7 @@ fn flexible_error_responses_too_large_wrong_total_requests() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let all_seen_shares: Vec<_> = (0..4)
             .map(|i| metadata_share_with_content_size(callback_id.get(), i, huge))
@@ -4572,7 +4994,7 @@ fn flexible_error_responses_too_large_wrong_min_responses() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let all_seen_shares: Vec<_> = (0..4)
             .map(|i| metadata_share_with_content_size(callback_id.get(), i, huge))
@@ -4655,7 +5077,7 @@ fn flexible_error_responses_too_large_invalid_when_committee_members_omitted() {
 
     // Attack: proposer includes only 2 large OK shares, omits 2 small OK shares.
     // num_unseen=2, min_known_ok_needed = 2 - 2 = 0, sum of 0 entries = 0 ≤ MAX → rejected.
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
         let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
@@ -4694,7 +5116,7 @@ fn flexible_error_responses_too_large_too_few_ok_shares() {
 
     // min_responses=3, committee=4. All 4 members present (0 unseen),
     // so min_known_ok_needed=3. But only 2 OK + 2 reject → 2 OK is insufficient.
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let ok_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
         let ok_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
@@ -4737,7 +5159,7 @@ fn flexible_error_responses_too_large_callback_id_mismatch() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
         // Share with wrong callback_id
@@ -4776,7 +5198,7 @@ fn flexible_error_responses_too_large_duplicate_signer() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         // Both shares from the same signer (node 0)
         let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
@@ -4814,7 +5236,7 @@ fn flexible_error_responses_too_large_signer_not_in_committee() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
         let share_bad = metadata_share_with_content_size(callback_id.get(), 99, huge);
@@ -4850,7 +5272,7 @@ fn flexible_error_responses_too_large_invalid_signature() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    let huge = (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE as u32 / 2) + 100_000;
     setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |mut pb, _pool| {
         pb.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
@@ -6198,7 +6620,7 @@ fn flexible_response_group_is_topped_up_with_extra_shares() {
     // consensus response (and hence a spend report) further down.
     let content = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -6616,7 +7038,7 @@ fn flexible_response_group_waits_for_shares_covering_consensus_cost() {
 
     let content = Encode!(&CanisterHttpResponsePayload {
         status: 200,
-        headers: vec![],
+        headers: BoundedHttpHeaders::new(vec![]),
         body: vec![],
     })
     .unwrap();
@@ -8128,6 +8550,21 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
     metadata_to_share(signer_node, &metadata)
 }
 
+/// A node id of the size that node ids have in production.
+fn full_size_node_id(i: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_self_authenticating(&i.to_be_bytes()))
+}
+
+/// A share of `signer` with a signature of the size that signatures have in production.
+fn full_size_share(
+    signer: NodeId,
+    metadata: &CanisterHttpResponseMetadata,
+) -> CanisterHttpResponseShare {
+    let mut share = metadata_to_share_with_signature(0, metadata, vec![0; 64]);
+    share.signature.signer = signer;
+    share
+}
+
 fn add_flexible_shares_to_pool(
     pool: &Arc<RwLock<CanisterHttpPoolImpl>>,
     callback_id: CallbackId,
@@ -8189,6 +8626,43 @@ fn build_and_validate_and_parse_payload_with_context(
         Ok(())
     );
     bytes_to_payload(&payload).expect("parse error")
+}
+
+/// Serializes the payload, one message type after the other.
+fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+    let CanisterHttpPayload {
+        timeouts,
+        divergence_responses,
+        out_of_cycles,
+        responses,
+        flexible_responses,
+        flexible_errors,
+        async_receipts,
+    } = payload;
+
+    let messages = timeouts
+        .into_iter()
+        .map(PayloadMessage::Timeout)
+        .chain(
+            divergence_responses
+                .into_iter()
+                .map(PayloadMessage::Divergence),
+        )
+        .chain(responses.into_iter().map(PayloadMessage::Response))
+        .chain(
+            flexible_responses
+                .into_iter()
+                .map(PayloadMessage::FlexibleResponses),
+        )
+        .chain(
+            flexible_errors
+                .into_iter()
+                .map(PayloadMessage::FlexibleError),
+        )
+        .chain(out_of_cycles.into_iter().map(PayloadMessage::OutOfCycles))
+        .chain(async_receipts.into_iter().map(PayloadMessage::AsyncReceipt));
+
+    messages_to_bytes(messages, max_size)
 }
 
 fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {

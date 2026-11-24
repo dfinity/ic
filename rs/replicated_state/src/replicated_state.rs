@@ -33,7 +33,7 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus},
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
+        CallbackId, Ingress, MessageId, Refund, Request, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -1087,23 +1087,27 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if receiver.get_ref() == subnet_id {
-                    match &msg {
-                        RequestOrResponse::Request(_) => push_input(
-                            &mut self.subnet_queues,
-                            msg,
-                            subnet_available_guaranteed_response_memory,
-                            own_subnet_type,
-                            input_queue_type,
-                        )
-                        // Requests are never silently dropped.
-                        .map(|_| true),
+                    match msg {
+                        RequestOrResponse::Request(mut request) => {
+                            // Cache the effective canister ID, unless already cached.
+                            Request::cache_effective_canister_id(&mut request);
+                            push_input(
+                                &mut self.subnet_queues,
+                                RequestOrResponse::Request(request),
+                                subnet_available_guaranteed_response_memory,
+                                own_subnet_type,
+                                input_queue_type,
+                            )
+                            // Requests are never silently dropped.
+                            .map(|_| true)
+                        }
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
                                 "Management canister does not accept canister responses",
-                                response,
+                                &response,
                             ),
-                            msg,
+                            RequestOrResponse::Response(response),
                         )),
                     }
                 } else {

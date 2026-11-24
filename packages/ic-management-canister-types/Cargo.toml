@@ -4,7 +4,6 @@ version = "0.11.0"
 authors.workspace = true
 edition.workspace = true
 description = "Types for calling the IC management canister"
-homepage = "https://docs.rs/ic-management-canister-types"
 documentation = "https://docs.rs/ic-management-canister-types"
 readme = "README.md"
 categories = ["api-bindings", "data-structures"]

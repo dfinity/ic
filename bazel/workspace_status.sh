@@ -10,8 +10,9 @@ if [ "$#" == "0" ]; then
     echo "STABLE_COMMIT_DATE_ISO_8601 0000-00-00T00:00:00+00:00"
 elif [ "$#" == "1" ] && [ "$1" == "--stamp" ]; then
     version="$(git rev-parse HEAD)"
-    # If the checkout is not clean, mark the version as dirty
-    if [ -n "$(git status --porcelain)" ]; then
+    # If the checkout is not clean, mark the version as dirty. Not for MODULE.bazel.lock: Bazel rewrites
+    # an outdated one itself, from this commit's MODULE.bazel.
+    if [ -n "$(git status --porcelain -- ':(top)' ':(top,exclude)MODULE.bazel.lock')" ]; then
         version="$version-dirty"
     fi
     echo "STABLE_VERSION $version"

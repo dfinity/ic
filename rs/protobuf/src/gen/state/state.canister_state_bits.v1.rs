@@ -448,6 +448,10 @@ pub struct CanisterCodeDeployment {
     pub mode: i32,
     #[prost(bytes = "vec", tag = "2")]
     pub module_hash: ::prost::alloc::vec::Vec<u8>,
+    /// SHA-256 hash of the init/post-upgrade argument of `install_code`.
+    /// `None` for entries recorded before `args_hash` started being recorded.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub args_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterControllersChange {
@@ -672,7 +676,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 73
+/// Next ID: 74
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "4")]
@@ -700,7 +704,7 @@ pub struct CanisterStateBits {
     pub heartbeats_and_global_timers_executed: u64,
     #[prost(uint64, tag = "63")]
     pub instructions_executed: u64,
-    #[prost(message, repeated, tag = "72")]
+    #[prost(message, repeated, tag = "73")]
     pub connection_metrics: ::prost::alloc::vec::Vec<CanisterToCanisterMetrics>,
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
@@ -839,7 +843,7 @@ pub mod canister_state_bits {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterToCanisterMetrics {
     #[prost(message, optional, tag = "1")]
-    pub receiver_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    pub sender_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(uint64, tag = "2")]
     pub timestamp_nanos: u64,
     #[prost(uint64, tag = "3")]

@@ -350,6 +350,7 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",  # Spread the VMs: packed onto a few hosts they starve the VMs of other tests of CPU time.
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/consensus/utils",

@@ -26,7 +26,10 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::{Arc, atomic::AtomicU64},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -587,6 +590,19 @@ pub struct TransformExecutionInput {
     pub query: Query,
     pub instruction_observation: Arc<AtomicU64>,
     pub max_instructions: NumInstructions,
+    pub start: TransformStart,
+}
+
+/// Decides once whether a transform runs: the query handler claims it to start
+/// it, the caller to cancel it, and only the first claim succeeds.
+#[derive(Clone, Debug, Default)]
+pub struct TransformStart(Arc<AtomicBool>);
+
+impl TransformStart {
+    /// Returns whether this is the first claim.
+    pub fn claim(&self) -> bool {
+        !self.0.swap(true, Ordering::Relaxed)
+    }
 }
 
 /// Interface for the component to execute canister http transform.
@@ -758,7 +774,7 @@ pub trait SystemApi {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<i32>;
 
     /// Returns the size of the value for the environment variable with the given name.
@@ -774,7 +790,7 @@ pub trait SystemApi {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<usize>;
 
     /// Copies the value of the environment variable with the given name into memory.
@@ -874,7 +890,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Replies to the sender with the data assembled using
@@ -889,7 +905,12 @@ pub trait SystemApi {
     fn ic0_msg_reject_code(&self) -> HypervisorResult<i32>;
 
     /// Replies to sender with an error message
-    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
+    fn ic0_msg_reject(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<()>;
 
     /// Returns the length of the reject message in bytes.
     ///
@@ -928,10 +949,11 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Outputs the specified bytes on the heap as a string on STDOUT.
-    fn ic0_debug_print(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
+    fn ic0_debug_print(&self, src: usize, size: usize, heap: &mut Heap<'_>)
+    -> HypervisorResult<()>;
 
     /// Traps, with a possibly helpful message
-    fn ic0_trap(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
+    fn ic0_trap(&self, src: usize, size: usize, heap: &mut Heap<'_>) -> HypervisorResult<()>;
 
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
@@ -953,7 +975,7 @@ pub trait SystemApi {
         reply_env: u64,
         reject_fun: u32,
         reject_env: u64,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Appends the specified bytes to the argument of the call. Initially, the
@@ -963,7 +985,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Relaxes the response delivery guarantee to be best effort, asking the system to respond at the
@@ -1237,7 +1259,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &Heap<'_>,
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
@@ -1287,7 +1309,12 @@ pub trait SystemApi {
     /// otherwise a 0 is returned. It can be called multiple times.
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
-    fn ic0_is_controller(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<u32>;
+    fn ic0_is_controller(
+        &self,
+        src: usize,
+        size: usize,
+        heap: &mut Heap<'_>,
+    ) -> HypervisorResult<u32>;
 
     /// If run in replicated execution (i.e. an update call or a certified
     /// query), returns 1.

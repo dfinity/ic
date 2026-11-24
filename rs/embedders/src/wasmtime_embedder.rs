@@ -717,7 +717,8 @@ impl WasmtimeEmbedder {
                 unsafe {
                     let store_ref = store_ptr.get();
                     if let Val::I64(current) = heap_page_budget_global.get(&mut *store_ref) {
-                        let _ = heap_page_budget_global.set(store_ref, Val::I64(current - 1));
+                        let _ = heap_page_budget_global
+                            .set(store_ref, Val::I64(current.saturating_sub(1)));
                     }
                 }
             }))

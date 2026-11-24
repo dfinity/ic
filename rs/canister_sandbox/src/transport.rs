@@ -616,7 +616,11 @@ fn send_message(
 /// A helper that reads bytes and file descriptors from the given socket.
 ///
 /// It is a wrapper around `libc::recvmsg()` and returns the result of that
-/// syscall (which is the number of bytes read or -1 on error).
+/// syscall (which is the number of bytes read or -1 on error). A `recvmsg()`
+/// that fails with `EINTR` is retried: the interruption says nothing about
+/// the peer, and Linux never restarts `recvmsg()` on a socket with a receive
+/// timeout, not even for signal handlers installed with `SA_RESTART` or when a
+/// frozen process is thawed (e.g., after the machine was suspended).
 ///
 /// If reading is successful, then the function pushes the read bytes and file
 /// descriptors onto the given `buf` and `fds`.
@@ -653,7 +657,12 @@ fn receive_message(
             msg_flags: flags,
         };
 
-        let num_bytes_received = libc::recvmsg(socket.as_raw_fd(), &mut hdr, flags);
+        let num_bytes_received = loop {
+            let result = libc::recvmsg(socket.as_raw_fd(), &mut hdr, flags);
+            if result != -1 || std::io::Error::last_os_error().raw_os_error() != Some(libc::EINTR) {
+                break result;
+            }
+        };
 
         if num_bytes_received > 0 {
             // Update the buffer length to account for the received bytes.
@@ -982,5 +991,85 @@ mod tests {
             Some(Duration::from_millis(10)),
         );
         assert_eq!(bytes, None);
+    }
+
+    /// Checks that the reader keeps running when a signal interrupts its
+    /// `recvmsg` while the socket has a receive timeout. Linux never restarts
+    /// such a `recvmsg`, even if the signal handler was installed with
+    /// `SA_RESTART`, so it fails with `EINTR`. Freezing and thawing a process
+    /// (e.g., suspending the machine or SIGSTOP + SIGCONT) has the same effect.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reader_survives_interrupted_receive() {
+        use std::os::unix::thread::JoinHandleExt;
+
+        extern "C" fn noop_signal_handler(_: libc::c_int) {}
+
+        // SAFETY: Installs a handler that does nothing for a signal that is not
+        // used anywhere else in this crate.
+        unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = noop_signal_handler as *const () as usize;
+            action.sa_flags = libc::SA_RESTART;
+            libc::sigemptyset(&mut action.sa_mask);
+            assert_eq!(
+                libc::sigaction(libc::SIGUSR1, &action, std::ptr::null_mut()),
+                0
+            );
+        }
+
+        let (comm_send, comm_recv) = std::os::unix::net::UnixStream::pair().unwrap();
+        let comm_send = Arc::new(comm_send);
+        let comm_recv = Arc::new(comm_recv);
+
+        let (ch_sender, ch_receiver) = sync_channel::<StringMessage>(1);
+        let reader = std::thread::spawn(move || {
+            socket_read_messages(
+                |message: StringMessage| {
+                    ch_sender.send(message).unwrap();
+                },
+                comm_recv,
+                // The default config sets a receive timeout on the socket.
+                SocketReaderConfig::default(),
+            );
+        });
+
+        // Interrupt the reader repeatedly so that at least some of the signals
+        // arrive while it is blocked in `recvmsg`.
+        for _ in 0..50 {
+            std::thread::sleep(Duration::from_millis(10));
+            if reader.is_finished() {
+                break;
+            }
+            // SAFETY: The reader thread is still running, so its handle is valid.
+            assert_eq!(
+                unsafe { libc::pthread_kill(reader.as_pthread_t(), libc::SIGUSR1) },
+                0
+            );
+        }
+        assert!(
+            !reader.is_finished(),
+            "the reader stopped after an interrupted receive"
+        );
+
+        let sender = UnixStreamMessageWriter::<StringMessage>::new(
+            Arc::clone(&comm_send),
+            IDLE_TIMEOUT_TO_TRIM_BUFFER,
+        );
+        sender.handle(
+            0,
+            StringMessage {
+                payload: "hello".to_string(),
+            },
+        );
+        let message = ch_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the reader did not deliver the message");
+        sender.stop();
+        assert_eq!(message.payload, "hello");
+
+        // Closing the socket makes the reader return.
+        comm_send.shutdown(std::net::Shutdown::Both).unwrap();
+        reader.join().unwrap();
     }
 }

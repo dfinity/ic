@@ -20,5 +20,28 @@ pub const INGRESS_INTERVAL_OVERLAP: Duration = Duration::from_secs(120);
 /// Maximum permitted ingress window, mirroring the 24-hour bound documented on
 /// `ConstructionPayloadsRequestMetadata`.
 pub const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+/// Maximum permitted memo length in `/construction/payloads`. The memo is copied
+/// into every envelope of the unsigned transaction, so its size must be bounded.
+/// This is well above the max memo length of any production ICRC-1 ledger.
+pub const MAX_MEMO_LENGTH_BYTES: usize = 1024;
+/// Maximum permitted size of the Candid-encoded ledger method arguments built in
+/// `/construction/payloads`. The arguments are copied into every envelope of the unsigned
+/// transaction, so their size must be bounded.
+pub const MAX_CANISTER_METHOD_ARGS_BYTES: usize = 4 * 1024;
+/// Maximum number of envelopes of a transaction in `/construction/combine`. This is the number of
+/// ingress expiries `/construction/payloads` builds for the longest ingress window,
+/// `MAX_INGRESS_WINDOW`, with an expiry every 2 minutes.
+pub const MAX_ENVELOPES_PER_TRANSACTION: usize = 720;
+/// Maximum size of a signature in `/construction/combine`. Signatures are copied into every
+/// envelope they sign, so their size must be bounded. Ed25519 and ECDSA secp256k1 signatures
+/// are 64 bytes long.
+pub const MAX_SIGNATURE_BYTES: usize = 64;
+/// Maximum size of a public key in `/construction/combine`, which is copied into every envelope
+/// like the signature. This is the size of an uncompressed secp256k1 public key.
+pub const MAX_PUBLIC_KEY_BYTES: usize = 65;
+/// Candid skipping quota for decoding the ledger method arguments of client-supplied envelopes.
+/// The size limit alone does not bound the decoding work, so this applies the same quota as the
+/// `ic_cdk` endpoint macros of the ledger methods being called.
+pub const CANISTER_METHOD_ARGS_SKIPPING_QUOTA: usize = 10_000;
 pub const STATUS_COMPLETED: &str = "COMPLETED";
 pub const MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST: u64 = 10000;

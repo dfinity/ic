@@ -5,21 +5,22 @@ use axum::{Router, http::Request};
 use bytes::Bytes;
 use futures::FutureExt;
 use ic_base_types::{NodeId, RegistryVersion};
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::info;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
-    ConnectivityChecker, create_peer_manager_and_registry_handle,
+    ConnectivityChecker, create_peer_manager_and_registry_handle, create_registry_handle,
     temp_crypto_component_with_tls_keys,
     turmoil::{
-        PeerManagerAction, add_peer_manager_to_sim, add_transport_to_sim, wait_for,
-        wait_for_timeout,
+        PeerManagerAction, add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for,
+        wait_for, wait_for_timeout,
     },
 };
-use ic_quic_transport::{QuicTransport, Transport, create_udp_socket};
+use ic_quic_transport::{QuicTransport, SubnetTopology, Transport, create_udp_socket};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use tokio::{
-    sync::{Notify, mpsc},
+    sync::{Notify, mpsc, watch},
     time::timeout,
 };
 use turmoil::Builder;
@@ -806,6 +807,99 @@ fn test_transient_failing_tls() {
         // This triggers a tls reconfiguration because it is a topology change.
         registry_handle.set_oldest_consensus_registry_version(RegistryVersion::from(2));
         wait_for(&mut sim, || conn_checker.fully_connected()).expect("Nodes failed to reconnect");
+
+        exit_notify.notify_waiters();
+        sim.run().unwrap();
+    })
+}
+
+/// Test that a connection is only added if both nodes are in the topology when its handshake
+/// completes.
+#[test]
+fn test_topology_checked_when_handshake_completes() {
+    with_test_replica_logger(|log| {
+        info!(log, "Starting test");
+
+        let mut sim = Builder::new()
+            .simulation_duration(Duration::from_secs(20))
+            .tick_duration(Duration::from_millis(100))
+            .build();
+
+        let exit_notify = Arc::new(Notify::new());
+        let exit_notify_clone = exit_notify.clone();
+        sim.client("test-client", async move {
+            exit_notify_clone.notified().await;
+            Ok(())
+        });
+
+        let (_, registry_handle) = create_registry_handle();
+        let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2]);
+
+        // Each node has its own topology, so that only node 2's topology changes.
+        let (topology_sender_1, topology_1) = watch::channel(SubnetTopology::default());
+        let (topology_sender_2, topology_2) = watch::channel(SubnetTopology::default());
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            registry_handle.clone(),
+            topology_1,
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            None,
+            conn_checker.check_fut(),
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_2,
+            registry_handle.clone(),
+            topology_2,
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            None,
+            conn_checker.check_fut(),
+        );
+
+        registry_handle.registry_client.reload();
+        let registry_version = registry_handle.registry_client.get_latest_version();
+        let node_1 = (
+            NODE_1,
+            SocketAddr::new(sim.lookup(NODE_1.to_string()), 4100),
+        );
+        let node_2 = (
+            NODE_2,
+            SocketAddr::new(sim.lookup(NODE_2.to_string()), 4100),
+        );
+        let both_nodes = SubnetTopology::new([node_1, node_2], registry_version, registry_version);
+
+        topology_sender_2.send_replace(both_nodes.clone());
+        run_simulation_for(&mut sim, Duration::from_secs(1)).unwrap();
+
+        // Node 1 dials node 2. Dropping node 2's packets keeps the handshake in progress.
+        sim.partition_oneway(NODE_2.to_string(), NODE_1.to_string());
+        topology_sender_1.send_replace(both_nodes);
+        run_simulation_for(&mut sim, Duration::from_millis(500)).unwrap();
+
+        topology_sender_2.send_replace(SubnetTopology::new(
+            [node_2],
+            registry_version,
+            registry_version,
+        ));
+        run_simulation_for(&mut sim, Duration::from_millis(200)).unwrap();
+        sim.repair_oneway(NODE_2.to_string(), NODE_1.to_string());
+
+        // Longer than the connect timeout.
+        wait_for_timeout(
+            &mut sim,
+            || !conn_checker.disconnected_from(&NODE_2, &NODE_1),
+            Duration::from_secs(12),
+        )
+        .expect("Node 2 should not connect to node 1");
 
         exit_notify.notify_waiters();
         sim.run().unwrap();

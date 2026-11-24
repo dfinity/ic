@@ -22,9 +22,11 @@ use ic_types::messages::MessageId;
 use ic_types::{CryptoHashOfState, NumInstructions};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{
-    CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
+    CallArgs, CallInterface, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    call_args, management, wasm,
 };
 use std::sync::OnceLock;
+use strum::{EnumIter, IntoEnumIterator};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -3030,4 +3032,893 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
 
     // Two heavy install code messages must be completed in five rounds.
     assert_eq!(num_completed(), 2);
+}
+
+#[test]
+fn dts_stop_and_delete_canister_with_concurrent_long_execution() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let user_id = PrincipalId::new_anonymous();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
+
+    // Canister `a` is a controller of canisters `b` and `c`.
+    let a = env
+        .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+    let controlled_by_a = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id, a.get()])
+            .build(),
+    );
+    // Canister `b`'s `canister_init` burns 100B instructions, i.e. it takes ~50
+    // install code slices to install and leaves `b` install code rate limited for
+    // ~50 rounds afterwards.
+    let b = env
+        .install_canister_with_cycles(
+            binary.clone(),
+            wasm()
+                .instruction_counter_is_at_least(100_000_000_000)
+                .build(),
+            controlled_by_a.clone(),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let c = env
+        .install_canister_with_cycles(binary, vec![], controlled_by_a, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Start a long execution on canister `c`: at 2B instructions per slice, 38B
+    // instructions take ~19 rounds to execute.
+    let long_execution = env.send_ingress(
+        user_id,
+        c,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(38_000_000_000)
+            .reply_data(&[42])
+            .build(),
+    );
+    env.tick();
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&c)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Canister `a` stops canister `b`.
+    let stop = env.send_ingress(
+        user_id,
+        a,
+        "update",
+        wasm()
+            .call_simple(
+                IC_00,
+                Method::StopCanister,
+                call_args().other_side(CanisterIdRecord::from(b).encode()),
+            )
+            .build(),
+    );
+    env.await_ingress(stop, 100).unwrap();
+
+    // The long execution on canister `c` is still running.
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution)),
+        Some(IngressState::Processing)
+    );
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&c)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Canister `a` requests the status of canister `c` (which has a long execution)
+    // and deletes canister `b`. Only the reply to the last call (`delete_canister`)
+    // is passed on to the ingress message's caller.
+    let status_and_delete = env.send_ingress(
+        user_id,
+        a,
+        "update",
+        wasm()
+            .call_simple(
+                IC_00,
+                Method::CanisterStatus,
+                call_args()
+                    .other_side(CanisterIdRecord::from(c).encode())
+                    .on_reply(wasm().noop())
+                    .on_reject(wasm().noop()),
+            )
+            .call_simple(
+                IC_00,
+                Method::DeleteCanister,
+                call_args().other_side(CanisterIdRecord::from(b).encode()),
+            )
+            .build(),
+    );
+    env.await_ingress(status_and_delete, 100).unwrap();
+
+    // Canister `b` is gone and the long execution on canister `c` eventually completes.
+    assert!(env.get_latest_state().canister_state(&b).is_none());
+    assert_eq!(
+        env.await_ingress(long_execution, 100).unwrap(),
+        WasmResult::Reply(vec![42])
+    );
+}
+
+// Blob that releases canister `B`'s looping update call: the loop only replies
+// once `B`'s global data is set to this blob. Nothing in this test sets it, so
+// the reply is held back until `B`'s call context is closed by `uninstall_code`.
+const LOOP_TRIGGER_BLOB: &[u8] = b"dts-uninstall-code-loop-trigger";
+// The reply that canister `B`'s looping update call would produce if it were
+// ever released (it never is in this test).
+const LOOP_REPLY_BLOB: &[u8] = b"dts-uninstall-code-loop-reply";
+// The reply that canister `A` produces once its last call (`uninstall_code` on
+// `B`) replies.
+const UNINSTALL_CODE_REPLY_BLOB: &[u8] = b"dts-uninstall-code-completed";
+// The number of instructions executed by canister `C`'s update call. It is above
+// the default `max_instructions_per_slice` (`2B`) so the call runs in DTS across
+// multiple rounds, and below the default `max_instructions_per_message` (`40B`)
+// so it eventually completes.
+const LONG_EXECUTION_INSTRUCTIONS: u64 = 38_000_000_000;
+
+// The following test executes the following scenario:
+// - three universal canisters `A`, `B`, and `C` are deployed, with `A` being the
+//   sole controller of `B` and `C`;
+// - `C` starts a long-running update call which runs in DTS (i.e., it is paused
+//   and resumed over multiple rounds);
+// - `B`'s `update` method is invoked via an ingress message running a loop that
+//   keeps calling `canister_status` on `B`, i.e., `B` holds the reply to that
+//   ingress message back indefinitely;
+// - `A` fires two concurrent calls: `canister_status` on the canister `C` running
+//   in DTS, and `uninstall_code` on the looping canister `B`;
+// - `A` replies to its ingress message from the callbacks of its last call
+//   (`uninstall_code` on `B`), which is what the test waits for.
+#[test]
+fn dts_uninstall_code_of_looping_canister_with_concurrent_canister_status() {
+    // The default application subnet configuration allows `40B` instructions per
+    // message and `2B` instructions per slice, i.e., DTS is in effect for the
+    // long-running update call of canister `C` below.
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let user_id = PrincipalId::new_anonymous();
+
+    // Deploy three universal canisters (without heartbeat so that they do not
+    // execute anything in the background).
+    let deploy = || {
+        env.install_canister_with_cycles(
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap()
+    };
+    let canister_a = deploy();
+    let canister_b = deploy();
+    let canister_c = deploy();
+
+    // Make `B` and `C` controlled by `A` so that `A` may call `canister_status`
+    // on `C` and `uninstall_code` on `B`. Note that this makes `B` lose the
+    // permission to call `canister_status` on itself, but the loop in `B` also
+    // iterates on rejected calls, so it keeps looping either way.
+    for canister_id in [canister_b, canister_c] {
+        env.update_settings(
+            &canister_id,
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![canister_a.get()])
+                .build(),
+        )
+        .unwrap();
+    }
+
+    // Start a long-running update call on `C`, which runs in DTS.
+    let long_execution_id = env.send_ingress(
+        user_id,
+        canister_c,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(LONG_EXECUTION_INSTRUCTIONS)
+            .reply_data(&[42])
+            .build(),
+    );
+
+    // Invoke `B`'s `update` method running the loop via an ingress message: `B`
+    // keeps calling `canister_status` on itself and only replies once its global
+    // data is set to `LOOP_TRIGGER_BLOB`, which never happens in this test.
+    let loop_id = env.send_ingress(
+        user_id,
+        canister_b,
+        "update",
+        wasm()
+            .loop_until_global_data_set(LOOP_TRIGGER_BLOB, LOOP_REPLY_BLOB)
+            .build(),
+    );
+
+    // Execute a couple of rounds so that `C`'s execution is paused (i.e., `C`
+    // runs in DTS) and `B` is looping.
+    for _ in 0..2 {
+        env.tick();
+    }
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Processing)
+    );
+    assert_eq!(
+        ingress_state(env.ingress_status(&loop_id)),
+        Some(IngressState::Processing)
+    );
+
+    let payload = wasm()
+        // 1. Call `canister_status` on `C`, which is running in DTS.
+        .call(
+            management::canister_status(canister_c)
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        )
+        // 2. Call `uninstall_code` on the looping canister `B`. This is the last
+        //    call by `A` and thus `A` replies to its ingress message from its
+        //    callbacks.
+        .call(
+            management::uninstall_code(canister_b)
+                .on_reply(wasm().reply_data(UNINSTALL_CODE_REPLY_BLOB))
+                .on_reject(wasm().reject_message().reply_data_append().reply()),
+        )
+        .build();
+    let msg_id = env.send_ingress(user_id, canister_a, "update", payload);
+
+    // Wait until the last call by `A` completes. The number of rounds is an
+    // arbitrary value high enough for the calls to complete.
+    assert_eq!(
+        env.await_ingress(msg_id, 100).unwrap(),
+        WasmResult::Reply(UNINSTALL_CODE_REPLY_BLOB.to_vec())
+    );
+    // Canister `B` has indeed been uninstalled and thus the ingress message
+    // whose reply `B` was holding back has been rejected.
+    assert!(env.module_hash(canister_b).is_none());
+    assert_matches!(
+        ingress_state(env.ingress_status(&loop_id)),
+        Some(IngressState::Failed(_))
+    );
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, EnumIter)]
+enum StorageReservationMessage {
+    /// An update call growing memory.
+    Update,
+    /// A heartbeat growing memory.
+    Heartbeat,
+    /// A global timer growing memory.
+    GlobalTimer,
+    /// `canister_init` growing memory.
+    Install,
+    /// `canister_init` growing memory after a long-running `(start)`.
+    InstallAfterStart,
+    /// `canister_pre_upgrade` growing memory.
+    PreUpgrade,
+    /// `canister_post_upgrade` growing memory.
+    PostUpgrade,
+    /// `canister_post_upgrade` growing memory after a long-running
+    /// `canister_pre_upgrade`.
+    PostUpgradeAfterPreUpgrade,
+    /// `canister_post_upgrade` growing memory after a long-running `(start)`.
+    PostUpgradeAfterStart,
+    /// A response callback of an inter-canister call growing memory.
+    Response,
+    /// A cleanup callback (after the response callback traps) of an
+    /// inter-canister call growing memory.
+    Cleanup,
+}
+
+impl StorageReservationMessage {
+    /// Returns true if a long-running stage of `install_code` (that does not
+    /// grow memory) precedes the stage growing memory.
+    fn has_long_running_previous_stage(self) -> bool {
+        matches!(
+            self,
+            Self::InstallAfterStart
+                | Self::PostUpgradeAfterPreUpgrade
+                | Self::PostUpgradeAfterStart
+        )
+    }
+
+    fn is_task(self) -> bool {
+        matches!(self, Self::Heartbeat | Self::GlobalTimer)
+    }
+
+    fn is_callback(self) -> bool {
+        matches!(self, Self::Response | Self::Cleanup)
+    }
+
+    fn is_install_code(self) -> bool {
+        !matches!(
+            self,
+            Self::Update | Self::Heartbeat | Self::GlobalTimer | Self::Response | Self::Cleanup
+        )
+    }
+
+    fn is_upgrade(self) -> bool {
+        self.is_install_code() && !matches!(self, Self::Install | Self::InstallAfterStart)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum StorageReservationSlice {
+    First,
+    Second,
+}
+
+/// The outcome of a long-running message growing memory.
+struct StorageReservationOutcome {
+    /// The result of the message (for a system task: of the update call
+    /// arming the system task).
+    result: Result<WasmResult, UserError>,
+    /// The reserved balance of the canister before the message started.
+    reserved_balance_before: Cycles,
+    /// The reserved balance of the canister after the message completed.
+    reserved_balance: Cycles,
+    /// The stable memory usage of the canister after the message completed.
+    stable_memory_usage: u64,
+    /// The instructions executed by the canister while the message executed.
+    instructions_executed: u64,
+}
+
+const GIB: u64 = 1 << 30;
+/// The instructions executed by the Wasm execution growing memory (it burns
+/// instructions until its instruction counter reaches this value). This spans
+/// multiple slices so that the execution is still paused after other canisters
+/// change the subnet memory usage.
+const STORAGE_RESERVATION_TOTAL_INSTRUCTIONS: u64 = 650_000_000;
+
+/// The change in the subnet memory usage due to other canisters on the subnet
+/// (not the canister executing the message growing memory).
+#[derive(Clone, Copy)]
+enum SubnetMemoryChange {
+    GrowWhilePaused,
+    GrowBeforeExecution,
+    ShrinkWhilePaused,
+}
+
+/// Executes a long-running message (an update call, a system task,
+/// `install_code`, or a response or cleanup callback) that grows stable memory
+/// by 185 GiB in the given slice of the Wasm execution growing memory. The
+/// canister has the given cycles balance and reserved cycles limit.
+///
+/// Other canisters grow the subnet memory usage either before the message or
+/// while it is paused. For `ShrinkWhilePaused`, they grow before the message
+/// and release their memory allocations while it is paused.
+fn run_long_running_message_growing_memory(
+    message: StorageReservationMessage,
+    slice: StorageReservationSlice,
+    subnet_memory_change: SubnetMemoryChange,
+    canister_balance: Cycles,
+    reserved_cycles_limit: u128,
+) -> StorageReservationOutcome {
+    const SLICE_INSTRUCTIONS: u64 = 100_000_000;
+    const TOTAL_INSTRUCTIONS: u64 = STORAGE_RESERVATION_TOTAL_INSTRUCTIONS;
+    // The instructions executed by a long-running stage of `install_code`
+    // preceding the stage growing memory: the stage must still be paused
+    // after other canisters grow the subnet memory usage.
+    const PREVIOUS_STAGE_INSTRUCTIONS: u64 = TOTAL_INSTRUCTIONS;
+    const STABLE_MEMORY_GROWTH_PAGES: u64 = 3_031_040; // 185 GiB.
+    const INITIAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000_000);
+
+    let grow_after_instructions = match slice {
+        StorageReservationSlice::First => 0,
+        StorageReservationSlice::Second => SLICE_INSTRUCTIONS + SLICE_INSTRUCTIONS / 2,
+    };
+    let burn = |instructions: u64| format!("(call $burn (i64.const {instructions}))");
+    let grow = format!(
+        "(if (i64.eq (call $stable64_grow (i64.const {STABLE_MEMORY_GROWTH_PAGES}))
+                     (i64.const -1))
+             (then (unreachable)))"
+    );
+    let grow_body = if message.has_long_running_previous_stage() {
+        // The stage growing memory starts right after the long-running
+        // previous stage completes (in the same round) and grows memory
+        // immediately, i.e., in its first slice.
+        assert!(slice == StorageReservationSlice::First);
+        grow
+    } else {
+        format!(
+            "{} {grow} {}",
+            burn(grow_after_instructions),
+            burn(TOTAL_INSTRUCTIONS)
+        )
+    };
+    let long_running_start = format!(
+        "(func $start {}) (start $start)",
+        burn(PREVIOUS_STAGE_INSTRUCTIONS)
+    );
+    let module = |funcs: &str| {
+        wat2wasm(&format!(
+            r#"(module
+                (import "ic0" "performance_counter"
+                    (func $performance_counter (param i32) (result i64)))
+                (import "ic0" "stable64_grow"
+                    (func $stable64_grow (param i64) (result i64)))
+                (import "ic0" "global_timer_set"
+                    (func $global_timer_set (param i64) (result i64)))
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (func $burn (param $instructions i64)
+                    (loop $burn
+                        (br_if $burn
+                            (i64.lt_u
+                                (call $performance_counter (i32.const 0))
+                                (local.get $instructions)))))
+                {funcs}
+                (memory 1))"#
+        ))
+    };
+    // The module installed before the message (if any) and the module
+    // installed by the message (for `install_code`).
+    let (old_module, new_module) = match message {
+        StorageReservationMessage::Update => (
+            Some(module(&format!(
+                r#"(func (export "canister_update update") {grow_body} (call $msg_reply))"#
+            ))),
+            None,
+        ),
+        // The heartbeat grows memory once after an update call arms it (by
+        // setting a flag in the Wasm memory).
+        StorageReservationMessage::Heartbeat => (
+            Some(module(&format!(
+                r#"(func (export "canister_update update")
+                       (i32.store (i32.const 0) (i32.const 1))
+                       (call $msg_reply))
+                   (func (export "canister_heartbeat")
+                       (if (i32.eq (i32.load (i32.const 0)) (i32.const 1))
+                           (then
+                               (i32.store (i32.const 0) (i32.const 2))
+                               {grow_body})))"#
+            ))),
+            None,
+        ),
+        // An update call sets the global timer to a time in the past so that
+        // the global timer runs in the next round.
+        StorageReservationMessage::GlobalTimer => (
+            Some(module(&format!(
+                r#"(func (export "canister_update update")
+                       (drop (call $global_timer_set (i64.const 1)))
+                       (call $msg_reply))
+                   (func (export "canister_global_timer") {grow_body})"#
+            ))),
+            None,
+        ),
+        StorageReservationMessage::Install => (
+            None,
+            Some(module(&format!(
+                r#"(func (export "canister_init") {grow_body})"#
+            ))),
+        ),
+        StorageReservationMessage::InstallAfterStart => (
+            None,
+            Some(module(&format!(
+                r#"{long_running_start} (func (export "canister_init") {grow_body})"#
+            ))),
+        ),
+        StorageReservationMessage::PreUpgrade => (
+            Some(module(&format!(
+                r#"(func (export "canister_pre_upgrade") {grow_body})"#
+            ))),
+            Some(module("")),
+        ),
+        StorageReservationMessage::PostUpgrade => (
+            Some(module("")),
+            Some(module(&format!(
+                r#"(func (export "canister_post_upgrade") {grow_body})"#
+            ))),
+        ),
+        StorageReservationMessage::PostUpgradeAfterPreUpgrade => (
+            Some(module(&format!(
+                r#"(func (export "canister_pre_upgrade") {})"#,
+                burn(PREVIOUS_STAGE_INSTRUCTIONS)
+            ))),
+            Some(module(&format!(
+                r#"(func (export "canister_post_upgrade") {grow_body})"#
+            ))),
+        ),
+        StorageReservationMessage::PostUpgradeAfterStart => (
+            Some(module("")),
+            Some(module(&format!(
+                r#"{long_running_start} (func (export "canister_post_upgrade") {grow_body})"#
+            ))),
+        ),
+        // The response (or cleanup) callback is executed by the universal
+        // canister.
+        StorageReservationMessage::Response | StorageReservationMessage::Cleanup => {
+            (Some(UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec()), None)
+        }
+    };
+
+    let env = if message.is_install_code() {
+        dts_install_code_env(
+            NumInstructions::from(1_000_000_000),
+            NumInstructions::from(SLICE_INSTRUCTIONS),
+        )
+        .0
+    } else {
+        dts_env(
+            NumInstructions::from(1_000_000_000),
+            NumInstructions::from(SLICE_INSTRUCTIONS),
+        )
+    };
+    let settings = |reserved_cycles_limit: u128| {
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(0)
+                .with_reserved_cycles_limit(reserved_cycles_limit)
+                .build(),
+        )
+    };
+    let canister_id =
+        env.create_canister_with_cycles(None, canister_balance, settings(reserved_cycles_limit));
+    let filler_1 = env.create_canister_with_cycles(None, INITIAL_BALANCE, settings(u128::MAX));
+    let filler_2 = env.create_canister_with_cycles(None, INITIAL_BALANCE, settings(u128::MAX));
+    if let Some(old_module) = old_module {
+        // The universal canister grows its Wasm memory when it first executes
+        // a (no-op) program. Do so in `canister_init` so that the update call
+        // making the inter-canister call does not reserve cycles depending on
+        // when it is executed.
+        let init_arg = if message.is_callback() {
+            wasm().noop().build()
+        } else {
+            vec![]
+        };
+        env.install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            old_module,
+            init_arg,
+        )
+        .unwrap();
+    }
+    let callee = message.is_callback().then(|| {
+        env.install_canister_with_cycles(
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            vec![],
+            settings(u128::MAX),
+            INITIAL_BALANCE,
+        )
+        .unwrap()
+    });
+    let mut growing_callback = wasm();
+    if slice == StorageReservationSlice::Second {
+        growing_callback =
+            growing_callback.instruction_counter_is_at_least(grow_after_instructions);
+    }
+    let growing_callback = growing_callback
+        .stable64_grow(STABLE_MEMORY_GROWTH_PAGES)
+        .instruction_counter_is_at_least(TOTAL_INSTRUCTIONS);
+    let callback_args = match message {
+        StorageReservationMessage::Cleanup => call_args()
+            .other_side(wasm().reply_data(&[]))
+            .on_reply(wasm().trap())
+            .on_cleanup(growing_callback),
+        _ => call_args()
+            .other_side(wasm().reply_data(&[]))
+            .on_reply(growing_callback.reply_data(&[])),
+    };
+
+    let start_message = || match message {
+        StorageReservationMessage::Update
+        | StorageReservationMessage::Heartbeat
+        | StorageReservationMessage::GlobalTimer => {
+            env.send_ingress(PrincipalId::new_anonymous(), canister_id, "update", vec![])
+        }
+        StorageReservationMessage::Install
+        | StorageReservationMessage::InstallAfterStart
+        | StorageReservationMessage::PreUpgrade
+        | StorageReservationMessage::PostUpgrade
+        | StorageReservationMessage::PostUpgradeAfterPreUpgrade
+        | StorageReservationMessage::PostUpgradeAfterStart => {
+            let mode = if message.is_upgrade() {
+                CanisterInstallMode::Upgrade
+            } else {
+                CanisterInstallMode::Install
+            };
+            env.send_ingress(
+                PrincipalId::new_anonymous(),
+                IC_00,
+                Method::InstallCode,
+                InstallCodeArgs::new(mode, canister_id, new_module.clone().unwrap(), vec![])
+                    .encode(),
+            )
+        }
+        StorageReservationMessage::Response | StorageReservationMessage::Cleanup => env
+            .send_ingress(
+                PrincipalId::new_anonymous(),
+                canister_id,
+                "update",
+                wasm()
+                    .inter_update(callee.unwrap(), callback_args.clone())
+                    .build(),
+            ),
+    };
+    let is_paused = || {
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .has_paused_execution_or_install_code()
+    };
+    // Executes rounds until the message is paused (starting a system task or
+    // executing a response callback requires multiple rounds).
+    let tick_until_paused = || {
+        for _ in 0..5 {
+            if is_paused() {
+                break;
+            }
+            env.tick();
+        }
+        assert!(is_paused());
+    };
+    let set_subnet_memory_allocation = |filler: CanisterId, bytes: u64| {
+        env.update_settings(
+            &filler,
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(bytes)
+                .build(),
+        )
+        .unwrap();
+    };
+    let reserved_balance_and_instructions_executed = || {
+        let state = env.get_latest_state();
+        let system_state = &state.canister_state(&canister_id).unwrap().system_state;
+        (
+            system_state.reserved_balance(),
+            system_state
+                .canister_metrics()
+                .instructions_executed()
+                .get(),
+        )
+    };
+
+    let (reserved_balance_before, instructions_executed_before) =
+        reserved_balance_and_instructions_executed();
+    let message_id = match subnet_memory_change {
+        SubnetMemoryChange::GrowWhilePaused => {
+            let message_id = start_message();
+            env.tick();
+            tick_until_paused();
+            set_subnet_memory_allocation(filler_1, 500 * GIB);
+            set_subnet_memory_allocation(filler_2, 240 * GIB);
+            assert!(is_paused());
+            message_id
+        }
+        SubnetMemoryChange::GrowBeforeExecution => {
+            set_subnet_memory_allocation(filler_1, 500 * GIB);
+            set_subnet_memory_allocation(filler_2, 240 * GIB);
+            start_message()
+        }
+        SubnetMemoryChange::ShrinkWhilePaused => {
+            set_subnet_memory_allocation(filler_1, 500 * GIB);
+            set_subnet_memory_allocation(filler_2, 240 * GIB);
+            let message_id = start_message();
+            env.tick();
+            tick_until_paused();
+            set_subnet_memory_allocation(filler_1, 0);
+            set_subnet_memory_allocation(filler_2, 0);
+            assert!(is_paused());
+            message_id
+        }
+    };
+
+    let result = env.await_ingress(message_id, 20);
+    if message.is_task() {
+        // The update call arming the system task completes before the system
+        // task, which is started (if it is not yet paused) and completed now.
+        tick_until_paused();
+        for _ in 0..20 {
+            if !is_paused() {
+                break;
+            }
+            env.tick();
+        }
+        assert!(!is_paused());
+    }
+
+    let (reserved_balance, instructions_executed) = reserved_balance_and_instructions_executed();
+    let stable_memory_usage = env
+        .get_latest_state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .stable_memory_usage()
+        .get();
+    StorageReservationOutcome {
+        result,
+        reserved_balance_before,
+        reserved_balance,
+        stable_memory_usage,
+        instructions_executed: instructions_executed - instructions_executed_before,
+    }
+}
+
+/// Executes a long-running message growing memory in the given slice and
+/// returns the reserved balance of the canister after the message completes
+/// (see `run_long_running_message_growing_memory`).
+fn storage_reservation_of_long_running_message(
+    message: StorageReservationMessage,
+    slice: StorageReservationSlice,
+    start_before_subnet_memory_grows: bool,
+) -> Cycles {
+    let outcome = run_long_running_message_growing_memory(
+        message,
+        slice,
+        if start_before_subnet_memory_grows {
+            SubnetMemoryChange::GrowWhilePaused
+        } else {
+            SubnetMemoryChange::GrowBeforeExecution
+        },
+        Cycles::new(100_000_000_000_000_000),
+        u128::MAX,
+    );
+    match message {
+        // The response callback traps (after which the cleanup callback runs).
+        StorageReservationMessage::Cleanup => {
+            let err = outcome.result.unwrap_err();
+            assert_eq!(err.code(), ErrorCode::CanisterCalledTrap, "{err}");
+        }
+        _ => {
+            outcome.result.unwrap();
+        }
+    }
+    assert_eq!(outcome.stable_memory_usage, 185 * GIB);
+    outcome.reserved_balance
+}
+
+/// Checks that every long-running message growing memory reserves storage
+/// cycles at the subnet memory saturation at the time it completes, i.e., the
+/// same amount as if it had started after other canisters had grown the subnet
+/// memory usage.
+#[test]
+fn dts_paused_message_growing_memory_reserves_cycles_at_current_saturation() {
+    for message in StorageReservationMessage::iter() {
+        let slices = if message.has_long_running_previous_stage() {
+            vec![StorageReservationSlice::First]
+        } else {
+            vec![
+                StorageReservationSlice::First,
+                StorageReservationSlice::Second,
+            ]
+        };
+        for slice in slices {
+            let paused_reserved = storage_reservation_of_long_running_message(message, slice, true);
+            let fresh_reserved = storage_reservation_of_long_running_message(message, slice, false);
+            // Sanity check: the subnet memory saturation is substantial.
+            assert!(
+                fresh_reserved >= Cycles::new(1_000_000_000_000_000),
+                "{message:?} growing memory in the {slice:?} slice: {fresh_reserved}"
+            );
+            assert_eq!(
+                paused_reserved, fresh_reserved,
+                "{message:?} growing memory in the {slice:?} slice"
+            );
+        }
+    }
+}
+
+/// The reason why a paused message cannot reserve storage cycles at the subnet
+/// memory saturation at the time it completes.
+#[derive(Clone, Copy, Debug)]
+enum LateStorageReservationFailure {
+    InsufficientCycles,
+    ReservedCyclesLimitExceeded,
+}
+
+/// Checks that every long-running message growing memory in its first slice
+/// fails if the canister cannot reserve storage cycles at the subnet memory
+/// saturation at the time the message completes (due to its cycles balance or
+/// reserved cycles limit, which suffice for the storage reservation at the
+/// start of the message) and that its changes are discarded.
+#[test]
+fn dts_paused_message_growing_memory_fails_to_reserve_cycles_at_current_saturation() {
+    for message in StorageReservationMessage::iter() {
+        // The Wasm execution of a message growing memory only after a long-running
+        // previous stage already starts at the current subnet memory saturation,
+        // so there is no late storage reservation that could fail.
+        if message.has_long_running_previous_stage() {
+            continue;
+        }
+        for failure in [
+            LateStorageReservationFailure::InsufficientCycles,
+            LateStorageReservationFailure::ReservedCyclesLimitExceeded,
+        ] {
+            let case = format!("{message:?} failing due to {failure:?}");
+            let (canister_balance, reserved_cycles_limit, error_code, error_message) = match failure
+            {
+                LateStorageReservationFailure::InsufficientCycles => (
+                    Cycles::new(10_000_000_000_000),
+                    u128::MAX,
+                    ErrorCode::InsufficientCyclesInMemoryGrow,
+                    "due to insufficient cycles",
+                ),
+                LateStorageReservationFailure::ReservedCyclesLimitExceeded => (
+                    Cycles::new(100_000_000_000_000_000),
+                    10_000_000_000_000,
+                    ErrorCode::ReservedCyclesLimitExceededInMemoryGrow,
+                    "due to its reserved cycles limit",
+                ),
+            };
+            let outcome = run_long_running_message_growing_memory(
+                message,
+                StorageReservationSlice::First,
+                SubnetMemoryChange::GrowWhilePaused,
+                canister_balance,
+                reserved_cycles_limit,
+            );
+            if message.is_task() {
+                // The failure of a system task is not reported. Hence, we check
+                // that the system task has executed (all its instructions).
+                outcome.result.unwrap();
+                assert!(
+                    outcome.instructions_executed >= STORAGE_RESERVATION_TOTAL_INSTRUCTIONS,
+                    "{case}: {}",
+                    outcome.instructions_executed
+                );
+            } else {
+                let err = outcome.result.unwrap_err();
+                // A failing cleanup callback reports the error code of the
+                // (trapping) response callback.
+                let expected_code = if message == StorageReservationMessage::Cleanup {
+                    ErrorCode::CanisterCalledTrap
+                } else {
+                    error_code
+                };
+                assert_eq!(err.code(), expected_code, "{case}: {err}");
+                assert!(err.description().contains(error_message), "{case}: {err}");
+            }
+            // The changes of the message are discarded.
+            assert_eq!(outcome.stable_memory_usage, 0, "{case}");
+            assert_eq!(
+                outcome.reserved_balance, outcome.reserved_balance_before,
+                "{case}"
+            );
+        }
+    }
+}
+
+/// Reservations already made by the sandbox are retained when subnet memory
+/// saturation falls before the execution commits.
+#[test]
+fn dts_paused_message_growing_memory_does_not_refund_cycles_when_saturation_falls() {
+    for message in [
+        StorageReservationMessage::Update,
+        StorageReservationMessage::Response,
+        StorageReservationMessage::Cleanup,
+    ] {
+        let reserved_at_high_saturation = storage_reservation_of_long_running_message(
+            message,
+            StorageReservationSlice::First,
+            false,
+        );
+        assert!(reserved_at_high_saturation >= Cycles::new(1_000_000_000_000_000));
+        let outcome = run_long_running_message_growing_memory(
+            message,
+            StorageReservationSlice::First,
+            SubnetMemoryChange::ShrinkWhilePaused,
+            Cycles::new(100_000_000_000_000_000),
+            reserved_at_high_saturation.get(),
+        );
+        if message == StorageReservationMessage::Cleanup {
+            let err = outcome.result.unwrap_err();
+            assert_eq!(
+                err.code(),
+                ErrorCode::CanisterCalledTrap,
+                "{message:?}: {err}"
+            );
+        } else {
+            outcome.result.unwrap();
+        }
+        assert_eq!(outcome.stable_memory_usage, 185 * GIB, "{message:?}");
+        assert_eq!(
+            outcome.reserved_balance, reserved_at_high_saturation,
+            "{message:?}"
+        );
+    }
 }

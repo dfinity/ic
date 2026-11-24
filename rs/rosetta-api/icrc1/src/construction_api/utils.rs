@@ -1,11 +1,15 @@
 use super::types::{
     CanisterMethodName, ConstructionPayloadsRequestMetadata, SignedTransaction, UnsignedTransaction,
 };
+use crate::common::constants::{
+    CANISTER_METHOD_ARGS_SKIPPING_QUOTA, MAX_CANISTER_METHOD_ARGS_BYTES,
+    MAX_ENVELOPES_PER_TRANSACTION, MAX_PUBLIC_KEY_BYTES, MAX_SIGNATURE_BYTES,
+};
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
 };
 use anyhow::{Context, bail};
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, DecoderConfig, Encode, Principal, decode_one_with_config};
 use ic_agent::agent::{Envelope, EnvelopeContent};
 use ic_rosetta_api::models::ConstructionParseResponse;
 use icrc_ledger_agent::Icrc1Agent;
@@ -19,6 +23,7 @@ use rosetta_core::response_types::{ConstructionCombineResponse, ConstructionPayl
 use rosetta_core::{
     identifiers::TransactionIdentifier, response_types::ConstructionSubmitResponse,
 };
+use serde::de::DeserializeOwned;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -92,6 +97,18 @@ pub async fn handle_construction_submit(
     bail!("No valid envelopes found in the signed transaction");
 }
 
+/// Decodes ledger method arguments taken from a client-supplied envelope under a skipping quota,
+/// so that the work spent on skipped values is bounded whatever vector lengths they declare. The
+/// decoded values only contain byte vectors, so the size limit already bounds them.
+fn decode_canister_method_args<T>(candid_bytes: &[u8]) -> Result<T, candid::Error>
+where
+    T: CandidType + DeserializeOwned,
+{
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(CANISTER_METHOD_ARGS_SKIPPING_QUOTA);
+    decode_one_with_config(candid_bytes, &config)
+}
+
 // Tries to convert a CanisterMethodArg into an icrc1::Transaction
 // Fails if the underlying method is not supported by icrc1 ledgers
 pub fn build_icrc1_transaction_from_canister_method_args(
@@ -99,6 +116,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
     caller: &Principal,
     candid_bytes: Vec<u8>,
 ) -> anyhow::Result<crate::common::storage::types::IcrcTransaction> {
+    validate_canister_method_args_size(&candid_bytes)?;
     Ok(match canister_method_name {
         CanisterMethodName::Icrc2Approve => {
             let ApproveArgs {
@@ -110,7 +128,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 expires_at,
                 memo,
                 created_at_time,
-            } = Decode!(&candid_bytes, ApproveArgs).with_context(|| {
+            } = decode_canister_method_args::<ApproveArgs>(&candid_bytes).with_context(|| {
                 format!("Could not decode approve args from: {candid_bytes:?} ")
             })?;
 
@@ -140,9 +158,9 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 fee,
                 memo,
                 created_at_time,
-            } = Decode!(&candid_bytes, TransferFromArgs).with_context(|| {
-                format!("Could not decode transfer from args from: {candid_bytes:?} ")
-            })?;
+            } = decode_canister_method_args::<TransferFromArgs>(&candid_bytes).with_context(
+                || format!("Could not decode transfer from args from: {candid_bytes:?} "),
+            )?;
 
             let operation = crate::common::storage::types::IcrcOperation::Transfer {
                 to,
@@ -168,7 +186,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 fee,
                 memo,
                 created_at_time,
-            } = Decode!(&candid_bytes, TransferArg).with_context(|| {
+            } = decode_canister_method_args::<TransferArg>(&candid_bytes).with_context(|| {
                 format!("Could not decode transfer args from: {candid_bytes:?} ")
             })?;
 
@@ -353,12 +371,19 @@ pub fn handle_construction_combine(
     unsigned_transaction: UnsignedTransaction,
     signatures: Vec<Signature>,
 ) -> anyhow::Result<ConstructionCombineResponse> {
-    if unsigned_transaction.envelope_contents.len() != signatures.len() {
+    let num_envelopes = unsigned_transaction.envelope_contents.len();
+    if num_envelopes > MAX_ENVELOPES_PER_TRANSACTION {
+        bail!(
+            "The number of envelopes must not exceed {MAX_ENVELOPES_PER_TRANSACTION}: got {num_envelopes}"
+        );
+    }
+    if num_envelopes != signatures.len() {
         bail!("Number of signatures does not match number of envelopes");
     }
 
     let mut request_id_to_signature = std::collections::HashMap::new();
     for signature in &signatures {
+        validate_signature_size(signature)?;
         if request_id_to_signature.contains_key(&signature.signing_payload.hex_bytes) {
             bail!("Duplicate request_id found in signatures: {:?}", signature);
         }
@@ -366,10 +391,16 @@ pub fn handle_construction_combine(
         request_id_to_signature.insert(signature.signing_payload.hex_bytes.clone(), signature);
     }
 
+    // The envelopes have distinct request ids, and there are as many envelopes as signatures, so
+    // every signature is used exactly once.
+    let mut request_ids = HashSet::with_capacity(num_envelopes);
     let mut envelopes = vec![];
     for envelope_content in &unsigned_transaction.envelope_contents {
         if matches!(envelope_content, EnvelopeContent::Call { .. }) {
             let request_id = build_signable_payload(envelope_content);
+            if !request_ids.insert(request_id.clone()) {
+                bail!("A transaction must not contain repeated envelopes");
+            }
             let signature = request_id_to_signature
                 .get(&request_id)
                 .context("Failed to find signature for request id")?;
@@ -391,6 +422,17 @@ pub fn handle_construction_combine(
     Ok(ConstructionCombineResponse {
         signed_transaction: hex::encode(serde_cbor::to_vec(&SignedTransaction { envelopes })?),
     })
+}
+
+/// Validates the size of a signature and its public key before they are copied into an envelope.
+fn validate_signature_size(signature: &Signature) -> anyhow::Result<()> {
+    if signature.hex_bytes.len() > 2 * MAX_SIGNATURE_BYTES {
+        bail!("A signature must not be larger than {MAX_SIGNATURE_BYTES} bytes");
+    }
+    if signature.public_key.hex_bytes.len() > 2 * MAX_PUBLIC_KEY_BYTES {
+        bail!("A public key must not be larger than {MAX_PUBLIC_KEY_BYTES} bytes");
+    }
+    Ok(())
 }
 
 fn build_payloads_from_call_envelope_content(
@@ -417,6 +459,17 @@ fn build_payloads_from_call_envelope_content(
     Ok(signing_payload)
 }
 
+/// Validates the size of the canister method arguments before they are copied into every envelope.
+fn validate_canister_method_args_size(canister_method_args: &[u8]) -> anyhow::Result<()> {
+    if canister_method_args.len() > MAX_CANISTER_METHOD_ARGS_BYTES {
+        bail!(
+            "The canister method arguments must not be longer than {MAX_CANISTER_METHOD_ARGS_BYTES} bytes: Length: {}",
+            canister_method_args.len()
+        );
+    }
+    Ok(())
+}
+
 pub fn handle_construction_payloads(
     rosetta_core_operations: Vec<Operation>,
     created_at_time: u64,
@@ -437,6 +490,7 @@ pub fn handle_construction_payloads(
     // We can now build the canister method args used to call the icrc1 ledger
     let canister_method_args =
         build_icrc1_ledger_canister_method_args(icrc1_operation, memo, created_at_time)?;
+    validate_canister_method_args_size(&canister_method_args)?;
 
     let mut signing_payloads = Vec::new();
     let mut envelope_contents = Vec::new();
@@ -519,9 +573,10 @@ pub fn handle_construction_parse(
                     created_at_time: icrc1_transaction.created_at_time,
                     // The ingress start is the first ingress expiry set minus the ingress interval
                     ingress_start: ingress_expiry_start.map(|start| {
-                        start
-                            - (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
-                                as u64
+                        start.saturating_sub(
+                            (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
+                                as u64,
+                        )
                     }),
                     ingress_end: ingress_expiry_end,
                 }
@@ -695,6 +750,349 @@ mod test {
                 },
             )
             .unwrap();
+    }
+
+    fn account_with_subaccount() -> Account {
+        Account {
+            owner: Principal::from_slice(&[0xff; 29]),
+            subaccount: Some([0xff; 32]),
+        }
+    }
+
+    fn u256_max() -> candid::Nat {
+        candid::Nat::from(num_bigint::BigUint::from_bytes_be(&[0xff; 32]))
+    }
+
+    fn largest_supported_operations() -> Vec<crate::common::storage::types::IcrcOperation> {
+        use crate::common::storage::types::IcrcOperation;
+        vec![
+            IcrcOperation::Approve {
+                from: account_with_subaccount(),
+                spender: account_with_subaccount(),
+                amount: u256_max(),
+                expected_allowance: Some(u256_max()),
+                expires_at: Some(u64::MAX),
+                fee: Some(u256_max()),
+            },
+            IcrcOperation::Transfer {
+                from: account_with_subaccount(),
+                to: account_with_subaccount(),
+                spender: Some(account_with_subaccount()),
+                amount: u256_max(),
+                fee: Some(u256_max()),
+            },
+            IcrcOperation::Transfer {
+                from: account_with_subaccount(),
+                to: account_with_subaccount(),
+                spender: None,
+                amount: u256_max(),
+                fee: Some(u256_max()),
+            },
+        ]
+    }
+
+    #[test]
+    fn test_largest_supported_canister_method_args_are_accepted() {
+        for operation in largest_supported_operations() {
+            let args = build_icrc1_ledger_canister_method_args(
+                operation,
+                Some(Memo::from(vec![0xff_u8; 1024])),
+                u64::MAX,
+            )
+            .unwrap();
+            assert!(validate_canister_method_args_size(&args).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_oversized_canister_method_args_are_rejected() {
+        assert!(
+            validate_canister_method_args_size(&[0_u8; MAX_CANISTER_METHOD_ARGS_BYTES]).is_ok()
+        );
+        for operation in largest_supported_operations() {
+            let args = build_icrc1_ledger_canister_method_args(
+                operation,
+                Some(Memo::from(vec![0xff_u8; MAX_CANISTER_METHOD_ARGS_BYTES])),
+                u64::MAX,
+            )
+            .unwrap();
+            let err = validate_canister_method_args_size(&args).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("canister method arguments must not be longer"),
+                "unexpected error: {err}"
+            );
+        }
+    }
+
+    fn transfer_rosetta_core_operations() -> Vec<Operation> {
+        icrc1_operation_to_rosetta_core_operations(
+            crate::common::storage::types::IcrcOperation::Transfer {
+                from: account_with_subaccount(),
+                to: account_with_subaccount(),
+                spender: None,
+                amount: candid::Nat::from(1_u64),
+                fee: None,
+            },
+            test_currency(),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn test_currency() -> Currency {
+        Currency {
+            symbol: "XTST".to_string(),
+            decimals: 8,
+            metadata: None,
+        }
+    }
+
+    fn call_envelope_content(arg: Vec<u8>, ingress_expiry: u64) -> EnvelopeContent {
+        EnvelopeContent::Call {
+            canister_id: Principal::anonymous(),
+            method_name: CanisterMethodName::Icrc1Transfer.to_string(),
+            arg,
+            nonce: None,
+            sender: account_with_subaccount().owner,
+            ingress_expiry,
+            sender_info: None,
+        }
+    }
+
+    fn oversized_transfer_args() -> Vec<u8> {
+        Encode!(&TransferArg {
+            from_subaccount: None,
+            to: account_with_subaccount(),
+            fee: None,
+            created_at_time: None,
+            memo: Some(Memo::from(vec![0xff_u8; MAX_CANISTER_METHOD_ARGS_BYTES])),
+            amount: candid::Nat::from(1_u64),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn test_construction_payloads_rejects_oversized_canister_method_args() {
+        let err = handle_construction_payloads(
+            transfer_rosetta_core_operations(),
+            0,
+            Some(Memo::from(vec![0xff_u8; MAX_CANISTER_METHOD_ARGS_BYTES])),
+            Principal::anonymous(),
+            PublicKey::new(
+                hex::encode([0_u8; 32]),
+                rosetta_core::objects::CurveType::Edwards25519,
+            ),
+            vec![1],
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("canister method arguments must not be longer"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_construction_parse_and_hash_reject_oversized_canister_method_args() {
+        let envelope_content = call_envelope_content(oversized_transfer_args(), 1);
+
+        let err = build_transaction_hash_from_envelope_content(&envelope_content).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("canister method arguments must not be longer"),
+            "unexpected error: {err}"
+        );
+
+        let err = handle_construction_parse(
+            vec![envelope_content],
+            test_currency(),
+            Some(1),
+            Some(1),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("canister method arguments must not be longer"),
+            "unexpected error: {err}"
+        );
+    }
+
+    /// Length of the `vec null` in the args built by the tests below. It is encoded with this
+    /// length and then patched to `DECLARED_VEC_LEN`, which is far too long to skip.
+    const ENCODED_VEC_LEN: u64 = 1_234_567;
+    const DECLARED_VEC_LEN: u64 = 100_000_000;
+
+    fn leb128(mut n: u64) -> Vec<u8> {
+        let mut bytes = vec![];
+        loop {
+            let byte = (n & 0x7f) as u8;
+            n >>= 7;
+            if n == 0 {
+                bytes.push(byte);
+                return bytes;
+            }
+            bytes.push(byte | 0x80);
+        }
+    }
+
+    /// Replaces the length of the single `vec null` in `args` with `DECLARED_VEC_LEN`.
+    fn with_declared_vec_len(args: Vec<u8>) -> Vec<u8> {
+        let encoded = leb128(ENCODED_VEC_LEN);
+        let positions: Vec<usize> = args
+            .windows(encoded.len())
+            .enumerate()
+            .filter(|(_, window)| *window == encoded.as_slice())
+            .map(|(pos, _)| pos)
+            .collect();
+        assert_eq!(positions.len(), 1, "the vec length must occur exactly once");
+        let pos = positions[0];
+        [
+            &args[..pos],
+            &leb128(DECLARED_VEC_LEN),
+            &args[pos + encoded.len()..],
+        ]
+        .concat()
+    }
+
+    fn zero_sized_vec() -> Vec<()> {
+        vec![(); ENCODED_VEC_LEN as usize]
+    }
+
+    fn transfer_arg() -> TransferArg {
+        TransferArg {
+            from_subaccount: None,
+            to: account_with_subaccount(),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: candid::Nat::from(1_u64),
+        }
+    }
+
+    /// `TransferArg` args followed by a long `vec null` argument.
+    fn transfer_args_with_trailing_vec() -> Vec<u8> {
+        with_declared_vec_len(Encode!(&transfer_arg(), &zero_sized_vec()).unwrap())
+    }
+
+    /// `TransferArg` args with an extra long `vec null` record field.
+    fn transfer_args_with_extra_field() -> Vec<u8> {
+        #[derive(candid::CandidType)]
+        struct TransferArgWithExtraField {
+            from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+            to: Account,
+            fee: Option<candid::Nat>,
+            created_at_time: Option<u64>,
+            memo: Option<Memo>,
+            amount: candid::Nat,
+            extra: Vec<()>,
+        }
+        with_declared_vec_len(
+            Encode!(&TransferArgWithExtraField {
+                from_subaccount: None,
+                to: account_with_subaccount(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: candid::Nat::from(1_u64),
+                extra: zero_sized_vec(),
+            })
+            .unwrap(),
+        )
+    }
+
+    /// `TransferArg` args whose `opt` memo holds a long `vec null` instead of a blob.
+    fn transfer_args_with_mismatched_opt_field() -> Vec<u8> {
+        #[derive(candid::CandidType)]
+        struct TransferArgWithMismatchedMemo {
+            from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+            to: Account,
+            fee: Option<candid::Nat>,
+            created_at_time: Option<u64>,
+            memo: Option<Vec<()>>,
+            amount: candid::Nat,
+        }
+        with_declared_vec_len(
+            Encode!(&TransferArgWithMismatchedMemo {
+                from_subaccount: None,
+                to: account_with_subaccount(),
+                fee: None,
+                created_at_time: None,
+                memo: Some(zero_sized_vec()),
+                amount: candid::Nat::from(1_u64),
+            })
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_construction_parse_and_hash_reject_args_exceeding_skipping_quota() {
+        for (name, args) in [
+            ("trailing argument", transfer_args_with_trailing_vec()),
+            ("extra record field", transfer_args_with_extra_field()),
+            (
+                "mismatched opt field",
+                transfer_args_with_mismatched_opt_field(),
+            ),
+        ] {
+            let envelope_content = call_envelope_content(args, 1);
+
+            let err = build_transaction_hash_from_envelope_content(&envelope_content).unwrap_err();
+            assert!(
+                format!("{err:#}").contains("Skipping cost exceeds the limit"),
+                "{name}: unexpected hash error: {err:#}"
+            );
+
+            let err = handle_construction_parse(
+                vec![envelope_content],
+                test_currency(),
+                Some(1),
+                Some(1),
+                false,
+            )
+            .unwrap_err();
+            assert!(
+                format!("{err:#}").contains("Skipping cost exceeds the limit"),
+                "{name}: unexpected parse error: {err:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_canister_method_args_with_short_unexpected_vec_are_accepted() {
+        // Values the decoder has to skip are fine as long as they stay within the quota.
+        let args = Encode!(&transfer_arg(), &vec![(); 100]).unwrap();
+        let transaction = build_icrc1_transaction_from_canister_method_args(
+            &CanisterMethodName::Icrc1Transfer,
+            &account_with_subaccount().owner,
+            args,
+        )
+        .unwrap();
+        assert_eq!(transaction.memo, None);
+    }
+
+    #[test]
+    fn test_construction_parse_does_not_underflow_ingress_start() {
+        let args = Encode!(&TransferArg {
+            from_subaccount: None,
+            to: account_with_subaccount(),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: candid::Nat::from(1_u64),
+        })
+        .unwrap();
+        let response = handle_construction_parse(
+            vec![call_envelope_content(args, 0)],
+            test_currency(),
+            Some(0),
+            Some(0),
+            false,
+        )
+        .unwrap();
+        let metadata = ConstructionPayloadsRequestMetadata::try_from(response.metadata).unwrap();
+        assert_eq!(metadata.ingress_start, Some(0));
     }
 
     #[test]

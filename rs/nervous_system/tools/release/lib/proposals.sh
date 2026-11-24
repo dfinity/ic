@@ -460,38 +460,23 @@ EOF
 }
 
 ##: generate_forum_post_nns_upgrades
-## Usage: $1 <proposal_file> (<proposal_file>...)
-## Example: $1 directory_with_new_proposals/*
-## Example: $1 proposal_1.md proposal_2.md
+## Usage: $1 <proposal_file>:<proposal_id> ...
+## Example: $1 nns-cycles-minting.md:144844 nns-registry.md:144845
 generate_forum_post_nns_upgrades() {
     if [ $# -eq 0 ]; then
         echo "No proposal files provided"
         exit 1
     fi
 
-    PROPOSAL_FILES=$(ls "$@")
+    PROPOSALS_SECTION=$(generate_forum_post_proposals_section "$@")
 
     VOTE_DATE=$(date -d "+3 days" +'%A, %B %-d, %Y' 2>/dev/null || date -v+3d +'%A, %B %-d, %Y')
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals on $VOTE_DATE.
+The NNS Team submitted the following proposals. DFINITY plans to vote on these proposals on $VOTE_DATE.
 
-TODO proposal links
-
-## Additional Notes / Breaking Changes
-
-TODO - delete if nothing relevant
-
-## Submitted Proposals
-
-$(for file in $PROPOSAL_FILES; do
-            echo "### $(nns_upgrade_proposal_canister_raw_name $file)"
-            echo '````'
-            cat $file
-            echo '````'
-            echo
-        done)
+$PROPOSALS_SECTION
 EOF
     )
 
@@ -499,42 +484,78 @@ EOF
 }
 
 ##: generate_forum_post_sns_wasm_publish
-## Usage: $1 <proposal_file> (<proposal_file>...)
-## Example: $1 directory_with_new_proposals/*
-## Example: $1 proposal_1.md proposal_2.md
+## Usage: $1 <proposal_file>:<proposal_id> ...
+## Example: $1 sns-root.md:144846 sns-governance.md:144847
 generate_forum_post_sns_wasm_publish() {
     if [ $# -eq 0 ]; then
         echo "No proposal files provided"
         exit 1
     fi
 
-    PROPOSAL_FILES=$(ls "$@")
+    PROPOSALS_SECTION=$(generate_forum_post_proposals_section "$@")
 
     VOTE_DATE=$(date -d "+3 days" +'%A, %B %-d, %Y' 2>/dev/null || date -v+3d +'%A, %B %-d, %Y')
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals on $VOTE_DATE.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM. DFINITY plans to vote on these proposals on $VOTE_DATE.
 
-TODO proposal links
-
-## Additional Notes / Breaking Changes
-
-TODO - delete if nothing relevant
-
-## Submitted Proposals
-
-$(for file in $PROPOSAL_FILES; do
-            echo "### $(sns_wasm_publish_proposal_canister_raw_name $file)"
-            echo '````'
-            cat $file
-            echo '````'
-            echo
-        done)
+$PROPOSALS_SECTION
 EOF
     )
 
     echo "$OUTPUT"
+}
+
+# Prints the "Submitted Proposals" section of a forum post: that heading,
+# followed by one subsection per proposal, in order of proposal ID. Each
+# subsection is the canister's name (as a heading), a link to the proposal, and
+# the proposal text (quoted).
+#
+# Arguments are like those of generate_forum_post_nns_upgrades.
+generate_forum_post_proposals_section() {
+    # Validate arguments.
+    local BAD_ARGS=()
+    local ARG
+    for ARG in "$@"; do
+        if [[ ! "$ARG" =~ :[0-9]+$ ]]; then
+            BAD_ARGS+=("$ARG")
+        fi
+    done
+    if [ ${#BAD_ARGS[@]} -gt 0 ]; then
+        echo >&2 "Arguments must be of the form <proposal_file>:<proposal_id> (e.g. nns-registry.md:144845), but these are not: ${BAD_ARGS[*]}"
+        return 1
+    fi
+
+    # Cram arguments into one string, one line per proposal.
+    # Sort by proposal ID.
+    local PROPOSAL_LINES
+    PROPOSAL_LINES=$(
+        for ARG in "$@"; do
+            # Print ${proposal_id} ${proposal_file_path}
+            echo "${ARG##*:} ${ARG%:*}"
+        done | sort -n
+    )
+
+    echo "## Submitted Proposals"
+    echo
+
+    # Print a subsection for each proposal.
+    # (This includes heading and link to the proposal in Dashboard.)
+    local PROPOSAL_ID PROPOSAL_FILE
+    while read -r PROPOSAL_ID PROPOSAL_FILE; do
+        local CANISTER_NAME
+        CANISTER_NAME=$(extract_canister_name_from_proposal "$PROPOSAL_FILE") || return 1
+
+        echo "### ${CANISTER_NAME}"
+        echo
+        echo "[Proposal $PROPOSAL_ID](https://dashboard.internetcomputer.org/proposal/$PROPOSAL_ID)"
+        echo
+        echo '````'
+        cat "$PROPOSAL_FILE" || return 1
+        echo '````'
+        echo
+    done <<<"$PROPOSAL_LINES"
 }
 
 #### Helper functions
@@ -640,14 +661,25 @@ proposal_field_value() {
     extract_first_markdown_link_display_name "$VALUE"
 }
 
-nns_upgrade_proposal_canister_raw_name() {
+# Prints the name of the canister that a proposal is about, e.g. "Registry".
+# The name is taken from the proposal's title (its first line), which is either
+#
+#     # Upgrade the Registry Canister to Commit ...      (NNS)
+#     # Publish SNS Governance WASM Built at Commit ...  (SNS)
+extract_canister_name_from_proposal() {
     local FILE=$1
-    cat "$FILE" | grep "# Upgrade the" | cut -d' ' -f4
-}
 
-sns_wasm_publish_proposal_canister_raw_name() {
-    local FILE=$1
-    cat "$FILE" | grep "# Publish SNS" | cut -d' ' -f4
+    local TITLE
+    TITLE=$(head -n 1 "$FILE")
+
+    if [[ "$TITLE" =~ ^"# Upgrade the "(.+)" Canister to Commit " ]] \
+        || [[ "$TITLE" =~ ^"# Publish SNS "(.+)" WASM Built at Commit " ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return
+    fi
+
+    echo >&2 "Unable to find the canister name in the title of $FILE: $TITLE"
+    return 1
 }
 #### Proposal text validators
 

@@ -35,20 +35,22 @@ const SSH_ACCESS_TIMEOUT: Duration = Duration::from_secs(30);
 const SSH_ACCESS_BACKOFF: Duration = Duration::from_secs(5);
 
 pub fn generate_key_strings() -> (String, String) {
+    use rand_0_10::SeedableRng;
+    use rsa::traits::PublicKeyParts;
+
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
     // an Ed25519 private key the SSH way, we might consider switching to it.
-    let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 1024).expect("RSA keygen failed");
-    use rsa::traits::PublicKeyParts;
-    let e = rsa.e();
-    let n = rsa.n();
+    // `rsa` takes a rand 0.10 RNG.
+    let mut rng = rand_0_10::rngs::StdRng::from_seed(rand::random());
+    let rsa = rsa::PrivateKey::new(&mut rng, 1024).expect("RSA keygen failed");
 
     let private_key = private_key_to_pem_string(&rsa);
-    let public_key = public_key_to_string(e.to_bytes_be(), n.to_bytes_be());
+    let public_key = public_key_to_string(rsa.e_bytes().into_vec(), rsa.n_bytes().into_vec());
 
     (private_key, public_key)
 }
 
-fn private_key_to_pem_string(rsa: &rsa::RsaPrivateKey) -> String {
+fn private_key_to_pem_string(rsa: &rsa::PrivateKey) -> String {
     use rsa::pkcs1::EncodeRsaPrivateKey;
     rsa.to_pkcs1_pem(rsa::pkcs1::LineEnding::CRLF)
         .unwrap()

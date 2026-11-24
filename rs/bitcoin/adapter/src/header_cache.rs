@@ -777,12 +777,18 @@ pub(crate) mod test {
             assert_eq!(cache.metrics.in_memory_elements.get(), 1);
             assert_eq!(cache.metrics.on_disk_elements.get(), 1);
 
-            // Make a few new headers
+            // Make a few new headers on three forks of genesis. generate_headers only
+            // randomizes the timestamp, so pass the hashes generated so far to keep the
+            // forks from starting with the same header.
             let mut next_headers = BTreeMap::new();
             for i in 1..4 {
-                for header in
-                    generate_headers(genesis_block_hash, genesis_block_header.time, i, &[])
-                {
+                let known_hashes: Vec<BlockHash> = next_headers.keys().copied().collect();
+                for header in generate_headers(
+                    genesis_block_hash,
+                    genesis_block_header.time,
+                    i,
+                    &known_hashes,
+                ) {
                     cache.add_header(header.block_hash(), header).unwrap();
                     let next_node = cache.get_header(header.block_hash()).unwrap();
                     assert_eq!(next_node.data.header, header);
@@ -792,12 +798,17 @@ pub(crate) mod test {
             assert_eq!(cache.metrics.in_memory_elements.get(), 7);
             assert_eq!(cache.metrics.on_disk_elements.get(), 1);
 
-            // Add more headers
+            // Add more headers on three forks of the intermediate tip.
             let intermediate = cache.get_active_chain_tip();
             let intermediate_hash = intermediate.header.block_hash();
             for i in 1..4 {
-                for header in generate_headers(intermediate_hash, intermediate.header.time, i, &[])
-                {
+                let known_hashes: Vec<BlockHash> = next_headers.keys().copied().collect();
+                for header in generate_headers(
+                    intermediate_hash,
+                    intermediate.header.time,
+                    i,
+                    &known_hashes,
+                ) {
                     cache.add_header(header.block_hash(), header).unwrap();
                     let next_node = cache.get_header(header.block_hash()).unwrap();
                     assert_eq!(next_node.data.header, header);

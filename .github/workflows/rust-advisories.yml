@@ -1,0 +1,127 @@
+name: Rust Advisories
+
+on:
+  schedule:
+    - cron: "37 11 * * *" # 11:37 UTC - midday rather than overnight, so the check doesn't land on the commit Schedule RC cuts
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/rust-advisories.yml"
+      - "deny.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cargo-deny:
+    name: Audit Cargo.lock
+    # for dfinity/ic: run on all events except on PRs from forks;
+    # never run on other repos such as dfinity/ic-private
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # NOTE: update CARGO_DENY_SHA256 whenever CARGO_DENY_VERSION changes.
+      CARGO_DENY_VERSION: "0.21.0"
+      CARGO_DENY_SHA256: "a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Install cargo-deny and the Rust toolchain
+        run: |
+          set -euo pipefail
+          name="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$name.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/$name.tar.gz"
+          echo "$CARGO_DENY_SHA256  $RUNNER_TEMP/$name.tar.gz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/cargo-deny"
+          tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP/cargo-deny" --strip-components=1
+          rustup toolchain install
+      - name: Run cargo deny
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/cargo-deny.txt"
+          status=0
+          "$RUNNER_TEMP/cargo-deny/cargo-deny" --color never --all-features --locked \
+            check --hide-inclusion-graph --show-stats advisories >"$out" 2>&1 || status=$?
+          cat "$out"
+          if [[ $status -eq 0 ]]; then
+            result="passed"
+          elif [[ $status -eq 1 ]] && grep -Eq '^ *advisories FAILED: [0-9]+ errors' "$out"; then
+            result="advisories found, see below"
+          else
+            result="cargo deny did not complete (exit $status), see the step log"
+            echo "::error title=cargo deny did not complete::$result"
+          fi
+          {
+            echo '## `cargo deny check advisories` of `Cargo.lock`'
+            echo "**Result:** $result"
+            echo '~~~'
+            head -c 1000000 "$out"
+            echo '~~~'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  cargo-audit:
+    name: Audit Cargo.Bazel.toml.lock
+    # for dfinity/ic: run on all events except on PRs from forks;
+    # never run on other repos such as dfinity/ic-private
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # NOTE: update CARGO_AUDIT_SHA256 whenever CARGO_AUDIT_VERSION changes.
+      CARGO_AUDIT_VERSION: "0.23.0"
+      CARGO_AUDIT_SHA256: "b77993532b253fcbf550996d7716465ec3d734d4e74e7f87bfb65a19add0fb59"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /Cargo.Bazel.toml.lock
+          sparse-checkout-cone-mode: false
+      - name: Install cargo-audit
+        run: |
+          set -euo pipefail
+          name="cargo-audit-x86_64-unknown-linux-gnu-v${CARGO_AUDIT_VERSION}"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$name.tgz" \
+            "https://github.com/rustsec/rustsec/releases/download/cargo-audit/v${CARGO_AUDIT_VERSION}/$name.tgz"
+          echo "$CARGO_AUDIT_SHA256  $RUNNER_TEMP/$name.tgz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/cargo-audit"
+          tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP/cargo-audit" --strip-components=1
+      - name: Run cargo audit
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/cargo-audit.txt"
+          status=0
+          # Fails on vulnerabilities and unmaintained crates; unsound and yanked crates are only listed.
+          "$RUNNER_TEMP/cargo-audit/cargo-audit" audit --color never --deny unmaintained \
+            --file Cargo.Bazel.toml.lock >"$out" 2>&1 || status=$?
+          cat "$out"
+          if [[ $status -eq 0 ]]; then
+            result="passed"
+          elif [[ $status -eq 1 ]] && grep -Eq '^error: [0-9]+ (vulnerabilit(y|ies)|denied warnings?) found' "$out"; then
+            result="advisories found, see below"
+          else
+            result="cargo audit did not complete (exit $status), see the step log"
+            echo "::error title=cargo audit did not complete::$result"
+          fi
+          {
+            echo '## `cargo audit` of `Cargo.Bazel.toml.lock`'
+            echo "**Result:** $result"
+            echo '~~~'
+            head -c 1000000 "$out"
+            echo '~~~'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"

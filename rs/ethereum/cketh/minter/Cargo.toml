@@ -46,7 +46,7 @@ minicbor = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
-rlp = "0.5.2"
+rlp = "0.6.1"
 scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

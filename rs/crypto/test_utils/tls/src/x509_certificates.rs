@@ -8,8 +8,9 @@ use rand::{CryptoRng, Rng};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use x509_cert::{
-    builder::{Builder, CertificateBuilder, Profile},
-    ext::pkix::BasicConstraints,
+    TbsCertificate,
+    builder::{Builder, CertificateBuilder, profile::BuilderProfile},
+    ext::{Extension, pkix::BasicConstraints},
     name::Name,
     serial_number::SerialNumber,
     time::Validity,
@@ -58,11 +59,11 @@ impl spki::DynSignatureAlgorithmIdentifier for KeyPair {
     fn signature_algorithm_identifier(&self) -> spki::Result<spki::AlgorithmIdentifierOwned> {
         match self {
             KeyPair::Ed25519 { .. } => Ok(spki::AlgorithmIdentifierOwned {
-                oid: pkcs8::ObjectIdentifier::new("1.3.101.112").unwrap(),
+                oid: spki::ObjectIdentifier::new("1.3.101.112").unwrap(),
                 parameters: None,
             }),
             KeyPair::Secp256r1 { .. } => Ok(spki::AlgorithmIdentifierOwned {
-                oid: pkcs8::ObjectIdentifier::new("1.2.840.10045.3.1.7").unwrap(),
+                oid: spki::ObjectIdentifier::new("1.2.840.10045.3.1.7").unwrap(),
                 parameters: None,
             }),
         }
@@ -86,15 +87,15 @@ pub enum VerifyingKey {
     Secp256r1(ic_secp256r1::PublicKey),
 }
 
-impl pkcs8::EncodePublicKey for VerifyingKey {
-    fn to_public_key_der(&self) -> spki::Result<pkcs8::Document> {
+impl spki::EncodePublicKey for VerifyingKey {
+    fn to_public_key_der(&self) -> spki::Result<spki::Document> {
         match self {
             VerifyingKey::Ed25519(key) => {
                 let der = key.serialize_rfc8410_der();
-                Ok(pkcs8::Document::try_from(der)
+                Ok(spki::Document::try_from(der)
                     .expect("failed to create document from ed25519 DER"))
             }
-            VerifyingKey::Secp256r1(key) => Ok(pkcs8::Document::try_from(key.serialize_der())
+            VerifyingKey::Secp256r1(key) => Ok(spki::Document::try_from(key.serialize_der())
                 .expect("failed to create document from ed25519 DER")),
         }
     }
@@ -289,16 +290,15 @@ impl CertBuilder {
     }
 
     fn x509(self, key_pair: &KeyPair) -> x509_cert::Certificate {
-        let validity = Validity {
-            not_before: self.not_before_asn_1_time(),
-            not_after: self.not_after_asn_1_time(),
-        };
+        let validity = Validity::new(self.not_before_asn_1_time(), self.not_after_asn_1_time());
         let cn_or_default = self.cn.unwrap_or_else(|| DEFAULT_CN.to_string());
+        let subject = x509_cert_cn(&cn_or_default, self.duplicate_subject_cn);
         let (profile, cert_signer) = if let Some((ca_key_pair, issuer)) = &self.ca_signing_data {
             // CA signed cert
             let cert_signer = ca_key_pair.clone();
-            let profile = Profile::Manual {
-                issuer: Some(x509_cert_cn(issuer, self.duplicate_issuer_cn)),
+            let profile = ManualProfile {
+                subject,
+                issuer: x509_cert_cn(issuer, self.duplicate_issuer_cn),
             };
             (profile, cert_signer)
         } else {
@@ -308,28 +308,22 @@ impl CertBuilder {
             } else {
                 key_pair.clone()
             };
-            let profile = Profile::Manual {
-                issuer: Some(x509_cert_cn(&cn_or_default, self.duplicate_issuer_cn)),
+            let profile = ManualProfile {
+                subject,
+                issuer: x509_cert_cn(&cn_or_default, self.duplicate_issuer_cn),
             };
             (profile, cert_signer)
         };
 
         let serial_number = SerialNumber::new(&self.serial_number.unwrap_or(DEFAULT_SERIAL))
             .expect("serial failed");
-        let subject = x509_cert_cn(&cn_or_default, self.duplicate_subject_cn);
         let subject_public_key_info =
             spki::SubjectPublicKeyInfoOwned::try_from(key_pair.public_key_der().as_slice())
                 .expect("spki failed");
 
-        let mut builder = CertificateBuilder::new(
-            profile,
-            serial_number,
-            validity,
-            subject,
-            subject_public_key_info,
-            &cert_signer,
-        )
-        .expect("Create certificate");
+        let mut builder =
+            CertificateBuilder::new(profile, serial_number, validity, subject_public_key_info)
+                .expect("Create certificate");
 
         if !self.version_1 {
             // x509_certs sets version to 3 whenever there are extensions added
@@ -341,7 +335,9 @@ impl CertBuilder {
                 .expect("failed to add extension");
         }
 
-        builder.build().expect("failed to build certificate")
+        builder
+            .build(&cert_signer)
+            .expect("failed to build certificate")
     }
 
     fn not_before_asn_1_time(&self) -> x509_cert::time::Time {
@@ -409,6 +405,35 @@ impl CertBuilder {
             GeneralizedTime::from_unix_duration(na_duration_since_unix_epoch)
                 .expect("notBefore: GeneralizedTime::from_unix_duration failed"),
         )
+    }
+}
+
+/// A certificate profile that takes the given subject and issuer names as they
+/// are (including, e.g., duplicate CNs) and that adds no extensions of its own.
+/// A built certificate thus contains exactly the extensions added via
+/// [`CertificateBuilder::add_extension`], and the builder makes it a version 1
+/// certificate if there are none.
+struct ManualProfile {
+    subject: Name,
+    issuer: Name,
+}
+
+impl BuilderProfile for ManualProfile {
+    fn get_issuer(&self, _subject: &Name) -> Name {
+        self.issuer.clone()
+    }
+
+    fn get_subject(&self) -> Name {
+        self.subject.clone()
+    }
+
+    fn build_extensions(
+        &self,
+        _spk: spki::SubjectPublicKeyInfoRef<'_>,
+        _issuer_spk: spki::SubjectPublicKeyInfoRef<'_>,
+        _tbs: &TbsCertificate,
+    ) -> x509_cert::builder::Result<Vec<Extension>> {
+        Ok(Vec::new())
     }
 }
 
