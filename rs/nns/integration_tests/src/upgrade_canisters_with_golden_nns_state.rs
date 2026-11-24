@@ -11,9 +11,12 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
+use ic_nns_governance_api::{
+    ManageNeuronResponse, MonthlyNodeProviderRewards, Proposal, Vote, manage_neuron_response,
+    proposal::Action,
+};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    get_pending_proposals, nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -204,6 +207,68 @@ fn vote_yes_with_well_known_public_neurons(state_machine: &StateMachine, proposa
     }
 }
 
+/// Makes DFINITY "leader" neurons (IDs 27 and 28) vote no on proposals that
+/// upgrade an NNS canister.
+///
+/// This is so that the upgrades performed by this test (via proposal) do not
+/// get clobbered by such pre-existing proposals.
+///
+/// Such votes are not absolutely guaranteed to block such proposals, but they
+/// would generally be very effective.
+/// assert_upgraded_canisters_still_run_checked_out_code catches when such
+/// proposals slip through.
+fn vote_down_pending_nns_canister_upgrades(state_machine: &StateMachine) {
+    for proposal_info in get_pending_proposals(state_machine) {
+        let proposal_id = proposal_info.id.unwrap();
+        let proposal = proposal_info.proposal.unwrap();
+        if !is_nns_canister_upgrade(&proposal) {
+            continue;
+        }
+
+        let title = proposal.title.unwrap_or_default();
+        println!(
+            "Voting down pre-existing proposal {} ({title:?}), so that it does not \
+             replace code that this test installs.",
+            proposal_id.id,
+        );
+
+        // Cycle through DFINITY's "leader" neurons...
+        for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
+            let vote_result = nns_cast_vote(
+                state_machine,
+                voter_controller,
+                voter_neuron_id,
+                proposal_id.id,
+                Vote::No,
+            );
+
+            // Print warning if voting did not succeed. If the canister gets
+            // clobbered, assert_upgraded_canisters_still_run_checked_out_code
+            // will detect that later.
+            match &vote_result {
+                Ok(ManageNeuronResponse {
+                    command: Some(manage_neuron_response::Command::RegisterVote(_)),
+                }) => continue,
+
+                _ => {
+                    println!(
+                        "🚨 Neuron {} FAILED to vote No on proposal {} ({title:?}). If that \
+                        proposal gets executed, it might replace code that this test \
+                        installs. Result: {vote_result:?}",
+                        voter_neuron_id.id, proposal_id.id,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Returns whether the proposal would install code in an NNS canister. To wit,
+/// whether its action is InstallCode.
+fn is_nns_canister_upgrade(proposal: &Proposal) -> bool {
+    matches!(proposal.action, Some(Action::InstallCode(_)))
+}
+
 #[test]
 fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 0: Read configuration. To wit, what canisters does the user want to upgrade in this
@@ -266,6 +331,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
     state_machine.reject_remote_callbacks();
+
+    // Keep pre-existing proposals from replacing code that this test installs.
+    vote_down_pending_nns_canister_upgrades(&state_machine);
 
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
