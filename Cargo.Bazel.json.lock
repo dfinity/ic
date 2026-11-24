@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "8c2aaf25b0e05e7b27c06caef4145227427dc49b8a6a625916e8637112f7abb0",
+  "checksum": "3cce7ec76e584b8765a36e7c781684e1f1c151bf1e3e62eb89b879a61128078c",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18014,10 +18014,6 @@
             "target": "libsystemd"
           },
           {
-            "id": "little-loadshedder 0.2.0",
-            "target": "little_loadshedder"
-          },
-          {
             "alias": "lmdb_rkv",
             "id": "lmdb-rkv 0.14.99",
             "target": "lmdb"
@@ -18077,7 +18073,7 @@
             "target": "netdev"
           },
           {
-            "id": "nftables 0.4.1",
+            "id": "nftables 0.6.3",
             "target": "nftables"
           },
           {
@@ -18240,7 +18236,7 @@
             "target": "ratatui"
           },
           {
-            "id": "ratelimit 0.9.1",
+            "id": "ratelimit 0.10.1",
             "target": "ratelimit"
           },
           {
@@ -33959,45 +33955,6 @@
       ],
       "version": "1.0.1"
     },
-    "little-loadshedder 0.2.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "tower 0.4.13",
-            "target": "tower"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "little_loadshedder",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "little-loadshedder",
-      "package_url": "https://github.com/Skepfyr/little-loadshedder",
-      "repository": {
-        "Http": {
-          "sha256": "1edea14a875dba8659cb864480c27e8eb2d099542b657729a7567625a2c1d65a",
-          "url": "https://static.crates.io/crates/little-loadshedder/0.2.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "little_loadshedder",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.2.0"
-    },
     "lmdb-rkv 0.14.99": {
       "common_attrs": {
         "crate_features": [
@@ -36370,9 +36327,13 @@
       ],
       "version": "1.0.6"
     },
-    "nftables 0.4.1": {
+    "nftables 0.6.3": {
       "common_attrs": {
         "deps": [
+          {
+            "id": "schemars 1.2.3",
+            "target": "schemars"
+          },
           {
             "id": "serde 1.0.229",
             "target": "serde"
@@ -36386,18 +36347,18 @@
             "target": "serde_path_to_error"
           },
           {
-            "id": "strum 0.26.3",
+            "id": "strum 0.27.2",
             "target": "strum"
           },
           {
-            "id": "thiserror 1.0.69",
+            "id": "thiserror 2.0.21",
             "target": "thiserror"
           }
         ],
         "edition": "2021",
         "proc_macro_deps": [
           {
-            "id": "strum_macros 0.26.4",
+            "id": "strum_macros 0.27.2",
             "target": "strum_macros"
           }
         ]
@@ -36410,11 +36371,11 @@
         "MIT"
       ],
       "name": "nftables",
-      "package_url": "https://github.com/namib-project/nftables-rs",
+      "package_url": "https://github.com/nftables-rs/nftables-rs",
       "repository": {
         "Http": {
-          "sha256": "3b5081f5cae4d24af558828494371be6672d02a693e9b4cbca4a0cbae5443e6f",
-          "url": "https://static.crates.io/crates/nftables/0.4.1/download"
+          "sha256": "3c57e7343eed9e9330e084eef12651b15be3c8ed7825915a0ffa33736b852bed",
+          "url": "https://static.crates.io/crates/nftables/0.6.3/download"
         }
       },
       "targets": [
@@ -36425,7 +36386,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.6.3"
     },
     "nix 0.29.0": {
       "build_script_attrs": {
@@ -45096,7 +45057,7 @@
       ],
       "version": "0.29.0"
     },
-    "ratelimit 0.9.1": {
+    "ratelimit 0.10.1": {
       "common_attrs": {
         "deps": [
           {
@@ -45108,7 +45069,7 @@
             "target": "parking_lot"
           },
           {
-            "id": "thiserror 1.0.69",
+            "id": "thiserror 2.0.21",
             "target": "thiserror"
           }
         ],
@@ -45125,8 +45086,8 @@
       "package_url": "https://github.com/pelikan-io/rustcommon",
       "repository": {
         "Http": {
-          "sha256": "6c1bb13e2dcfa2232ac6887157aad8d9b3fe4ca57f7c8d4938ff5ea9be742300",
-          "url": "https://static.crates.io/crates/ratelimit/0.9.1/download"
+          "sha256": "5dc94ed8e3de45f6d8d052869d48c0dbeebcaa7a6c345ec7f0f917e10347428e",
+          "url": "https://static.crates.io/crates/ratelimit/0.10.1/download"
         }
       },
       "targets": [
@@ -45137,7 +45098,7 @@
           }
         }
       ],
-      "version": "0.9.1"
+      "version": "0.10.1"
     },
     "raw-cpuid 11.6.0": {
       "common_attrs": {
@@ -49070,6 +49031,12 @@
     },
     "schemars 1.2.3": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "derive",
+          "schemars_derive",
+          "std"
+        ],
         "deps": [
           {
             "id": "dyn-clone 1.0.20",
@@ -49088,7 +49055,13 @@
             "target": "serde_json"
           }
         ],
-        "edition": "2021"
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "schemars_derive 1.2.3",
+            "target": "schemars_derive"
+          }
+        ]
       },
       "library_target_name": "schemars",
       "license": "MIT",
@@ -49159,6 +49132,52 @@
         }
       ],
       "version": "0.8.22"
+    },
+    "schemars_derive 1.2.3": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "serde_derive_internals 0.30.0",
+            "target": "serde_derive_internals"
+          },
+          {
+            "id": "syn 3.0.10",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "schemars_derive",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "schemars_derive",
+      "package_url": "https://github.com/GREsau/schemars",
+      "repository": {
+        "Http": {
+          "sha256": "e1c3a92094fa7d61aa124645844facb6b554dfc797136d0f5fd1f890e2bffc69",
+          "url": "https://static.crates.io/crates/schemars_derive/1.2.3/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "schemars_derive",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.2.3"
     },
     "scoped-tls 1.0.1": {
       "common_attrs": {
@@ -50484,6 +50503,49 @@
         }
       ],
       "version": "0.29.1"
+    },
+    "serde_derive_internals 0.30.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 3.0.10",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "serde_derive_internals",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "serde_derive_internals",
+      "package_url": "https://github.com/serde-rs/serde",
+      "repository": {
+        "Http": {
+          "sha256": "f852137cce035d6a4df67ccce505ff6b3e9fd3a10e3e52b24dc71e650bb1a9bd",
+          "url": "https://static.crates.io/crates/serde_derive_internals/0.30.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_derive_internals",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.30.0"
     },
     "serde_json 1.0.154": {
       "build_script_attrs": {},
@@ -58122,75 +58184,6 @@
         }
       ],
       "version": "0.14.9"
-    },
-    "tower 0.4.13": {
-      "common_attrs": {
-        "crate_features": [
-          "__common",
-          "default",
-          "futures-core",
-          "futures-util",
-          "log",
-          "pin-project",
-          "pin-project-lite",
-          "tracing",
-          "util"
-        ],
-        "deps": [
-          {
-            "id": "futures-core 0.3.34",
-            "target": "futures_core"
-          },
-          {
-            "id": "futures-util 0.3.34",
-            "target": "futures_util"
-          },
-          {
-            "id": "pin-project 1.1.13",
-            "target": "pin_project"
-          },
-          {
-            "id": "pin-project-lite 0.2.17",
-            "target": "pin_project_lite"
-          },
-          {
-            "id": "tower-layer 0.3.3",
-            "target": "tower_layer"
-          },
-          {
-            "id": "tower-service 0.3.3",
-            "target": "tower_service"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "tower",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "tower",
-      "package_url": "https://github.com/tower-rs/tower",
-      "repository": {
-        "Http": {
-          "sha256": "b8fa9be0de6cf49e536ce1851f987bd21a43b771b09473c3549a6c853db37c1c",
-          "url": "https://static.crates.io/crates/tower/0.4.13/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tower",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.4.13"
     },
     "tower 0.5.3": {
       "common_attrs": {
@@ -66781,7 +66774,6 @@
     "libfuzzer-sys 0.4.13",
     "libnss 0.5.0",
     "libsystemd 0.7.2",
-    "little-loadshedder 0.2.0",
     "lmdb-rkv 0.14.99",
     "lmdb-rkv-sys 0.11.99",
     "loopdev-3 0.5.3",
@@ -66796,7 +66788,7 @@
     "moka 0.12.16",
     "more-asserts 0.3.1",
     "netdev 0.47.0",
-    "nftables 0.4.1",
+    "nftables 0.6.3",
     "nix 0.32.0",
     "num-bigint 0.4.8",
     "num-bigint-dig 0.9.1",
@@ -66838,7 +66830,7 @@
     "rand_chacha 0.9.0",
     "rand_distr 0.4.3",
     "ratatui 0.29.0",
-    "ratelimit 0.9.1",
+    "ratelimit 0.10.1",
     "rayon 1.12.0",
     "rcgen 0.13.2",
     "regex 1.13.2",

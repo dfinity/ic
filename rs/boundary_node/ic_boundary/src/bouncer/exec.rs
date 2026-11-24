@@ -8,7 +8,7 @@ use derive_new::new;
 use nftables::schema::Nftables;
 
 pub trait Execute: Send + Sync {
-    fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables>, Error>;
+    fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables<'static>>, Error>;
     fn execute_raw(&self, stdin: String) -> Result<String, Error>;
 }
 
@@ -21,7 +21,7 @@ pub struct Executor {
 }
 
 impl Execute for Executor {
-    fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables>, Error> {
+    fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables<'static>>, Error> {
         let payload_raw =
             serde_json::to_string(payload).context("failed to serialize Nftables struct")?;
         let stdout = self.execute_raw(payload_raw)?;
