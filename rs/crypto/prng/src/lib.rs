@@ -6,6 +6,7 @@ use ic_types::consensus::RandomBeacon;
 use ic_types::crypto::randomness_from_crypto_hashable;
 use rand::{CryptoRng, Error, RngCore};
 use rand_chacha::ChaCha20Rng;
+use std::convert::Infallible;
 use std::fmt;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -99,3 +100,26 @@ impl RngCore for Csprng {
 }
 
 impl CryptoRng for Csprng {}
+
+// rand 0.10 view of the same generator: implementing `TryRng` with an
+// infallible error type automatically implements rand 0.10's `Rng` and its
+// extension trait `RngExt`, and `TryCryptoRng` adds `CryptoRng`. Both views
+// advance the same state, so they produce one and the same output stream.
+impl rand_0_10::TryRng for Csprng {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        Ok(self.rng.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        Ok(self.rng.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Infallible> {
+        self.rng.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl rand_0_10::TryCryptoRng for Csprng {}

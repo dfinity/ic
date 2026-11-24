@@ -1,5 +1,6 @@
 use rand::{CryptoRng, Error, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use std::convert::Infallible;
 
 /// Byte length of the seed type used in [`ReproducibleRng`].
 const SEED_LEN: usize = 32;
@@ -84,3 +85,26 @@ impl RngCore for ReproducibleRng {
 }
 
 impl CryptoRng for ReproducibleRng {}
+
+// rand 0.10 view of the same generator: implementing `TryRng` with an
+// infallible error type automatically implements rand 0.10's `Rng` and its
+// extension trait `RngExt`, and `TryCryptoRng` adds `CryptoRng`. Both views
+// advance the same state, so they produce one and the same output stream.
+impl rand_0_10::TryRng for ReproducibleRng {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        Ok(self.rng.next_u32())
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        Ok(self.rng.next_u64())
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Infallible> {
+        self.rng.fill_bytes(dst);
+        Ok(())
+    }
+}
+
+impl rand_0_10::TryCryptoRng for ReproducibleRng {}

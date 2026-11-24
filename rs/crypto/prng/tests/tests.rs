@@ -46,6 +46,61 @@ fn should_offer_methods_of_rng_trait() {
 }
 
 #[test]
+fn should_produce_deterministic_randomness_through_rand_0_10_traits() {
+    let seed = seed();
+
+    let mut rng = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
+
+    assert_eq!(rand_0_10::Rng::next_u32(&mut rng), 2_206_231_697);
+}
+
+#[test]
+fn should_offer_methods_of_rand_0_10_rng_ext_trait() {
+    use rand_0_10::RngExt;
+    let seed = seed();
+
+    let mut rng = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
+
+    assert_eq!(rng.random::<u32>(), 2_206_231_697);
+}
+
+#[test]
+fn should_produce_same_output_through_rand_0_8_and_rand_0_10_traits() {
+    let seed = seed();
+
+    for purpose in [CommitteeSampling, BlockmakerRanking, ExecutionThread(0)] {
+        let mut rng_0_8 = Csprng::from_randomness_and_purpose(&seed, &purpose);
+        let mut rng_0_10 = Csprng::from_randomness_and_purpose(&seed, &purpose);
+
+        assert_eq!(
+            draw_through_rand_0_8(&mut rng_0_8),
+            draw_through_rand_0_10(&mut rng_0_10),
+            "Mismatch for purpose {purpose:?}"
+        );
+    }
+}
+
+#[test]
+fn should_continue_one_output_stream_when_alternating_between_rand_0_8_and_rand_0_10_traits() {
+    let seed = seed();
+    let mut rng_0_8 = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
+    let mut rng_alternating = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
+
+    let expected = [
+        draw_through_rand_0_8(&mut rng_0_8),
+        draw_through_rand_0_8(&mut rng_0_8),
+    ]
+    .concat();
+    let alternating = [
+        draw_through_rand_0_8(&mut rng_alternating),
+        draw_through_rand_0_10(&mut rng_alternating),
+    ]
+    .concat();
+
+    assert_eq!(alternating, expected);
+}
+
+#[test]
 fn should_generate_purpose_specific_randomness_for_random_beacon() {
     let rb = random_beacon();
 
@@ -125,6 +180,37 @@ fn should_produce_different_randomness_for_different_execution_threads_for_rando
     let mut csprng2 = Csprng::from_randomness_and_purpose(&seed, &ExecutionThread(thread_2));
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
+}
+
+/// Lengths of the byte strings that `draw_through_rand_0_8` and
+/// `draw_through_rand_0_10` request between words. Some are not multiples of
+/// the word size, and together they cross ChaCha block boundaries.
+const FILL_LENGTHS: [usize; 4] = [1, 7, 64, 203];
+
+/// Draws words and byte strings through rand 0.8's `RngCore`.
+fn draw_through_rand_0_8<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<u8> {
+    let mut output = Vec::new();
+    for len in FILL_LENGTHS {
+        output.extend_from_slice(&rand::RngCore::next_u32(rng).to_le_bytes());
+        output.extend_from_slice(&rand::RngCore::next_u64(rng).to_le_bytes());
+        let mut bytes = vec![0_u8; len];
+        rand::RngCore::fill_bytes(rng, &mut bytes);
+        output.extend_from_slice(&bytes);
+    }
+    output
+}
+
+/// Draws the same sequence as `draw_through_rand_0_8` through rand 0.10's `Rng`.
+fn draw_through_rand_0_10<R: rand_0_10::CryptoRng>(rng: &mut R) -> Vec<u8> {
+    let mut output = Vec::new();
+    for len in FILL_LENGTHS {
+        output.extend_from_slice(&rand_0_10::Rng::next_u32(rng).to_le_bytes());
+        output.extend_from_slice(&rand_0_10::Rng::next_u64(rng).to_le_bytes());
+        let mut bytes = vec![0_u8; len];
+        rand_0_10::Rng::fill_bytes(rng, &mut bytes);
+        output.extend_from_slice(&bytes);
+    }
+    output
 }
 
 fn fake_random_beacon(height: u64) -> RandomBeacon {

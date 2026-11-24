@@ -8881,6 +8881,7 @@ dependencies = [
  "ic-crypto-internal-seed",
  "ic-types",
  "ic-types-test-utils",
+ "rand 0.10.4",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
  "strum 0.28.0",
@@ -9135,6 +9136,7 @@ dependencies = [
 name = "ic-crypto-test-utils-reproducible-rng"
 version = "0.9.0"
 dependencies = [
+ "rand 0.10.4",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
 ]

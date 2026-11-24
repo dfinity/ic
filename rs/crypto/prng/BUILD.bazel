@@ -10,6 +10,9 @@ filegroup(
 rust_library(
     name = "prng",
     srcs = glob(["src/**/*.rs"]),
+    aliases = {
+        "@crate_index//:rand_0_10": "rand_0_10",
+    },
     crate_name = "ic_crypto_prng",
     proc_macro_deps = [
         # Keep sorted.
@@ -21,6 +24,7 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/seed",
         "//rs/types/types",
         "@crate_index//:rand",
+        "@crate_index//:rand_0_10",
         "@crate_index//:rand_chacha",
         "@crate_index//:strum",
     ],
@@ -35,6 +39,7 @@ rust_test(
         "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:rand",
+        "@crate_index//:rand_0_10",
         "@crate_index//:rand_chacha",
         "@crate_index//:strum",
     ],
@@ -43,6 +48,9 @@ rust_test(
 rust_test_suite(
     name = "test_suite",
     srcs = glob(["tests/**"]),
+    aliases = {
+        "@crate_index//:rand_0_10": "rand_0_10",
+    },
     deps = [
         # Keep sorted.
         ":prng",
@@ -50,6 +58,7 @@ rust_test_suite(
         "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:rand",
+        "@crate_index//:rand_0_10",
         "@crate_index//:rand_chacha",
         "@crate_index//:strum",
     ],
