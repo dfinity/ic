@@ -666,7 +666,7 @@ comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496
 ] }
 configparser = "3.3.0"
 crc32fast = "^1.2.0"
-criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
+criterion = { version = "0.8.2", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
 crossbeam-utils = "0.8.21"
 crossterm = "0.29.0"
@@ -835,7 +835,7 @@ paste = "1.0.15"
 pem = { version = "4.0.0", default-features = false, features = ["std"] }
 pin-project-lite = "^0.2"
 ping = "0.10.0"
-pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771", default-features = false, features = [
+pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "d153f32547d4a09085caf0987ac401183c53c446", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",

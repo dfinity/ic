@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "5cd0eafde7a0d3d591d3261b11b4678c8394d2878310ed2ec858bf80db705cab",
+  "checksum": "de0a8e850cd3fde6d3f6fcd859db5327a964ff0e93b57edff7876443b7bd7a61",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -184,6 +184,12 @@
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(any(windows, target_os = \"cygwin\"))": [],
+    "cfg(any(windows, unix))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
     "cfg(curve25519_dalek_backend = \"fiat\")": [],
     "cfg(not(all(target_arch = \"arm\", target_os = \"none\")))": [
       "aarch64-apple-darwin",
@@ -1975,6 +1981,51 @@
         }
       ],
       "version": "0.3.0"
+    },
+    "alloca 0.4.0": {
+      "build_script_attrs": {
+        "deps": [
+          {
+            "id": "cc 1.11.2",
+            "target": "cc"
+          }
+        ]
+      },
+      "common_attrs": {
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "alloca",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "alloca",
+      "package_url": "https://github.com/playXE/alloca-rs",
+      "repository": {
+        "Http": {
+          "sha256": "e5a7d05ea6aea7e9e64d25b9156ba2fee3fdd659e34e41063cd2fc7cd020d7f4",
+          "url": "https://static.crates.io/crates/alloca/0.4.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloca",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.4.0"
     },
     "allocator-api2 0.2.21": {
       "common_attrs": {
@@ -14042,104 +14093,98 @@
       ],
       "version": "1.5.5"
     },
-    "criterion 0.5.1": {
+    "criterion 0.8.2": {
       "common_attrs": {
         "crate_features": [
           "async",
           "async_tokio",
           "cargo_bench_support",
           "default",
-          "futures",
           "html_reports",
           "plotters",
-          "rayon",
-          "tokio"
+          "rayon"
         ],
-        "deps": [
-          {
-            "id": "anes 0.1.6",
-            "target": "anes"
-          },
-          {
-            "id": "cast 0.3.0",
-            "target": "cast"
-          },
-          {
-            "id": "ciborium 0.2.2",
-            "target": "ciborium"
-          },
-          {
-            "id": "clap 4.6.8",
-            "target": "clap"
-          },
-          {
-            "id": "criterion-plot 0.5.0",
-            "target": "criterion_plot"
-          },
-          {
-            "id": "futures 0.3.34",
-            "target": "futures"
-          },
-          {
-            "id": "is-terminal 0.4.17",
-            "target": "is_terminal"
-          },
-          {
-            "id": "itertools 0.10.5",
-            "target": "itertools"
-          },
-          {
-            "id": "num-traits 0.2.19",
-            "target": "num_traits"
-          },
-          {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
-          },
-          {
-            "id": "oorandom 11.1.5",
-            "target": "oorandom"
-          },
-          {
-            "id": "plotters 0.3.7",
-            "target": "plotters"
-          },
-          {
-            "id": "rayon 1.12.0",
-            "target": "rayon"
-          },
-          {
-            "id": "regex 1.13.2",
-            "target": "regex"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          },
-          {
-            "id": "serde_json 1.0.154",
-            "target": "serde_json"
-          },
-          {
-            "id": "tinytemplate 1.2.1",
-            "target": "tinytemplate"
-          },
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "walkdir 2.5.0",
-            "target": "walkdir"
+        "deps": {
+          "common": [
+            {
+              "id": "anes 0.1.6",
+              "target": "anes"
+            },
+            {
+              "id": "cast 0.3.0",
+              "target": "cast"
+            },
+            {
+              "id": "ciborium 0.2.2",
+              "target": "ciborium"
+            },
+            {
+              "id": "clap 4.6.8",
+              "target": "clap"
+            },
+            {
+              "id": "criterion-plot 0.8.2",
+              "target": "criterion_plot"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "oorandom 11.1.5",
+              "target": "oorandom"
+            },
+            {
+              "id": "page_size 0.6.0",
+              "target": "page_size"
+            },
+            {
+              "id": "plotters 0.3.7",
+              "target": "plotters"
+            },
+            {
+              "id": "rayon 1.12.0",
+              "target": "rayon"
+            },
+            {
+              "id": "regex 1.13.2",
+              "target": "regex"
+            },
+            {
+              "id": "serde 1.0.229",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.154",
+              "target": "serde_json"
+            },
+            {
+              "id": "tinytemplate 1.2.1",
+              "target": "tinytemplate"
+            },
+            {
+              "id": "tokio 1.54.1",
+              "target": "tokio"
+            },
+            {
+              "id": "walkdir 2.5.0",
+              "target": "walkdir"
+            }
+          ],
+          "selects": {
+            "cfg(any(windows, unix))": [
+              {
+                "id": "alloca 0.4.0",
+                "target": "alloca"
+              }
+            ]
           }
-        ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "serde_derive 1.0.229",
-            "target": "serde_derive"
-          }
-        ]
+        },
+        "edition": "2021"
       },
       "library_target_name": "criterion",
       "license": "Apache-2.0 OR MIT",
@@ -14149,11 +14194,11 @@
         "MIT"
       ],
       "name": "criterion",
-      "package_url": "https://github.com/bheisler/criterion.rs",
+      "package_url": "https://github.com/criterion-rs/criterion.rs",
       "repository": {
         "Http": {
-          "sha256": "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f",
-          "url": "https://static.crates.io/crates/criterion/0.5.1/download"
+          "sha256": "950046b2aa2492f9a536f5f4f9a3de7b9e2476e575e05bd6c333371add4d98f3",
+          "url": "https://static.crates.io/crates/criterion/0.8.2/download"
         }
       },
       "targets": [
@@ -14164,9 +14209,9 @@
           }
         }
       ],
-      "version": "0.5.1"
+      "version": "0.8.2"
     },
-    "criterion-plot 0.5.0": {
+    "criterion-plot 0.8.2": {
       "common_attrs": {
         "deps": [
           {
@@ -14174,25 +14219,25 @@
             "target": "cast"
           },
           {
-            "id": "itertools 0.10.5",
+            "id": "itertools 0.13.0",
             "target": "itertools"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "criterion_plot",
-      "license": "MIT/Apache-2.0",
+      "license": "Apache-2.0 OR MIT",
       "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "name": "criterion-plot",
-      "package_url": "https://github.com/bheisler/criterion.rs",
+      "package_url": "https://github.com/criterion-rs/criterion.rs",
       "repository": {
         "Http": {
-          "sha256": "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1",
-          "url": "https://static.crates.io/crates/criterion-plot/0.5.0/download"
+          "sha256": "d8d80a2f4f5b554395e47b5d8305bc3d27813bacb73493eb1001e8f76dae29ea",
+          "url": "https://static.crates.io/crates/criterion-plot/0.8.2/download"
         }
       },
       "targets": [
@@ -14203,7 +14248,7 @@
           }
         }
       ],
-      "version": "0.5.0"
+      "version": "0.8.2"
     },
     "critical-section 1.2.0": {
       "common_attrs": {
@@ -17647,7 +17692,7 @@
             "target": "crc32fast"
           },
           {
-            "id": "criterion 0.5.1",
+            "id": "criterion 0.8.2",
             "target": "criterion"
           },
           {
@@ -31951,11 +31996,6 @@
     },
     "itertools 0.10.5": {
       "common_attrs": {
-        "crate_features": [
-          "default",
-          "use_alloc",
-          "use_std"
-        ],
         "deps": [
           {
             "id": "either 1.19.0",
@@ -32065,6 +32105,11 @@
     },
     "itertools 0.13.0": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "use_alloc",
+          "use_std"
+        ],
         "deps": [
           {
             "id": "either 1.19.0",
@@ -40801,6 +40846,52 @@
       ],
       "version": "0.14.0"
     },
+    "page_size 0.6.0": {
+      "common_attrs": {
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.191",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2015"
+      },
+      "library_target_name": "page_size",
+      "license": "MIT/Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "page_size",
+      "package_url": "https://github.com/Elzair/page_size_rs",
+      "repository": {
+        "Http": {
+          "sha256": "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da",
+          "url": "https://static.crates.io/crates/page_size/0.6.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "page_size",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.6.0"
+    },
     "pairing 0.23.0": {
       "common_attrs": {
         "deps": [
@@ -43516,7 +43607,7 @@
             "target": "cfg_if"
           },
           {
-            "id": "criterion 0.5.1",
+            "id": "criterion 0.8.2",
             "target": "criterion"
           },
           {
@@ -43584,7 +43675,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "9159b45ecc3540d7fc44c6a6e70a173676cfa771"
+            "Rev": "d153f32547d4a09085caf0987ac401183c53c446"
           },
           "remote": "https://github.com/dfinity/pprof-rs"
         }
@@ -68677,7 +68768,7 @@
     "comparable 0.5.6",
     "configparser 3.3.0",
     "crc32fast 1.5.5",
-    "criterion 0.5.1",
+    "criterion 0.8.2",
     "crossbeam-channel 0.5.17",
     "crossbeam-utils 0.8.23",
     "crossterm 0.29.0",
