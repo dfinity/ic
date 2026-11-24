@@ -154,8 +154,11 @@ crate.spec(
     version = "^1.0.93",
 )
 crate.spec(
+    default_features = False,
     features = [
+        "derive",
         "serde_json",
+        "std",
     ],
     package = "askama",
     version = "^0.16.1",
