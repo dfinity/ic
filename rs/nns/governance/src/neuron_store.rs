@@ -771,7 +771,7 @@ impl NeuronStore {
     /// Returns whether neuron `neuron_id` follows, on the NeuronManagement topic, any neuron for
     /// which `is_candidate_manager` returns true, i.e. whether it is directly managed by any such
     /// neuron. Returns false if the neuron is not found. This loads (the followees of) the neuron.
-    pub fn is_directly_managed_by_any_of(
+    fn is_directly_managed_by_any_of(
         &self,
         neuron_id: &NeuronId,
         is_candidate_manager: impl Fn(&NeuronId) -> bool,
@@ -928,6 +928,21 @@ impl NeuronStore {
                 .following()
                 .get_followers_by_followee_and_category(&followee, topic)
         })
+    }
+
+    /// Returns the neurons that follow any of `manager_ids` on the NeuronManagement topic, i.e. the
+    /// neurons that are directly managed by any of them (see `is_managed_by_any_of`). This does
+    /// one lookup in the following index per element of `manager_ids`; no neuron is loaded.
+    pub fn get_neurons_directly_managed_by_any_of(
+        &self,
+        manager_ids: &BTreeSet<NeuronId>,
+    ) -> BTreeSet<NeuronId> {
+        manager_ids
+            .iter()
+            .flat_map(|manager_id| {
+                self.get_followers_by_followee_and_topic(*manager_id, Topic::NeuronManagement)
+            })
+            .collect::<BTreeSet<NeuronId>>()
     }
 
     // Gets all neuron ids associated with the given principal id (hot-key or controller).
