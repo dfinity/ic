@@ -289,8 +289,9 @@ fn should_use_only_the_leftmost_32_bytes_of_a_longer_digest() {
     let pk = sk.public_key();
 
     // 2^29 bytes is the shortest digest whose length in bits overflows a
-    // u32, on which the rfc6979 crate panics. A zero-initialized vector gets
-    // memory only for the pages written to, so this 512 MiB digest is cheap.
+    // u32, on which the rfc6979 crate panics. vec! gets this zeroed 512 MiB
+    // digest from calloc, which takes fresh pages from the OS without
+    // writing them, so only the page written below takes memory.
     for len in [64, 1 << 29] {
         let mut digest = vec![0_u8; len];
         rng.fill(&mut digest[..64]);
