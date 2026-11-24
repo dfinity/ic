@@ -646,14 +646,17 @@ fn provisional_create_canister_has_no_creation_fee() {
 
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.canister_metrics().consumed_cycles(),
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic(),
         NominalCycles::default(),
     );
     assert_eq!(
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::CanisterCreation),
         None
     );
@@ -6004,7 +6007,7 @@ fn update_settings_charges_log_resize_instructions_when_the_call_fails() {
         .management_canister_cost(resize_instructions, test.get_own_subnet_cycles_config())
         .nominal();
     assert_ne!(expected_charge, NominalCycles::zero());
-    let (gauge_before, counter_before) = consumed_instruction_cycles(&test, canister_id);
+    let consumed_before = consumed_instruction_cycles(&test, canister_id);
 
     // Resize the log (`LOG_LIMIT - 1`) and change the controllers. The resize
     // runs and is charged; recording the `controllers_change` history entry then
@@ -6034,9 +6037,8 @@ fn update_settings_charges_log_resize_instructions_when_the_call_fails() {
 
     // The resize instructions are charged despite the failure. Before the fix
     // they were refunded on rollback, leaving these deltas at zero.
-    let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
-    assert_eq!(gauge_after - gauge_before, expected_charge);
-    assert_eq!(counter_after - counter_before, expected_charge);
+    let consumed_after = consumed_instruction_cycles(&test, canister_id);
+    assert_eq!(consumed_after - consumed_before, expected_charge);
 
     // The round instruction budget is debited too: this is what bounds the
     // number of log resizes a canister can trigger within a single round.
@@ -6165,7 +6167,7 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
     assert!(balance > target_balance);
     test.consume_cycles(canister_id, balance - target_balance);
 
-    let (gauge_before, counter_before) = consumed_instruction_cycles(&test, canister_id);
+    let consumed_before = consumed_instruction_cycles(&test, canister_id);
 
     // Lower the freezing threshold and grow the log in one call.
     let args = UpdateSettingsArgs {
@@ -6198,9 +6200,8 @@ fn update_settings_validates_log_resize_against_the_pre_update_freezing_threshol
 
     // The resize never ran, so neither the canister nor the round is charged
     // for it, ...
-    let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
-    assert_eq!(gauge_after, gauge_before);
-    assert_eq!(counter_after, counter_before);
+    let consumed_after = consumed_instruction_cycles(&test, canister_id);
+    assert_eq!(consumed_after, consumed_before);
     assert_eq!(test.subnet_message_instructions(), NumInstructions::new(0));
 
     // ... and no charge was left behind for the rollback to fail to re-apply.
@@ -6384,33 +6385,22 @@ fn upload_chunk_charges_canister_cycles() {
     );
 }
 
-/// Returns the `Instructions` entries of the canister's consumed-cycles gauge
-/// and monotonic counter maps, in that order.
-fn consumed_instruction_cycles(
-    test: &ExecutionTest,
-    canister_id: CanisterId,
-) -> (NominalCycles, NominalCycles) {
-    let canister_metrics = test
-        .canister_state(canister_id)
+/// Returns the cycles the canister has consumed for `Instructions`.
+fn consumed_instruction_cycles(test: &ExecutionTest, canister_id: CanisterId) -> NominalCycles {
+    test.canister_state(canister_id)
         .system_state
-        .canister_metrics();
-    let instructions = |use_cases: &BTreeMap<CyclesUseCase, NominalCycles>| {
-        use_cases
-            .get(&CyclesUseCase::Instructions)
-            .cloned()
-            .unwrap_or_default()
-    };
-    (
-        instructions(canister_metrics.consumed_cycles_by_use_cases()),
-        instructions(canister_metrics.consumed_cycles_by_use_cases_monotonic()),
-    )
+        .canister_metrics()
+        .consumed_cycles_by_use_cases_monotonic()
+        .get(&CyclesUseCase::Instructions)
+        .cloned()
+        .unwrap_or_default()
 }
 
 // The management-canister instruction cost of `upload_chunk` is a direct, final
-// charge: it is consumed without a subsequent refund. Since the monotonic
-// per-use-case counter defers `Instructions` accounting to refund time, such a
-// charge only reaches the counter if the consuming code observes a zero refund
-// for it. Regression test that it does, i.e. that the counter tracks the gauge.
+// charge: it is consumed without a subsequent refund. Since the consumed cycles
+// metrics defer `Instructions` accounting to refund time, such a charge only
+// reaches them if the consuming code observes a zero refund for it. Regression
+// test that it does.
 #[test]
 fn upload_chunk_records_charge_on_consumed_cycles_counter() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -6425,7 +6415,7 @@ fn upload_chunk_records_charge_on_consumed_cycles_counter() {
         .nominal();
     assert_ne!(expected_charge, NominalCycles::zero());
 
-    let (gauge_before, counter_before) = consumed_instruction_cycles(&test, canister_id);
+    let consumed_before = consumed_instruction_cycles(&test, canister_id);
 
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
@@ -6434,10 +6424,9 @@ fn upload_chunk_records_charge_on_consumed_cycles_counter() {
     .encode();
     let _hash = test.subnet_message("upload_chunk", payload).unwrap();
 
-    let (gauge_after, counter_after) = consumed_instruction_cycles(&test, canister_id);
+    let consumed_after = consumed_instruction_cycles(&test, canister_id);
 
-    assert_eq!(gauge_after - gauge_before, expected_charge);
-    assert_eq!(counter_after - counter_before, expected_charge);
+    assert_eq!(consumed_after - consumed_before, expected_charge);
 }
 
 #[test]
@@ -8440,7 +8429,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles()
+            .consumed_cycles_monotonic()
             .get(),
         creation_fee.get()
     );
@@ -8448,17 +8437,9 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::CanisterCreation)
             .unwrap()
-            .get(),
-        creation_fee.get()
-    );
-    assert_eq!(
-        canister
-            .system_state
-            .canister_metrics()
-            .consumed_cycles()
             .get(),
         creation_fee.get()
     );
@@ -8509,7 +8490,7 @@ fn create_canister_free() {
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles()
+            .consumed_cycles_monotonic()
             .get(),
         CANISTER_CREATION_FEE.get()
     );
@@ -8542,7 +8523,7 @@ fn create_canister_as_subnet_admin_succeeds_on_free_cost_schedule() {
         canister
             .system_state
             .canister_metrics()
-            .consumed_cycles()
+            .consumed_cycles_monotonic()
             .get(),
         CANISTER_CREATION_FEE.get()
     );

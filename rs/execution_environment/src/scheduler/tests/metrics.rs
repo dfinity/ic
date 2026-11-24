@@ -20,7 +20,6 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
@@ -1105,105 +1104,6 @@ fn threshold_signature_agreements_metric_is_updated() {
     assert!(sign_with_threshold_contexts.is_empty());
 }
 
-/// Asserts the invariants that tie `CanisterMetrics::consumed_cycles` and
-/// `CanisterMetrics::consumed_cycles_by_use_cases` to their monotonic counterparts:
-/// a gauge exceeds its monotonic counterpart by exactly the prepayments that are
-/// still outstanding for it. Returns the outstanding prepayments.
-fn assert_consumed_cycles_invariant(
-    test: &SchedulerTest,
-    canister_id: CanisterId,
-) -> OutstandingPrepayments {
-    /// Asserts that `gauge` exceeds `monotonic` by exactly `outstanding`; `what`
-    /// names the amount.
-    fn assert_invariant(
-        what: &str,
-        gauge: NominalCycles,
-        monotonic: NominalCycles,
-        outstanding: NominalCycles,
-    ) {
-        assert!(
-            outstanding <= gauge,
-            "the {outstanding} outstanding prepayments must not exceed the {what} \
-             gauge {gauge}",
-        );
-        assert_eq!(
-            gauge - outstanding,
-            monotonic,
-            "{what} gauge {gauge} minus the {outstanding} outstanding prepayments \
-             must equal the monotonic {monotonic}",
-        );
-    }
-
-    let system_state = &test.canister_state(canister_id).system_state;
-    let outstanding = system_state
-        .outstanding_prepayments()
-        .expect("Canister has a paused execution");
-    let metrics = system_state.canister_metrics();
-
-    assert_invariant(
-        "consumed cycles",
-        metrics.consumed_cycles(),
-        metrics.consumed_cycles_monotonic(),
-        outstanding.total(),
-    );
-    for (use_case, gauge) in metrics.consumed_cycles_by_use_cases() {
-        // An absent monotonic entry reads as zero.
-        let monotonic = metrics
-            .consumed_cycles_by_use_cases_monotonic()
-            .get(use_case)
-            .copied()
-            .unwrap_or_else(NominalCycles::zero);
-        assert_invariant(
-            &format!("{} consumed cycles", use_case.as_str()),
-            *gauge,
-            monotonic,
-            outstanding.for_use_case(*use_case),
-        );
-    }
-
-    // The loop above covers the gauge map's use cases; `HTTPOutcalls` is the only
-    // monotonic entry allowed to have no gauge counterpart, as HTTPS outcalls are
-    // only tracked as a gauge at the subnet level.
-    let extra: Vec<_> = metrics
-        .consumed_cycles_by_use_cases_monotonic()
-        .keys()
-        .filter(|use_case| {
-            **use_case != CyclesUseCase::HTTPOutcalls
-                && !metrics
-                    .consumed_cycles_by_use_cases()
-                    .contains_key(use_case)
-        })
-        .collect();
-    assert!(
-        extra.is_empty(),
-        "Canister {canister_id}: monotonic consumed cycles with no gauge: {extra:?}",
-    );
-
-    outstanding
-}
-
-/// Opens a call to an xnet canister, so that the caller is left with an outstanding
-/// prepayment for the response.
-fn call_xnet_canister(test: &mut SchedulerTest, canister: CanisterId) {
-    let xnet_canister = test.xnet_canister_id();
-    test.send_ingress(
-        canister,
-        ingress(1).call(other_side(xnet_canister, 1), on_response(1)),
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-}
-
-#[test]
-fn consumed_cycles_monotonic_matches_the_gauge_net_of_outstanding_prepayments() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let canister = test.create_canister();
-
-    call_xnet_canister(&mut test, canister);
-
-    let outstanding = assert_consumed_cycles_invariant(&test, canister);
-    assert_ne!(outstanding, OutstandingPrepayments::default());
-}
-
 #[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     for cost_schedule in [
@@ -1668,7 +1568,7 @@ fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
         .state()
         .metadata
         .subnet_metrics
-        .consumed_cycles_total_including_canisters();
+        .consumed_cycles_total_including_canisters_monotonic();
     let leftover_cycles = test.canister_state(canister_id).system_state.balance();
 
     test.inject_call_to_ic00(
@@ -1688,7 +1588,7 @@ fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
     assert_eq!(subnet_metrics.get_consumed_cycles_http_outcalls(), outcalls);
     // The deletion only adds the canister's leftover balance to the total.
     assert_eq!(
-        subnet_metrics.consumed_cycles_total_including_canisters(),
+        subnet_metrics.consumed_cycles_total_including_canisters_monotonic(),
         total_before + NominalCycles::new(leftover_cycles.get())
     );
     // And the exported metrics report the outcall once.

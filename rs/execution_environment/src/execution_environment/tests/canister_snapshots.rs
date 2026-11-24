@@ -40,7 +40,6 @@ use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
-use std::collections::BTreeMap;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -1980,8 +1979,8 @@ fn take_canister_snapshot_charges_canister_cycles() {
 }
 
 // On a free subnet the real instruction charge for `take_canister_snapshot` is
-// zero, but its nominal amount must still be recorded on both the
-// consumed-cycles gauge and the monotonic counter. Regression test that the
+// zero, but its nominal amount must still be recorded in the consumed cycles
+// metrics. Regression test that the
 // nominal amount is not dropped along the way.
 #[test]
 fn take_canister_snapshot_records_nominal_cycles_on_free_subnet() {
@@ -2013,37 +2012,29 @@ fn take_canister_snapshot_records_nominal_cycles_on_free_subnet() {
     assert_ne!(expected_charge.nominal(), NominalCycles::zero());
 
     let instruction_cycles = |test: &ExecutionTest| {
-        let canister_metrics = test
-            .canister_state(canister_id)
+        test.canister_state(canister_id)
             .system_state
-            .canister_metrics();
-        let instructions = |use_cases: &BTreeMap<CyclesUseCase, NominalCycles>| {
-            use_cases
-                .get(&CyclesUseCase::Instructions)
-                .cloned()
-                .unwrap_or_default()
-        };
-        (
-            instructions(canister_metrics.consumed_cycles_by_use_cases()),
-            instructions(canister_metrics.consumed_cycles_by_use_cases_monotonic()),
-        )
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions)
+            .cloned()
+            .unwrap_or_default()
     };
 
     let initial_balance = test.canister_state(canister_id).system_state.balance();
-    let (gauge_before, counter_before) = instruction_cycles(&test);
+    let consumed_before = instruction_cycles(&test);
 
     let args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     test.subnet_message("take_canister_snapshot", args.encode())
         .unwrap();
 
-    let (gauge_after, counter_after) = instruction_cycles(&test);
+    let consumed_after = instruction_cycles(&test);
 
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_balance,
     );
-    assert_eq!(gauge_after - gauge_before, expected_charge.nominal());
-    assert_eq!(counter_after - counter_before, expected_charge.nominal());
+    assert_eq!(consumed_after - consumed_before, expected_charge.nominal());
 }
 
 #[test]

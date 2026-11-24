@@ -1732,7 +1732,7 @@ impl ExecutionTest {
         let cycles_used_after = canister
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .cloned()
             .unwrap_or_default();
@@ -1801,7 +1801,7 @@ impl ExecutionTest {
             let cycles_used_before = canister
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default();
@@ -3575,7 +3575,7 @@ fn consumed_instruction_cycles(canister: &CanisterState) -> NominalCycles {
     canister
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::Instructions)
         .cloned()
         .unwrap_or_default()

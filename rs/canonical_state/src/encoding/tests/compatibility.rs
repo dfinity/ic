@@ -359,10 +359,7 @@ fn canonical_encoding_subnet_metrics() {
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
-        metrics.refresh_consumed_cycles(
-            NominalCycles::new(50_000_000_000),
-            NominalCycles::new(30_000_000_000),
-        );
+        metrics.refresh_consumed_cycles(NominalCycles::new(30_000_000_000));
 
         assert_eq!(
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 29 E8 D6 08 00 01 00 03 19 10 68",

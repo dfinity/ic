@@ -479,11 +479,6 @@ pub struct SubnetMetrics {
     /// (compilation, chunk assembly, snapshots), so it is not a Wasm meter.
     pub round_instructions_total: u64,
 
-    /// Backing store of [`Self::consumed_cycles_total_including_canisters()`]; zero
-    /// until [`Self::refresh_consumed_cycles`] derives it.
-    #[validate_eq(Ignore)]
-    consumed_cycles_total_including_canisters: NominalCycles,
-
     /// Backing store of
     /// [`Self::consumed_cycles_total_including_canisters_monotonic()`]; zero until
     /// [`Self::refresh_consumed_cycles`] derives it.
@@ -558,7 +553,6 @@ impl SubnetMetrics {
     /// of the total that is not held by the canisters that still exist.
     ///
     /// It is one of the two summands of
-    /// [`Self::consumed_cycles_total_including_canisters`] and of
     /// [`Self::consumed_cycles_total_including_canisters_monotonic`].
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
@@ -596,19 +590,8 @@ impl SubnetMetrics {
 
     /// All cycles removed from circulation on this subnet, by both deleted and
     /// still-existing canisters: [`Self::consumed_cycles_total`] plus the sum of
-    /// `CanisterMetrics::consumed_cycles()` over the canisters that currently
-    /// exist, as of the end of the last committed round.
-    pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
-        self.consumed_cycles_total_including_canisters
-    }
-
-    /// The monotonic counterpart of
-    /// [`Self::consumed_cycles_total_including_canisters`]:
-    /// [`Self::consumed_cycles_total`] plus the sum of
-    /// `CanisterMetrics::consumed_cycles_monotonic()` (rather than of the
-    /// `CanisterMetrics::consumed_cycles()` gauge, which also includes outstanding
-    /// prepayments) over the canisters that currently exist, as of the end of the
-    /// last committed round.
+    /// `CanisterMetrics::consumed_cycles_monotonic()` over the canisters that
+    /// currently exist, as of the end of the last committed round.
     ///
     /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
     /// reports, what the `subnet_metrics`
@@ -619,27 +602,18 @@ impl SubnetMetrics {
         self.consumed_cycles_total_including_canisters_monotonic
     }
 
-    /// Recomputes [`Self::consumed_cycles_total_including_canisters`] and
-    /// [`Self::consumed_cycles_total_including_canisters_monotonic`] from the
-    /// subnet-level aggregate and, respectively, `consumed_by_canisters`, the sum
-    /// of `CanisterMetrics::consumed_cycles()`, and `consumed_by_canisters_monotonic`,
-    /// the sum of `CanisterMetrics::consumed_cycles_monotonic()`, over the canisters
-    /// that currently exist.
+    /// Recomputes [`Self::consumed_cycles_total_including_canisters_monotonic`] from
+    /// the subnet-level aggregate and `consumed_by_canisters_monotonic`, the sum of
+    /// `CanisterMetrics::consumed_cycles_monotonic()` over the canisters that
+    /// currently exist.
     ///
     /// Callers pass the canisters' part only; adding the subnet-level part happens
-    /// here, so no caller can get it wrong. The totals are derived, not
+    /// here, so no caller can get it wrong. The total is derived, not
     /// persisted: `ReplicatedState::refresh_consumed_cycles` calls this whenever a
     /// state is committed and `ReplicatedState::new_from_checkpoint` on load.
-    pub fn refresh_consumed_cycles(
-        &mut self,
-        consumed_by_canisters: NominalCycles,
-        consumed_by_canisters_monotonic: NominalCycles,
-    ) {
-        let consumed_cycles_total = self.consumed_cycles_total();
-        self.consumed_cycles_total_including_canisters =
-            consumed_cycles_total + consumed_by_canisters;
+    pub fn refresh_consumed_cycles(&mut self, consumed_by_canisters_monotonic: NominalCycles) {
         self.consumed_cycles_total_including_canisters_monotonic =
-            consumed_cycles_total + consumed_by_canisters_monotonic;
+            self.consumed_cycles_total() + consumed_by_canisters_monotonic;
     }
 }
 

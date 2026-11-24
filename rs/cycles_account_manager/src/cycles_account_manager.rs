@@ -413,8 +413,8 @@ impl CyclesAccountManager {
     /// no subsequent refund.
     ///
     /// In addition to deducting the cycles, this observes a zero refund so that
-    /// the full amount is recorded on the monotonic per-use-case counter, which
-    /// (unlike the gauge) only accounts for `Instructions` at refund time.
+    /// the full amount is recorded in the consumed cycles metrics, which only
+    /// account for `Instructions` at refund time.
     pub fn consume_cycles_for_final_instructions(
         &self,
         system_state: &mut SystemState,

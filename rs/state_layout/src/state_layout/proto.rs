@@ -33,7 +33,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             executed: item.executed,
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
-            consumed_cycles: Some((&item.consumed_cycles).into()),
             consumed_cycles_monotonic: Some((&item.consumed_cycles_monotonic).into()),
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
@@ -42,16 +41,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
             canister_creation_timestamp_nanos: item.canister_creation_timestamp_nanos,
-            consumed_cycles_by_use_cases: item
-                .consumed_cycles_by_use_cases
-                .into_iter()
-                .map(
-                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
-                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
-                        cycles: Some((&cycles).into()),
-                    },
-                )
-                .collect(),
             consumed_cycles_by_use_cases_monotonic: item
                 .consumed_cycles_by_use_cases_monotonic
                 .into_iter()
@@ -119,9 +108,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|b| b.try_into())
             .transpose()?;
 
-        let consumed_cycles =
-            try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
-                .unwrap_or_default();
         let consumed_cycles_monotonic = try_from_option_field(
             value.consumed_cycles_monotonic,
             "CanisterStateBits::consumed_cycles_monotonic",
@@ -147,21 +133,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(Cycles::try_from)
             .transpose()?
             .unwrap_or_else(Cycles::zero);
-
-        let mut consumed_cycles_by_use_cases = BTreeMap::new();
-        for x in value.consumed_cycles_by_use_cases.into_iter() {
-            consumed_cycles_by_use_cases.insert(
-                CyclesUseCase::try_from(
-                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
-                        ProxyDecodeError::ValueOutOfRange {
-                            typ: "CyclesUseCase",
-                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
-                        }
-                    })?,
-                )?,
-                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
-            );
-        }
 
         let mut consumed_cycles_by_use_cases_monotonic = BTreeMap::new();
         for x in value.consumed_cycles_by_use_cases_monotonic.into_iter() {
@@ -215,7 +186,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             executed: value.executed,
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
-            consumed_cycles,
             consumed_cycles_monotonic,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
@@ -227,7 +197,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             canister_creation_timestamp_nanos: value.canister_creation_timestamp_nanos,
-            consumed_cycles_by_use_cases,
             consumed_cycles_by_use_cases_monotonic,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(

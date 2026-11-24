@@ -1438,10 +1438,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .canister_metrics()
                 .interrupted_during_execution(),
             certified_data: canister_state.system_state.certified_data.clone(),
-            consumed_cycles: canister_state
-                .system_state
-                .canister_metrics()
-                .consumed_cycles(),
             consumed_cycles_monotonic: canister_state
                 .system_state
                 .canister_metrics()
@@ -1467,11 +1463,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .canister_creation_timestamp
                 .map(|t| t.as_nanos_since_unix_epoch()),
-            consumed_cycles_by_use_cases: canister_state
-                .system_state
-                .canister_metrics()
-                .consumed_cycles_by_use_cases()
-                .clone(),
             consumed_cycles_by_use_cases_monotonic: canister_state
                 .system_state
                 .canister_metrics()

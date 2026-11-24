@@ -1182,9 +1182,8 @@ mod tests {
             .observe_consumed_cycles_with_use_case(CyclesUseCase::VetKd, NominalCycles::new(4));
 
         // Add a non-deleted canister that has consumed some cycles: a direct charge
-        // (for memory), which raises both the gauge and the monotonic amount, and a
-        // prepayment (for instructions) whose refund is still outstanding, which
-        // raises only the gauge.
+        // (for memory), which counts right away, and a prepayment (for instructions)
+        // whose refund is still outstanding, which does not count yet.
         let mut canister_state = new_canister_state(
             canister_test_id(2),
             user_test_id(24).get(),
@@ -1203,16 +1202,11 @@ mod tests {
                 Cycles::new(123_456),
                 CanisterCyclesCostSchedule::Normal,
             ));
-        let consumed_by_canisters = canister_state
-            .system_state
-            .canister_metrics()
-            .consumed_cycles();
         let consumed_by_canisters_monotonic = canister_state
             .system_state
             .canister_metrics()
             .consumed_cycles_monotonic();
-        assert!(consumed_by_canisters_monotonic > NominalCycles::zero());
-        assert!(consumed_by_canisters > consumed_by_canisters_monotonic);
+        assert_eq!(consumed_by_canisters_monotonic, NominalCycles::new(7_890));
         state.put_canister_state(canister_state);
 
         // The tree reads the stored aggregate, which is zero until refreshed.
@@ -1220,7 +1214,7 @@ mod tests {
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters(),
+                .consumed_cycles_total_including_canisters_monotonic(),
             NominalCycles::zero()
         );
 
@@ -1231,24 +1225,14 @@ mod tests {
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters(),
-            subnet_level + consumed_by_canisters
-        );
-        assert_eq!(
-            state
-                .metadata
-                .subnet_metrics
                 .consumed_cycles_total_including_canisters_monotonic(),
             subnet_level + consumed_by_canisters_monotonic
         );
 
         let encode_with_canisters_part =
-            |consumed_by_canisters, consumed_by_canisters_monotonic, certification_version| {
+            |consumed_by_canisters_monotonic, certification_version| {
                 let mut metrics = state.metadata.subnet_metrics.clone();
-                metrics.refresh_consumed_cycles(
-                    consumed_by_canisters,
-                    consumed_by_canisters_monotonic,
-                );
+                metrics.refresh_consumed_cycles(consumed_by_canisters_monotonic);
                 encode_subnet_metrics(&metrics, certification_version)
             };
 
@@ -1276,23 +1260,11 @@ mod tests {
             );
 
             // The canister's consumed cycles are included as the monotonic amount.
-            let without_canisters = encode_with_canisters_part(
-                NominalCycles::zero(),
-                NominalCycles::zero(),
-                certification_version,
-            );
-            let gauge_only = encode_with_canisters_part(
-                consumed_by_canisters,
-                NominalCycles::zero(),
-                certification_version,
-            );
-            let monotonic_only = encode_with_canisters_part(
-                NominalCycles::zero(),
-                consumed_by_canisters_monotonic,
-                certification_version,
-            );
-            assert_eq!(metrics_blob, monotonic_only);
-            assert_ne!(metrics_blob, gauge_only);
+            let without_canisters =
+                encode_with_canisters_part(NominalCycles::zero(), certification_version);
+            let with_canisters =
+                encode_with_canisters_part(consumed_by_canisters_monotonic, certification_version);
+            assert_eq!(metrics_blob, with_canisters);
             assert_ne!(metrics_blob, without_canisters);
         }
     }

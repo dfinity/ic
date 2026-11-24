@@ -1780,7 +1780,6 @@ mod tests {
             let burned = consumed_cycles
                 .burned
                 .map_or(NominalCycles::zero(), |c| c.nominal());
-            let mut total_consumed = NominalCycles::zero();
             for (use_case, amount) in [
                 (CyclesUseCase::BurnedCycles, burned),
                 (
@@ -1796,22 +1795,7 @@ mod tests {
                         .map_or(NominalCycles::zero(), |c| c.nominal()),
                 ),
             ] {
-                total_consumed += amount;
-                assert_eq!(
-                    metrics
-                        .consumed_cycles_by_use_cases()
-                        .get(&use_case)
-                        .copied()
-                        .unwrap_or_default(),
-                    initial_metrics
-                        .consumed_cycles_by_use_cases()
-                        .get(&use_case)
-                        .copied()
-                        .unwrap_or_default()
-                        + amount,
-                    "Unexpected consumed cycles for {use_case:?}"
-                );
-                // Request prepayments enter the monotonic metrics only when settled.
+                // Request prepayments enter the consumed cycles only when settled.
                 let settled = if use_case == CyclesUseCase::BurnedCycles {
                     amount
                 } else {
@@ -1829,13 +1813,9 @@ mod tests {
                         .copied()
                         .unwrap_or_default()
                         + settled,
-                    "Unexpected monotonic consumed cycles for {use_case:?}"
+                    "Unexpected consumed cycles for {use_case:?}"
                 );
             }
-            assert_eq!(
-                metrics.consumed_cycles(),
-                initial_metrics.consumed_cycles() + total_consumed
-            );
             assert_eq!(
                 metrics.consumed_cycles_monotonic(),
                 initial_metrics.consumed_cycles_monotonic() + burned
