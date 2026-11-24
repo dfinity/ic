@@ -368,7 +368,7 @@ fn can_parse_pkcs8_v2_der_secret_key() {
 }
 
 #[test]
-fn pkcs8_v2_ignores_public_key_bit_string_with_unused_bits() {
+fn pkcs8_v2_rejects_public_key_bit_string_with_unused_bits() {
     let rng = &mut test_rng();
     let sk = random_key(rng);
     let other_pk = random_key(rng).public_key().serialize_raw();
@@ -382,10 +382,9 @@ fn pkcs8_v2_ignores_public_key_bit_string_with_unused_bits() {
     // A public key that does not match the private key is rejected
     assert!(PrivateKey::deserialize_pkcs8(&der).is_err());
 
-    // A public key whose BIT STRING has unused bits is ignored, even when it
-    // does not match the private key
+    // A public key whose BIT STRING has unused bits is rejected
     der[50] = 1;
-    assert_eq!(PrivateKey::deserialize_pkcs8(&der).unwrap(), sk);
+    assert!(PrivateKey::deserialize_pkcs8(&der).is_err());
 }
 
 #[test]

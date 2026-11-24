@@ -6,7 +6,7 @@
 //! A crate for creating and verifying Ed25519 signatures
 
 use curve25519_dalek::{EdwardsPoint, Scalar, edwards::CompressedEdwardsY};
-use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
+use ed25519_dalek::pkcs8::{DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use hex_literal::hex;
@@ -248,7 +248,19 @@ impl PrivateKey {
             let sk_offset = BUGGY_RING_V2_DER_PREFIX.len();
             Self::deserialize_raw(&bytes[sk_offset..sk_offset + Self::BYTES])
         } else {
-            let sk = SigningKey::from_pkcs8_der(bytes)
+            let info = ed25519_dalek::pkcs8::PrivateKeyInfoRef::try_from(bytes)
+                .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
+            // The optional public key must be a whole number of bytes
+            if info
+                .public_key
+                .as_ref()
+                .is_some_and(|pk| pk.has_unused_bits())
+            {
+                return Err(PrivateKeyDecodingError::InvalidKeyEncoding(
+                    "the public key BIT STRING has unused bits".to_string(),
+                ));
+            }
+            let sk = SigningKey::try_from(info)
                 .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
             Ok(Self { sk })
         }
