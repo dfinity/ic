@@ -23,6 +23,7 @@ time = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+# TODO: remove, with the test that uses it, once the workspace is on ic-stable-structures 0.7.
 ic-stable-structures-0-6 = { package = "ic-stable-structures", version = "0.6.8" }
 
 [lib]

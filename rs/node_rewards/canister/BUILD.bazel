@@ -237,6 +237,7 @@ rust_test(
 
 rust_test(
     name = "nrc_test",
+    # TODO: remove, with the test that uses it, once the workspace is on ic-stable-structures 0.7.
     aliases = {
         "@crate_index//:ic-stable-structures": "ic_stable_structures_0_6",
     },

@@ -49,6 +49,7 @@ futures-util = { workspace = true }
 ic-nervous-system-agent = { path = "../../nervous_system/agent", features = ["test"] }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
+# TODO: remove, with the test that uses it, once the workspace is on ic-stable-structures 0.7.
 ic-stable-structures-0-6 = { package = "ic-stable-structures", version = "0.6.8" }
 maplit = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }

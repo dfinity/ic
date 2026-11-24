@@ -36,6 +36,7 @@ rust_canister(
 rust_test(
     name = "unit_tests",
     srcs = glob(["canister/**/*.rs"]),
+    # TODO: remove, with the test that uses it, once the workspace is on ic-stable-structures 0.7.
     aliases = {
         "@crate_index//:ic-stable-structures": "ic_stable_structures_0_6",
     },
