@@ -111,6 +111,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, RoutingTable, routing_table_insert_subnet,
+    routing_table_split_subnet_or_panic,
 };
 use ic_registry_subnet_features::{
     ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig, SubnetFeatures,
@@ -3727,10 +3728,12 @@ impl StateMachine {
             .expect("malformed routing table")
             .expect("missing routing table");
 
-        routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
-        routing_table
-            .assign_ranges(ranges.clone(), subnet_id)
-            .expect("ranges are not well formed");
+        routing_table_split_subnet_or_panic(
+            &mut routing_table,
+            self.get_subnet_id(),
+            subnet_id,
+            ranges.clone(),
+        );
 
         let pb_routing_table = PbRoutingTable::from(routing_table);
         self.registry_data_provider

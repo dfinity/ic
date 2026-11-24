@@ -63,8 +63,8 @@ impl Registry {
     /// 3. update the catch up package contents of the `source` subnet, to include an information
     ///    that the subnet is split,
     /// 4. create catch up package contents for the newly added subnet,
-    /// 5. modify the routing table and reroute some of the canister IDs from the source subnet to
-    ///    the newly added subnet,
+    /// 5. modify the routing table: reroute some of the canister IDs from the source subnet to
+    ///    the newly added subnet, and assign a fresh canister ID range to each of the two subnets,
     /// 6. modify the CanisterMigrations entry, to also include the information that the source
     ///    subnet is being split.
     pub async fn split_subnet(&mut self, payload: SplitSubnetPayload) -> Result<(), String> {
@@ -230,10 +230,11 @@ impl Registry {
             destination_subnet_id,
         ));
 
-        mutations.extend(self.add_subnet_to_routing_table_and_reroute(
+        mutations.extend(self.split_subnet_in_routing_table(
             post_call_registry_version,
-            ranges_to_migrate,
+            payload.source_subnet_id,
             destination_subnet_id,
+            ranges_to_migrate,
         ));
 
         self.maybe_apply_mutation_internal(mutations);

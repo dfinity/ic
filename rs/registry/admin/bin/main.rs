@@ -1140,7 +1140,8 @@ impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToSplitSubnetCmd {
     /// The subnet to split. It keeps the nodes and canister ID ranges that are
-    /// not moved to the destination subnet. Must have an even number of nodes.
+    /// not moved to the destination subnet, and is assigned a fresh canister ID
+    /// range to create new canisters in. Must have an even number of nodes.
     #[clap(long)]
     pub source_subnet: PrincipalId,
 

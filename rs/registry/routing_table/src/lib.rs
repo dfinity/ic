@@ -237,16 +237,31 @@ pub fn routing_table_insert_subnet(
     routing_table.insert(canister_id_range, subnet_id)
 }
 
-/// A helper function to help insert a new subnet to the routing table
-pub fn routing_table_insert_subnet_and_reroute_or_panic(
-    subnet_id: SubnetId,
+/// Updates the routing table to reflect `source_subnet_id` being split into itself and the newly
+/// created `destination_subnet_id`:
+///  * the given ranges are rerouted from the source subnet to the destination subnet
+///  * each of the two subnets is assigned a fresh range to allocate new canister IDs from
+///
+/// The source subnet gets a fresh range too, because the range that it allocated canister IDs
+/// from so far may have been migrated, partially or entirely, to the destination subnet.
+///
+/// Replicas only allocate canister IDs from a routing table entry spanning exactly
+/// `[N * CANISTER_IDS_PER_SUBNET, (N + 1) * CANISTER_IDS_PER_SUBNET - 1]`, so a fresh range must
+/// not be merged with an adjacent range of the same subnet. That is why the destination subnet's
+/// fresh range is inserted first: the source subnet's fresh range then directly follows it, and
+/// never one of the source subnet's own ranges.
+pub fn routing_table_split_subnet_or_panic(
     routing_table: &mut RoutingTable,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
     migrated_canister_id_ranges: CanisterIdRanges,
 ) {
-    routing_table_insert_subnet(routing_table, subnet_id)
-        .expect("Failed to insert a subnet to the routing table");
+    routing_table_insert_subnet(routing_table, destination_subnet_id)
+        .expect("Failed to insert the destination subnet into the routing table");
+    routing_table_insert_subnet(routing_table, source_subnet_id)
+        .expect("Failed to insert a fresh range of the source subnet into the routing table");
     routing_table
-        .assign_ranges(migrated_canister_id_ranges, subnet_id)
+        .assign_ranges(migrated_canister_id_ranges, destination_subnet_id)
         .expect("Failed to reroute canisters in the routing table");
     routing_table.optimize();
 }
