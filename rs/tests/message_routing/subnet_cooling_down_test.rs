@@ -1,8 +1,8 @@
 /* tag::catalog[]
 Title:: Draining and halting a subnet that is "cooling down", downloading,
 validating and merging the states of the subnets to merge, rerouting the
-canister ID ranges of the subnet, and recovering the subnet it is merged into
-at the merged state, with the subnet merging tool.
+canister ID ranges of the subnet, recovering the subnet it is merged into at
+the merged state, and deleting the subnet, with the subnet merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -17,11 +17,12 @@ subnet rerouted to the subnet it is merged into, proposes the recovery CUP of
 that subnet at the merged state, uploads the merged state to a node of that
 subnet, waits until that node reports the recovery CUP, and unhalts that
 subnet, after which the canisters of the cooling down subnet are served by the
-subnet it is merged into. The cooling down subnet also holds calls
+subnet it is merged into, and, once every other subnet routes them there,
+deletes the cooling down subnet. The cooling down subnet also holds calls
 waiting for responses that never arrive: they are not drained, but make it
 possible to assert that a subnet merge populates the ingress history properly.
 
-The subnet that is cooled down, i.e. the one that would be merged away, is
+The subnet that is cooled down, i.e. the one that is merged away, is
 called `S`, and the Application subnet the tool is told to merge `S` into is
 called `D`. `S` exchanges the same calls with `D` as with a third Application
 subnet `O`, which is not part of the merge: once the merge goes ahead, the
@@ -168,6 +169,14 @@ Runbook::
    `USO` were hosted by `S` and are served by `D` now: `UDS`'s loop only
    advances once `D` executes again, and `UOS`'s loop once the calls from `O`
    to a canister of `S` are responded to again.
+26. The following steps of the tool are executed:
+   `CheckRegistryVersionOnAllSubnets`, which waits until every subnet other
+   than `S` has reached the registry version recorded by
+   `CheckRegistryForRoutingTableEntry` on a quorum of its replicas, i.e. routes
+   the canisters of `S` to `D`, and `DeleteSourceSubnet`, which submits a
+   proposal deleting `S`.
+27. After `DeleteSourceSubnet`: check that `S` is gone from the registry. The
+   tool's last step, `Cleanup`, then deletes its working directory.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -179,7 +188,8 @@ holds exactly the canisters of both, and the registry version the tool records
 routes the canister ID ranges of `S` to `D`; and the registry holds the
 recovery CUP contents of `D` at the merged state, with `D` halted; the replica
 on `D`'s node runs on the merged state the tool uploaded to it; and once `D` is
-unhalted, the call loops of `UDS` and `UOS` advance again.
+unhalted, the call loops of `UDS` and `UOS` advance again; finally, `S` is
+deleted.
 
 end::catalog[] */
 
@@ -352,7 +362,9 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 /// so that a stuck step fails with its own error. The sum is dominated by
 /// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
 /// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
-/// 15s apart, about 525s) and `LOOPS_RESUMED_TIMEOUT`, about 2425s together.
+/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and the wait of
+/// `CheckRegistryVersionOnAllSubnets` (`REGISTRY_TIMEOUT`), about 2545s
+/// together.
 /// `HALT_TIMEOUT` is counted once although it applies to each of the two
 /// subnets: both are scheduled to halt before either is waited for, so the two
 /// waits overlap. The overall timeout additionally covers the setup (booting
@@ -399,6 +411,13 @@ fn main() -> Result<()> {
         // The nodes of `D` restart their replicas once they see the recovery
         // CUP of `D` in the registry.
         .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
+        // Deleting `S` deletes its subnet record, and the replicas of `S` that
+        // are still running panic if they notice before their orchestrator stops
+        // them (as in `delete_subnet_test`).
+        .add_unallowed_log_pattern_except(
+            "panicked",
+            "rs/consensus/src/consensus/allowed_panics.rs",
+        )
         .execute_from_args()?;
     Ok(())
 }
@@ -685,7 +704,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 25: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 27: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -827,6 +846,17 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                 );
                 runtime.block_on(check_loops_resumed(context, &stalled_iterations));
             }
+            StepType::CheckRegistryVersionOnAllSubnets => {
+                info!(
+                    logger,
+                    "Step 26: every subnet other than S has reached the registry version that \
+                     routes the canisters of S to D"
+                );
+            }
+            StepType::DeleteSourceSubnet => {
+                runtime.block_on(check_source_subnet_deleted(&topology, context));
+            }
+            StepType::Cleanup => {}
         }
     }
     assert_eq!(
@@ -838,8 +868,31 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     info!(
         logger,
         "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
-         merged, the canister ID ranges of S rerouted to D, and D recovered at the merged state \
-         and unhalted, by the subnet merging tool"
+         merged, the canister ID ranges of S rerouted to D, D recovered at the merged state and \
+         unhalted, and S deleted, by the subnet merging tool"
+    );
+}
+
+/// Step 27: check that the subnet the tool deleted is gone from the registry.
+async fn check_source_subnet_deleted(topology: &TopologySnapshot, context: &Context<'_>) {
+    let logger = &context.logger;
+    let s_subnet_id = context.s_subnet.subnet_id;
+
+    let topology = topology
+        .block_for_newer_registry_version()
+        .await
+        .expect("the registry should have a newer version after the subnet was deleted");
+    let remaining: Vec<_> = topology.subnets().map(|subnet| subnet.subnet_id).collect();
+    assert!(
+        !remaining.contains(&s_subnet_id),
+        "subnet S ({s_subnet_id}) is still in the registry at version {}: {remaining:?}",
+        topology.get_registry_version(),
+    );
+    info!(
+        logger,
+        "Step 27 done: subnet S is gone as of registry version {}; the remaining subnets are \
+         {remaining:?}",
+        topology.get_registry_version(),
     );
 }
 
