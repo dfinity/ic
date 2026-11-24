@@ -52,7 +52,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 ipnet = { workspace = true }
 lazy_static = { workspace = true }
-maxminddb = "0.29"
+maxminddb = "0.32"
 mockall = { workspace = true }
 moka = { version = "0.12.15", features = ["sync"] }
 nftables = { workspace = true }
