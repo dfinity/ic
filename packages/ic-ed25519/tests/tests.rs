@@ -368,6 +368,27 @@ fn can_parse_pkcs8_v2_der_secret_key() {
 }
 
 #[test]
+fn pkcs8_v2_ignores_public_key_bit_string_with_unused_bits() {
+    let rng = &mut test_rng();
+    let sk = random_key(rng);
+    let other_pk = random_key(rng).public_key().serialize_raw();
+
+    let mut der = sk.serialize_pkcs8(PrivateKeyFormat::Pkcs8v2);
+    // The public key is a [1] IMPLICIT BIT STRING of 33 bytes: the number of
+    // unused bits followed by the 32-byte key
+    assert_eq!(der[48..51], hex!("812100"));
+    der[51..].copy_from_slice(&other_pk);
+
+    // A public key that does not match the private key is rejected
+    assert!(PrivateKey::deserialize_pkcs8(&der).is_err());
+
+    // A public key whose BIT STRING has unused bits is ignored, even when it
+    // does not match the private key
+    der[50] = 1;
+    assert_eq!(PrivateKey::deserialize_pkcs8(&der).unwrap(), sk);
+}
+
+#[test]
 fn can_parse_dfx_created_private_key() {
     let dfx_key: &str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEIPXo8WUQM26wS/cT6mmHO1ClYHixF46uhRoQlLmPfsQl\noSMDIQAY6M8L0Ocji3w8k2EBMTwhVJT0G6HI1ZZmWrPOzv8L1Q==\n-----END PRIVATE KEY-----\n";
 
