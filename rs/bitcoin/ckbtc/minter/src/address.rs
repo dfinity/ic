@@ -927,6 +927,29 @@ mod tests {
     }
 
     #[test]
+    fn should_reject_addresses_longer_than_1023_characters_as_malformed() {
+        // Bech32 checksums are validated only for strings of at most 1,023 characters. An
+        // address of that length with a valid checksum reaches the witness program length
+        // check, while a longer one fails the checksum check.
+        let longest = generate_address(Some(0), &[0; 633], Network::Mainnet);
+        assert_eq!(longest.len(), 1023);
+        assert_eq!(
+            BitcoinAddress::parse(&longest, Network::Mainnet),
+            Err(ParseAddressError::BadWitnessLength {
+                expected: 20,
+                actual: 633,
+            })
+        );
+
+        let too_long = generate_address(Some(0), &[0; 634], Network::Mainnet);
+        assert_eq!(too_long.len(), 1025);
+        assert_matches!(
+            BitcoinAddress::parse(&too_long, Network::Mainnet),
+            Err(ParseAddressError::MalformedAddress(_))
+        );
+    }
+
+    #[test]
     fn should_check_bech32_and_bech32m_checksums() {
         let valid = [
             // Bech32
