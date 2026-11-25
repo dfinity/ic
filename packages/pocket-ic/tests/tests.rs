@@ -1218,7 +1218,7 @@ fn test_schnorr() {
                                     .to_vec()
                             }
                         };
-                        let vk = VerifyingKey::from_bytes(&public_key).unwrap();
+                        let vk = VerifyingKey::from_slice(&public_key).unwrap();
                         let sig = Signature::try_from(schnorr_signature_result.unwrap().as_slice())
                             .unwrap();
 
@@ -1363,7 +1363,7 @@ fn test_ecdsa() {
             // We verify the ECDSA signature, which the IC returns with `s` normalized.
             let sig = p256::ecdsa::Signature::from_slice(&ecdsa_signature).unwrap();
             pk.verify_prehash(&message_hash, &sig).unwrap();
-            assert!(sig.normalize_s().is_none(), "{name}: `s` is not normalized");
+            assert_eq!(sig.normalize_s(), sig, "{name}: `s` is not normalized");
         }
     }
 }

@@ -607,9 +607,7 @@ fn sign_delegation(delegation: Delegation, identity: &impl Identity) -> SignedDe
 }
 
 fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
-    let pem = k256::SecretKey::random(rng)
-        .to_sec1_pem(k256::pkcs8::LineEnding::LF)
-        .unwrap();
+    let pem = ic_secp256k1::PrivateKey::generate_using_rng(rng).serialize_rfc5915_pem();
     Secp256k1Identity::from_pem(pem.as_bytes()).unwrap()
 }
 

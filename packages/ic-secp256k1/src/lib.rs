@@ -10,7 +10,7 @@ use k256::{
     AffinePoint, Scalar, Secp256k1,
     elliptic_curve::{
         Curve,
-        generic_array::{GenericArray, typenum::Unsigned},
+        array::{Array, typenum::Unsigned},
     },
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
@@ -109,7 +109,8 @@ impl DerivationPath {
 
     fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
         use hmac::{Hmac, Mac};
-        use k256::{elliptic_curve::ops::Reduce, sha2::Sha512};
+        use k256::elliptic_curve::ops::Reduce;
+        use sha2::Sha512;
 
         let mut hmac = Hmac::<Sha512>::new_from_slice(chain_code)
             .expect("HMAC-SHA-512 should accept 256 bit key");
@@ -119,8 +120,8 @@ impl DerivationPath {
 
         let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
 
-        let fb = k256::FieldBytes::from_slice(&hmac_output[..32]);
-        let next_offset = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
+        let fb = k256::FieldBytes::try_from(&hmac_output[..32]).expect("Correct size");
+        let next_offset = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&fb);
         let next_chain_key: [u8; 32] = hmac_output[32..].to_vec().try_into().expect("Correct size");
 
         // If iL >= order, try again with the "next" index as described in SLIP-10
@@ -140,9 +141,7 @@ impl DerivationPath {
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
         use k256::ProjectivePoint;
-        use k256::elliptic_curve::{
-            group::GroupEncoding, group::prime::PrimeCurveAffine, ops::MulByGenerator,
-        };
+        use k256::elliptic_curve::{group::CurveAffine, group::GroupEncoding};
 
         let mut ckd_input = pt.to_bytes();
 
@@ -325,8 +324,7 @@ fn bip341_generate_tweak(pk_x: &[u8], ttr: &[u8]) -> Result<Scalar, InvalidTapro
     sha256.update(ttr);
     let bytes: [u8; 32] = sha256.finalize().into();
 
-    let fb = k256::FieldBytes::from_slice(&bytes);
-    let s = k256::Scalar::from_repr(*fb);
+    let s = k256::Scalar::from_repr(k256::FieldBytes::from(bytes));
 
     if bool::from(s.is_some()) {
         Ok(s.unwrap())
@@ -350,8 +348,14 @@ impl PrivateKey {
 
     /// Generate a new random private key using some provided RNG
     pub fn generate_using_rng<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let key = k256::SecretKey::random(rng);
-        Self { key }
+        // Rejection sampling: draw 32 bytes until they encode a scalar in [1, n)
+        let mut bytes = zeroize::Zeroizing::new(k256::FieldBytes::default());
+        loop {
+            rng.fill_bytes(&mut bytes);
+            if let Ok(key) = k256::SecretKey::from_bytes(&bytes) {
+                return Self { key };
+            }
+        }
     }
 
     /// Generate a key using an input seed
@@ -370,8 +374,8 @@ impl PrivateKey {
         };
 
         let scalar = {
-            let fb = k256::FieldBytes::from_slice(&digest);
-            let scalar = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
+            let fb = k256::FieldBytes::from(digest);
+            let scalar = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&fb);
 
             // This could with ~ 1/2**256 probability fail. If it ever did, it
             // implies we've found a seed such that the SHA-256 hash of it,
@@ -394,7 +398,7 @@ impl PrivateKey {
                 KeyDecodingError::InvalidKeyEncoding(format!("invalid key size = {}.", bytes.len()))
             })?;
 
-        let key = k256::SecretKey::from_bytes(&GenericArray::from(byte_array))
+        let key = k256::SecretKey::from_bytes(&Array::from(byte_array))
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
@@ -487,13 +491,16 @@ impl PrivateKey {
     /// The signature is normalized (using the minimum-s approach of BitCoin)
     pub fn sign_digest_with_ecdsa(&self, digest: &[u8]) -> [u8; 64] {
         if digest.len() < 16 {
-            // k256 arbitrarily rejects digests that are < 128 bits
-            // handle this by prefixing with a sufficient number of zero bytes
+            // This crate signs a digest shorter than 128 bits by prefixing
+            // it with zero bytes to 32 bytes
             let mut zdigest = [0_u8; 32];
             let z_prefix_len = zdigest.len() - digest.len();
             zdigest[z_prefix_len..].copy_from_slice(digest);
             return self.sign_digest_with_ecdsa(&zdigest);
         }
+
+        // ECDSA uses only the leftmost 32 bytes of a longer digest
+        let digest = &digest[..digest.len().min(32)];
 
         use k256::ecdsa::{Signature, signature::hazmat::PrehashSigner};
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
@@ -868,8 +875,8 @@ impl PublicKey {
     ///
     /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
-        use k256::elliptic_curve::sec1::ToEncodedPoint;
-        self.key.to_encoded_point(compressed).as_bytes().to_vec()
+        use k256::elliptic_curve::sec1::ToSec1Point;
+        self.key.to_sec1_point(compressed).as_bytes().to_vec()
     }
 
     /// Serialize a public key in the style of BIP340
@@ -970,11 +977,7 @@ impl PublicKey {
         };
 
         let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
-        if let Some(normalized) = signature.normalize_s() {
-            ecdsa.verify(message, &normalized).is_ok()
-        } else {
-            ecdsa.verify(message, &signature).is_ok()
-        }
+        ecdsa.verify(message, &signature.normalize_s()).is_ok()
     }
 
     /// Verify a (message digest,signature) pair
@@ -1029,11 +1032,9 @@ impl PublicKey {
         };
 
         let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
-        if let Some(normalized) = signature.normalize_s() {
-            ecdsa.verify_prehash(digest, &normalized).is_ok()
-        } else {
-            ecdsa.verify_prehash(digest, &signature).is_ok()
-        }
+        ecdsa
+            .verify_prehash(digest, &signature.normalize_s())
+            .is_ok()
     }
 
     /// Verify a BIP340 (message,signature) pair
@@ -1047,8 +1048,8 @@ impl PublicKey {
 
         let pt = self.serialize_sec1(true);
 
-        // from_bytes takes just the x coordinate encoding:
-        match k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
+        // from_slice takes just the x coordinate encoding:
+        match k256::schnorr::VerifyingKey::from_slice(&pt[1..]) {
             Ok(bip340) => bip340.verify_prehash(message, &signature).is_ok(),
             _ => false,
         }
@@ -1056,8 +1057,6 @@ impl PublicKey {
 
     /// BIP341 derivation
     fn derive_bip341(&self, ttr: &[u8]) -> Result<Self, InvalidTaprootHash> {
-        use k256::elliptic_curve::ops::MulByGenerator;
-
         let pk = self.serialize_sec1(true);
 
         let t = k256::ProjectivePoint::mul_by_generator(&bip341_generate_tweak(&pk[1..], ttr)?);
@@ -1098,7 +1097,8 @@ impl PublicKey {
     /// with the secret key associated with this `PublicKey`.
     ///
     /// # Errors
-    /// See [`RecoveryError`] for details.
+    /// See [`RecoveryError`] for details. A digest shorter than 16 bytes
+    /// is rejected with [`RecoveryError::WrongParameters`].
     pub fn try_recovery_from_digest(
         &self,
         digest: &[u8],
@@ -1106,6 +1106,14 @@ impl PublicKey {
     ) -> Result<RecoveryId, RecoveryError> {
         let signature = k256::ecdsa::Signature::from_slice(signature)
             .map_err(|e| RecoveryError::SignatureParseError(e.to_string()))?;
+
+        if digest.len() < 16 {
+            // Unlike signing and verification, recovery does not extend
+            // digests shorter than 128 bits but rejects them
+            return Err(RecoveryError::WrongParameters(
+                k256::ecdsa::Error::new().to_string(),
+            ));
+        }
 
         let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
 
@@ -1155,7 +1163,8 @@ pub enum RecoveryError {
     /// The signature is syntactically invalid and cannot be parsed.
     SignatureParseError(String),
     /// Recovery failed which can only happen if parameters are wrong:
-    /// signature was not done on given digest or was done by another key pair.
+    /// signature was not done on given digest or was done by another key pair,
+    /// or the digest is shorter than 16 bytes.
     WrongParameters(String),
 }
 

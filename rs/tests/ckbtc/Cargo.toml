@@ -32,6 +32,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-system-test-driver = { path = "../../tests/driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
@@ -40,7 +41,6 @@ ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/t
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-k256 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }

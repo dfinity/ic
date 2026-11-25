@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "10f5efe5b26eea53afe95327a03177d5ce9f1d200f911aba87a4c295e9124cbd",
+  "checksum": "826b87f7766136b70c5525d1283a51f142419fe5e2511b07b0ba349876ab21b3",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7838,18 +7838,12 @@
       ],
       "version": "0.15.2"
     },
-    "bip32 0.5.3": {
+    "bip32 0.6.0": {
       "common_attrs": {
         "crate_features": [
-          "alloc",
-          "bip39",
           "default",
           "k256",
-          "mnemonic",
-          "once_cell",
-          "pbkdf2",
-          "secp256k1",
-          "std"
+          "secp256k1"
         ],
         "deps": [
           {
@@ -7857,31 +7851,19 @@
             "target": "bs58"
           },
           {
-            "id": "hmac 0.12.1",
+            "id": "hmac 0.13.0",
             "target": "hmac"
           },
           {
-            "id": "k256 0.13.4",
+            "id": "k256 0.14.0",
             "target": "k256"
           },
           {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
-          },
-          {
-            "id": "pbkdf2 0.12.2",
-            "target": "pbkdf2"
-          },
-          {
-            "id": "rand_core 0.6.4",
-            "target": "rand_core"
-          },
-          {
-            "id": "ripemd 0.1.3",
+            "id": "ripemd 0.2.0",
             "target": "ripemd"
           },
           {
-            "id": "sha2 0.10.9",
+            "id": "sha2 0.11.1",
             "target": "sha2"
           },
           {
@@ -7893,7 +7875,7 @@
             "target": "zeroize"
           }
         ],
-        "edition": "2021"
+        "edition": "2024"
       },
       "library_target_name": "bip32",
       "license": "Apache-2.0 OR MIT",
@@ -7906,8 +7888,8 @@
       "package_url": "https://github.com/iqlusioninc/crates/tree/main/bip32",
       "repository": {
         "Http": {
-          "sha256": "db40d3dfbeab4e031d78c844642fa0caa0b0db11ce1607ac9d2986dff1405c69",
-          "url": "https://static.crates.io/crates/bip32/0.5.3/download"
+          "sha256": "0271a2fe2a6f05231419e878b5f50152a5a6dbcc60c18855d924892ecc85a33a",
+          "url": "https://static.crates.io/crates/bip32/0.6.0/download"
         }
       },
       "targets": [
@@ -7918,7 +7900,7 @@
           }
         }
       ],
-      "version": "0.5.3"
+      "version": "0.6.0"
     },
     "bit-set 0.11.1": {
       "common_attrs": {
@@ -17643,7 +17625,7 @@
             "target": "bincode"
           },
           {
-            "id": "bip32 0.5.3",
+            "id": "bip32 0.6.0",
             "target": "bip32"
           },
           {
@@ -18087,7 +18069,7 @@
             "target": "jsonrpc"
           },
           {
-            "id": "k256 0.13.4",
+            "id": "k256 0.14.0",
             "target": "k256"
           },
           {
@@ -18222,11 +18204,11 @@
             "target": "opentelemetry_sdk"
           },
           {
-            "id": "p256 0.13.2",
+            "id": "p256 0.14.0",
             "target": "p256"
           },
           {
-            "id": "p384 0.13.1",
+            "id": "p384 0.14.0",
             "target": "p384"
           },
           {
@@ -40706,11 +40688,24 @@
     "p384 0.14.0": {
       "common_attrs": {
         "crate_features": [
+          "alloc",
           "arithmetic",
-          "ecdh"
+          "digest",
+          "ecdh",
+          "ecdsa",
+          "ecdsa-core",
+          "pem",
+          "pkcs8",
+          "sha2",
+          "sha384"
         ],
         "deps": {
           "common": [
+            {
+              "alias": "ecdsa_core",
+              "id": "ecdsa 0.17.0",
+              "target": "ecdsa"
+            },
             {
               "id": "elliptic-curve 0.14.3",
               "target": "elliptic_curve"
@@ -40722,6 +40717,10 @@
             {
               "id": "primeorder 0.14.0",
               "target": "primeorder"
+            },
+            {
+              "id": "sha2 0.11.1",
+              "target": "sha2"
             }
           ],
           "selects": {
@@ -48811,41 +48810,6 @@
       ],
       "version": "0.17.14"
     },
-    "ripemd 0.1.3": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "digest 0.10.7",
-            "target": "digest"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "ripemd",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "ripemd",
-      "package_url": "https://github.com/RustCrypto/hashes",
-      "repository": {
-        "Http": {
-          "sha256": "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f",
-          "url": "https://static.crates.io/crates/ripemd/0.1.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ripemd",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.3"
-    },
     "ripemd 0.2.0": {
       "common_attrs": {
         "crate_features": [
@@ -51646,40 +51610,6 @@
       ],
       "version": "0.22.2"
     },
-    "secp256k1 0.27.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "secp256k1-sys 0.8.2",
-            "target": "secp256k1_sys"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "secp256k1",
-      "license": "CC0-1.0",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "name": "secp256k1",
-      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
-      "repository": {
-        "Http": {
-          "sha256": "25996b82292a7a57ed3508f052cfff8640d38d32018784acd714758b43da9c8f",
-          "url": "https://static.crates.io/crates/secp256k1/0.27.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secp256k1",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.27.0"
-    },
     "secp256k1 0.29.100": {
       "common_attrs": {
         "crate_features": [
@@ -51957,52 +51887,6 @@
         }
       ],
       "version": "0.5.2"
-    },
-    "secp256k1-sys 0.8.2": {
-      "build_script_attrs": {
-        "deps": [
-          {
-            "id": "cc 1.11.2",
-            "target": "cc"
-          }
-        ],
-        "links": "rustsecp256k1_v0_8_1"
-      },
-      "common_attrs": {
-        "edition": "2018",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "secp256k1_sys",
-      "license": "CC0-1.0",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "name": "secp256k1-sys",
-      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
-      "repository": {
-        "Http": {
-          "sha256": "4473013577ec77b4ee3668179ef1186df3146e2cf2d927bd200974c6fe60fd99",
-          "url": "https://static.crates.io/crates/secp256k1-sys/0.8.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secp256k1_sys",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.8.2"
     },
     "security-framework 2.11.1": {
       "common_attrs": {
@@ -68867,7 +68751,7 @@
     "base64 0.23.1",
     "bech32 0.12.0",
     "bincode 1.3.3",
-    "bip32 0.5.3",
+    "bip32 0.6.0",
     "bit-vec 0.10.2",
     "bitcoin 0.28.2",
     "bitcoin-dogecoin 0.32.7-doge.0",
@@ -68979,7 +68863,7 @@
     "itertools 0.15.0",
     "json5 1.3.8",
     "jsonrpc 0.21.1",
-    "k256 0.13.4",
+    "k256 0.14.0",
     "keyring 3.6.3",
     "lazy_static 1.5.1",
     "leb128 0.2.7",
@@ -69012,8 +68896,8 @@
     "opentelemetry-otlp 0.32.0",
     "opentelemetry-prometheus 0.32.0",
     "opentelemetry_sdk 0.32.1",
-    "p256 0.13.2",
-    "p384 0.13.1",
+    "p256 0.14.0",
+    "p384 0.14.0",
     "pairing 0.23.0",
     "parking_lot 0.12.5",
     "paste 1.0.15",
