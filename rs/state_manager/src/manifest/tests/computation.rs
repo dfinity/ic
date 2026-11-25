@@ -1,13 +1,14 @@
 use crate::manifest::{
     AlignedBuffer, BaseManifestInfo, ChunkAction, ChunkToHash, ChunkValidationError,
     DEFAULT_CHUNK_SIZE, DIRECT_IO_ALIGN, DiffScript, FileWithSize, MANIFEST_SPAN_CHUNKS,
-    MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics, ManifestValidationError,
-    RehashManifest, StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks,
-    build_meta_manifest, compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes,
-    files_with_sizes, filter_out_zero_chunks,
+    MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4, MAX_REHASH_BYTES, ManifestMetrics,
+    ManifestValidationError, REHASH_FRACTION, RehashManifest, StateSyncVersion,
+    build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest, compute_manifest,
+    diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
+    filter_out_zero_chunks,
     hash::{ManifestHash, chunk_hasher},
     hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
-    observe_file_sizes, open_for_hashing, read_chunk, sample_rehash, validate_chunk,
+    observe_file_sizes, open_for_hashing, read_chunk, rehash_window, validate_chunk,
     validate_manifest, validate_manifest_internal_consistency, validate_meta_manifest,
     validate_sub_manifest,
 };
@@ -1142,45 +1143,14 @@ fn test_hash_plan() {
 
         Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table)
     };
-    // The chunks of the new files, reusing the hashes of `root.bin` and rehashing
-    // every `rehash_every_nth` chunk (from an offset seeded with `seed`).
-    let plan = |seed, rehash_every_nth| {
-        let mut chunks = hash_plan(
-            &files,
-            max_chunk_size,
-            Some((&manifest_old, &files_with_same_inodes)),
-        );
-        sample_rehash(&mut chunks, seed, rehash_every_nth);
-        chunks
-    };
-    let actions = |chunks: &[ChunkToHash]| -> Vec<ChunkAction> {
-        chunks.iter().map(|c| c.action.clone()).collect()
-    };
-
-    // Hash plan with recompute_period == 1
-    let chunks = plan(0, 1);
-
-    assert_eq!(
-        actions(&chunks),
-        vec![
-            ChunkAction::RecomputeAndCompare(manifest_old.chunk_table[0].hash),
-            ChunkAction::Recompute,
-            ChunkAction::Recompute,
-            ChunkAction::Recompute,
-            ChunkAction::Recompute,
-            ChunkAction::Recompute
-        ]
+    let chunks = hash_plan(
+        &files,
+        max_chunk_size,
+        Some((&manifest_old, &files_with_same_inodes)),
     );
-
-    let incremental_manifest = build_manifest_from_hash_plan(chunks);
-
-    assert_eq!(manifest_new, incremental_manifest);
-
-    // Hash plan with recompute_period == 0
-    let chunks = plan(0, u64::MAX);
-
+    let actions: Vec<ChunkAction> = chunks.iter().map(|c| c.action.clone()).collect();
     assert_eq!(
-        actions(&chunks),
+        actions,
         vec![
             ChunkAction::UseHash(manifest_old.chunk_table[0].hash),
             ChunkAction::Recompute,
@@ -1190,53 +1160,137 @@ fn test_hash_plan() {
             ChunkAction::Recompute
         ]
     );
+    assert_eq!(manifest_new, build_manifest_from_hash_plan(chunks.clone()));
 
-    let incremental_manifest = build_manifest_from_hash_plan(chunks);
+    // Recomputing the reused hash, as a rehash does, gives the same manifest.
+    let mut rehash_chunks = chunks;
+    rehash_chunks[0].action = ChunkAction::RecomputeAndCompare(manifest_old.chunk_table[0].hash);
+    assert_eq!(manifest_new, build_manifest_from_hash_plan(rehash_chunks));
+}
 
-    assert_eq!(manifest_new, incremental_manifest);
+/// Chunks of the given sizes, all with reusable hashes.
+fn reusable_chunks(sizes: &[u32]) -> Vec<ChunkToHash> {
+    let mut offset = 0;
+    sizes
+        .iter()
+        .enumerate()
+        .map(|(index, &size_bytes)| {
+            let hash = [index as u8; 32];
+            let info = ChunkInfo {
+                file_index: 0,
+                offset,
+                size_bytes,
+                hash,
+            };
+            offset += size_bytes as u64;
+            ChunkToHash {
+                index,
+                info,
+                action: ChunkAction::UseHash(hash),
+            }
+        })
+        .collect()
+}
 
-    // Hash plan with recompute_period == 2
-    // We loop several times and check that we recompute the chunk between 40% and
-    // 60%
-    let repetitions = 1000;
-    let mut seen_used = 0;
-    for seed in 0..repetitions {
-        let chunks = plan(seed, 2);
+/// Which of `chunks` `rehash_window` selects with `seed`.
+fn rehash_window_of(mut chunks: Vec<ChunkToHash>, seed: u64) -> Vec<bool> {
+    rehash_window(&mut chunks, seed);
+    chunks
+        .iter()
+        .map(|chunk| matches!(chunk.action, ChunkAction::RecomputeAndCompare(_)))
+        .collect()
+}
 
-        // It's random, so there could be two possible hash plans
-        if let ChunkAction::UseHash(_) = chunks[0].action {
-            seen_used += 1;
-            assert_eq!(
-                actions(&chunks),
-                vec![
-                    ChunkAction::UseHash(manifest_old.chunk_table[0].hash),
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute
-                ]
-            );
-        } else {
-            assert_eq!(
-                actions(&chunks),
-                vec![
-                    ChunkAction::RecomputeAndCompare(manifest_old.chunk_table[0].hash),
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute,
-                    ChunkAction::Recompute
-                ]
-            );
+/// 50 chunks of 1 to 7 MiB, 197 MiB in all.
+fn mixed_sizes() -> Vec<u32> {
+    (0..50).map(|i| (1 + i % 7) << 20).collect()
+}
+
+#[test]
+fn rehash_window_is_a_minimal_run_of_consecutive_chunks() {
+    let sizes = mixed_sizes();
+    let n = sizes.len();
+    let budget = sizes.iter().map(|&size| size as u64).sum::<u64>() / REHASH_FRACTION;
+    for seed in 0..200 {
+        let selected = rehash_window_of(reusable_chunks(&sizes), seed);
+        assert_eq!(selected, rehash_window_of(reusable_chunks(&sizes), seed));
+
+        // One run, possibly wrapping around after the last chunk.
+        let starts: Vec<_> = (0..n)
+            .filter(|&i| selected[i] && !selected[(i + n - 1) % n])
+            .collect();
+        assert_eq!(starts.len(), 1, "seed {seed}: {selected:?}");
+        let mut bytes = 0;
+        let mut i = starts[0];
+        while selected[i] {
+            bytes += sizes[i] as u64;
+            i = (i + 1) % n;
         }
-
-        let incremental_manifest = build_manifest_from_hash_plan(chunks);
-
-        assert_eq!(manifest_new, incremental_manifest);
+        // Holding the budget, but not without its last chunk.
+        let last = (i + n - 1) % n;
+        assert!(bytes >= budget, "seed {seed}: {bytes} bytes");
+        assert!(
+            bytes - (sizes[last] as u64) < budget,
+            "seed {seed}: {bytes} bytes"
+        );
     }
-    assert!(seen_used as f64 >= 0.4 * repetitions as f64);
-    assert!(seen_used as f64 <= 0.6 * repetitions as f64);
+}
+
+#[test]
+fn rehash_windows_cover_every_chunk() {
+    let sizes = mixed_sizes();
+    let mut times_selected = vec![0; sizes.len()];
+    for seed in 0..1000 {
+        let selected = rehash_window_of(reusable_chunks(&sizes), seed);
+        for (count, selected) in times_selected.iter_mut().zip(selected) {
+            *count += selected as u32;
+        }
+    }
+    // A chunk is selected if the window starts in it or in the chunks right before
+    // it holding less than the budget (19.7 MiB, so at least 12.7 MiB of them): 7%
+    // to 13.6% of the time. Allowing for chance, 3% to 18%.
+    for (index, count) in times_selected.into_iter().enumerate() {
+        assert!((30..=180).contains(&count), "chunk {index}: {count} times");
+    }
+}
+
+#[test]
+fn rehash_window_reads_at_most_max_rehash_bytes() {
+    // 2000 chunks of 1 GiB: a tenth would be 200 GiB.
+    const GIB: u64 = 1 << 30;
+    let sizes = vec![GIB as u32; 2000];
+    for seed in 0..10 {
+        let selected = rehash_window_of(reusable_chunks(&sizes), seed);
+        let bytes = selected.iter().filter(|&&selected| selected).count() as u64 * GIB;
+        assert!(bytes >= MAX_REHASH_BYTES, "seed {seed}: {bytes} bytes");
+        assert!(bytes < MAX_REHASH_BYTES + GIB, "seed {seed}: {bytes} bytes");
+    }
+}
+
+#[test]
+fn rehash_window_only_rehashes_reused_hashes() {
+    let sizes = mixed_sizes();
+    for seed in 0..10 {
+        let window = rehash_window_of(reusable_chunks(&sizes), seed);
+
+        // Recomputing every other chunk anyway leaves the window unchanged.
+        let mut chunks = reusable_chunks(&sizes);
+        for chunk in chunks.iter_mut().step_by(2) {
+            chunk.action = ChunkAction::Recompute;
+        }
+        rehash_window(&mut chunks, seed);
+        for (chunk, in_window) in chunks.iter().zip(window) {
+            let hash = chunk.info.hash;
+            let expected = match (chunk.index % 2 == 0, in_window) {
+                (true, _) => ChunkAction::Recompute,
+                (false, true) => ChunkAction::RecomputeAndCompare(hash),
+                (false, false) => ChunkAction::UseHash(hash),
+            };
+            assert_eq!(chunk.action, expected, "seed {seed}, chunk {}", chunk.index);
+        }
+    }
+    // Nothing to select from.
+    rehash_window(&mut [], 0);
 }
 
 #[test]
