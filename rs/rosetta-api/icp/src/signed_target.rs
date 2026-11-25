@@ -1,27 +1,12 @@
-//! Checks that the envelopes of a signed request are interchangeable.
+//! Checks that a signed request is described by the metadata Rosetta displays.
 //!
-//! A signed request carries one envelope per ingress expiry. The update half of
-//! each envelope is covered by the caller's signature, but which envelope
-//! `/construction/submit` broadcasts is decided at submit time, and the
-//! read-state half is signed independently of the update it travels with.
-//! Reading a request through [`representative_envelope`] gives the single
-//! update that stands for all of them, or an error if they are not
-//! interchangeable.
-//!
-//! It also checks that the metadata Rosetta displays for a request is
-//! derivable from, and consistent with, the signed update. `UnsignedTransaction`
-//! and `SignedTransaction` pair a [`RequestType`] -- plain CBOR metadata that no
-//! signature covers -- with an [`HttpCanisterUpdate`], whose `canister_id`,
-//! `method_name`, `arg`, `nonce` and `sender` are all covered by `update.id()`
-//! and therefore by the caller's signature. A transfer must be addressed to the
-//! ledger this instance serves, since its amount is displayed in that ledger's
-//! token, and must debit the sender's default account, which is the account
-//! displayed.
-//!
-//! `/construction/parse`, `/construction/hash` and the submit path's `Request`
-//! reconstruction all read a signed request through this module, so the
-//! envelope they describe is the envelope that gets sent, and the operations
-//! shown before signing, after signing and after submission cannot disagree.
+//! A signed request carries one envelope per ingress expiry, and
+//! `/construction/submit` broadcasts whichever one is currently valid. Its
+//! [`RequestType`] is unsigned metadata, while the `canister_id`,
+//! `method_name`, `arg`, `nonce` and `sender` of each update are signed.
+//! `/construction/parse`, `/construction/hash` and `/construction/submit` read
+//! a signed request through this module, so what they describe is what is
+//! sent.
 
 use crate::{convert, errors::ApiError, models::EnvelopePair, request_types::RequestType};
 use ic_types::{
@@ -32,21 +17,22 @@ use ic_types::{
 /// Ledger method behind `RequestType::Send`.
 const SEND_PB: &str = "send_pb";
 
-/// Check a signed request's envelopes as a whole: that they are
-/// interchangeable, and that the message they carry is the one the displayed
-/// metadata describes.
-pub fn verify_signed_envelopes(
+/// Returns the [`representative_envelope`] of a signed request after checking
+/// it against `request_type` with [`verify_signed_target`].
+pub fn verify_signed_envelopes<'a>(
     request_type: &RequestType,
-    envelopes: &[EnvelopePair],
+    envelopes: &'a [EnvelopePair],
     ledger_canister_id: &CanisterId,
     governance_canister_id: &CanisterId,
-) -> Result<(), ApiError> {
+) -> Result<&'a HttpCanisterUpdate, ApiError> {
+    let update = representative_envelope(envelopes)?;
     verify_signed_target(
         request_type,
-        representative_envelope(envelopes)?,
+        update,
         ledger_canister_id,
         governance_canister_id,
-    )
+    )?;
+    Ok(update)
 }
 
 /// Returns the update that stands for every envelope of a signed request.
@@ -99,17 +85,9 @@ fn verify_read_state(envelope: &EnvelopePair) -> Result<(), ApiError> {
     Ok(())
 }
 
-/// Check that every field of `request_type` that Rosetta will display is
-/// derivable from, and consistent with, the signed `update`.
-///
-/// Fails closed: a request whose displayed metadata cannot be confirmed against
-/// the signed payload is rejected rather than displayed with a warning.
-///
-/// `ledger_canister_id` and `governance_canister_id` are the canisters this
-/// Rosetta instance is configured for, and the ones `/construction/payloads`
-/// addresses. A transfer is denominated in that ledger's token and a neuron is
-/// named under that governance canister, so a request addressed anywhere else
-/// describes something this instance does not serve.
+/// Checks that every field of `request_type` that Rosetta displays is
+/// consistent with the signed `update`, which must be addressed to the
+/// canisters this instance is configured for.
 pub fn verify_signed_target(
     request_type: &RequestType,
     update: &HttpCanisterUpdate,
@@ -120,11 +98,7 @@ pub fn verify_signed_target(
         RequestType::Send => {
             verify_canister(update, ledger_canister_id, "A transfer")?;
             verify_method_name(update, SEND_PB)?;
-            // The ledger debits `AccountIdentifier::new(sender, from_subaccount)`,
-            // but both reconstruction paths report the debit against the
-            // sender's default account, so a transfer out of a subaccount would
-            // be displayed as coming from somewhere it does not.
-            // `/construction/payloads` only ever leaves this unset.
+            // The debit is displayed against the sender's default account.
             let args = convert::from_arg(update.arg.0.clone())?;
             if args.from_subaccount.is_some() {
                 return Err(ApiError::invalid_request(
@@ -137,11 +111,8 @@ pub fn verify_signed_target(
             Ok(())
         }
 
-        // The neuron request types name a neuron, and sometimes a controller,
-        // that the signed update also determines. Binding those is a separate
-        // step; until then they are described from the wrapper, as before.
-        // Listed rather than matched with a wildcard, so that a request type
-        // added later has to be considered here.
+        // Not checked yet. Listed explicitly so that a new request type has to
+        // be considered here.
         RequestType::Stake { .. }
         | RequestType::NeuronInfo { .. }
         | RequestType::ListNeurons { .. }
@@ -197,8 +168,6 @@ mod tests {
         PrincipalId::new_user_test_id(1)
     }
 
-    /// The canisters this Rosetta instance is configured for. Deliberately not
-    /// the mainnet ids, so that a check against a hard-coded one would fail.
     fn ledger() -> CanisterId {
         CanisterId::from_u64(1)
     }
@@ -312,8 +281,6 @@ mod tests {
         };
 
         verify(&RequestType::Send, &send(ledger())).unwrap();
-        // The amount and the recipient are signed, but the token they are
-        // denominated in follows from the ledger being called.
         assert_rejected(
             verify(&RequestType::Send, &send(CanisterId::from_u64(99))),
             "A transfer must be addressed to canister",
@@ -340,8 +307,6 @@ mod tests {
         };
 
         verify(&RequestType::Send, &send(None)).unwrap();
-        // The ledger would debit a subaccount of the sender, but the operations
-        // name the sender's default account.
         assert_rejected(
             verify(
                 &RequestType::Send,
@@ -351,8 +316,6 @@ mod tests {
         );
     }
 
-    /// A transfer that calls something other than the ledger's transfer method
-    /// is not the transfer the operations describe.
     #[test]
     fn a_transfer_calling_another_method_is_rejected() {
         let update = HttpCanisterUpdate {

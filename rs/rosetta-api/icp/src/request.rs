@@ -1,11 +1,6 @@
 use crate::{
-    convert,
-    convert::principal_id_from_public_key_or_principal,
-    errors::ApiError,
-    models,
-    models::seconds::Seconds,
-    request_types::*,
-    signed_target::{representative_envelope, verify_signed_envelopes},
+    convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
+    models::seconds::Seconds, request_types::*, signed_target::verify_signed_envelopes,
 };
 use ic_nns_governance_api::{
     ManageNeuronCommandRequest,
@@ -234,10 +229,6 @@ impl Request {
 
 impl Request {
     /// Sort of the inverse of `construction_payloads`.
-    ///
-    /// Takes the canisters this Rosetta instance is configured for so that the
-    /// verification below can bind the request to them; that is also why this
-    /// is not a `TryFrom`.
     pub fn from_signed_request(
         req: &models::Request,
         ledger_canister_id: &CanisterId,
@@ -245,20 +236,12 @@ impl Request {
     ) -> Result<Self, ApiError> {
         let (request_type, calls) = req;
 
-        // The submit path reconstructs the same `Request` values that
-        // `/construction/parse` returns, and reports them back in the
-        // `/construction/submit` response, so it needs the same guarantee that
-        // the wrapper metadata matches the signed payload. It checks every
-        // envelope, because `do_request` broadcasts whichever one is currently
-        // valid rather than the first.
-        verify_signed_envelopes(
+        let update = verify_signed_envelopes(
             request_type,
             calls,
             ledger_canister_id,
             governance_canister_id,
         )?;
-
-        let update = representative_envelope(calls)?;
 
         let pid = PrincipalId::try_from(update.sender.clone().0).map_err(|e| {
             ApiError::internal_error(format!("Could not parse envelope sender's public key: {e}"))
