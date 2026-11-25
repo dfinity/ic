@@ -165,7 +165,7 @@ crate.spec(
 )
 crate.spec(
     package = "assert_cmd",
-    version = "^2.0.16",
+    version = "^2.2.2",
 )
 crate.spec(
     package = "assert_matches",
@@ -602,11 +602,12 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "p384",
+        "nistp",
+        "aes",
         "alloc",
     ],
     package = "hpke",
-    version = "^0.13",
+    version = "^0.15.1",
 )
 crate.spec(
     package = "humantime",
@@ -899,7 +900,7 @@ crate.spec(
 )
 crate.spec(
     package = "libnss",
-    version = "^0.5.0",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "libsystemd",
@@ -1090,7 +1091,7 @@ crate.spec(
 )
 crate.spec(
     package = "ping",
-    version = "^0.5.0",
+    version = "^0.10.0",
 )
 crate.spec(
     default_features = False,
@@ -1194,16 +1195,8 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "os_rng",
-    ],
-    package = "rand",
-    package_alias = "rand_0_9",
-    version = "^0.9.3",
-)
-crate.spec(
-    default_features = False,
-    features = [
         "std_rng",
+        "sys_rng",
     ],
     package = "rand",
     package_alias = "rand_0_10",
@@ -1216,8 +1209,8 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "rand_chacha",
-    package_alias = "rand_chacha_0_9",
-    version = "^0.9.0",
+    package_alias = "rand_chacha_0_10",
+    version = "^0.10.0",
 )
 crate.spec(
     package = "rand_distr",
@@ -1228,8 +1221,19 @@ crate.spec(
     version = "^0.10.1",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "all-widgets",
+        "crossterm",
+        "layout-cache",
+        "macros",
+    ],
     package = "ratatui",
-    version = "^0.29",
+    version = "^0.30.2",
+)
+crate.spec(
+    package = "ratatui-textarea",
+    version = "^0.9.4",
 )
 crate.spec(
     package = "rayon",
@@ -1271,7 +1275,7 @@ crate.spec(
 )
 crate.spec(
     package = "rexpect",
-    version = "0.6",
+    version = "^0.7.1",
 )
 crate.spec(
     package = "ripemd",
@@ -1360,10 +1364,6 @@ crate.spec(
     ],
     package = "rustls",
     version = "^0.23.46",
-)
-crate.spec(
-    package = "rustls-pemfile",
-    version = "^2.1.2",
 )
 crate.spec(
     package = "rusty-fork",
@@ -1597,10 +1597,6 @@ crate.spec(
 crate.spec(
     package = "textplots",
     version = "^0.8",
-)
-crate.spec(
-    package = "tui-textarea",
-    version = "^0.7",
 )
 crate.spec(
     package = "thiserror",
@@ -2024,6 +2020,17 @@ crate.annotation(
         "-C",
         "opt-level=3",
     ],
+)
+
+# Build p384 0.14 with its formally verified fiat-crypto field and scalar
+# arithmetic instead of its default crypto-bigint backend. p384 depends on
+# fiat-crypto only under `cfg(p384_backend = "fiat")`, which crate_universe maps
+# to no platform, so the annotation adds that dependency too.
+crate.annotation(
+    crate = "p384",
+    rustc_flags = ["--cfg=p384_backend=\"fiat\""],
+    version = "^0.14",
+    deps = ["@@rules_rust++crate+crate_index__fiat-crypto-0.3.0//:fiat_crypto"],
 )
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)

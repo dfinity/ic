@@ -58,12 +58,15 @@ rust_test(
 rust_test_suite(
     name = "fstrim_tool_integration",
     srcs = glob(["tests/**/*.rs"]),
+    data = [":fstrim_tool_bin"],
+    env = {
+        "CARGO_BIN_EXE_fstrim_tool": "$(rootpath :fstrim_tool_bin)",
+    },
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     deps = [
         # Keep sorted.
-        ":fstrim_tool_bin",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ic_os/logging",
         "//rs/sys",
