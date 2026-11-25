@@ -675,7 +675,6 @@ mod tests {
     use proptest::{
         prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
     };
-
     use std::time::SystemTime;
 
     use crate::{
