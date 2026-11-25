@@ -2,7 +2,6 @@ use ic_base_types::NumBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use pb::upgrade_permit_action::Action;
-use std::collections::BTreeMap;
 
 use super::{iterator_to_bytes, slice_to_messages};
 use crate::consensus::UpgradeAuthorizationContent;
@@ -119,19 +118,10 @@ impl TryFrom<pb::UpgradePermitAction> for UpgradePermitAction {
 fn signature_batch(
     signatures: Vec<pb::BasicSignature>,
 ) -> Result<BasicSignatureBatch<UpgradeAuthorizationContent>, ProxyDecodeError> {
-    let mut signatures_map = BTreeMap::new();
-    for signature in signatures {
+    let signatures_map = crate::decode_map(signatures, |signature| {
         let signature: BasicSignature<UpgradeAuthorizationContent> = signature.try_into()?;
-        if let Some(previous) = signatures_map.insert(signature.signer, signature.signature) {
-            // Unwrap is fine, entry has just been inserted
-            let new = signatures_map.get(&signature.signer).unwrap();
-            return Err(ProxyDecodeError::DuplicateEntry {
-                key: format!("{:?}", signature.signer),
-                v1: format!("{previous:?}"),
-                v2: format!("{new:?}"),
-            });
-        }
-    }
+        Ok((signature.signer, signature.signature))
+    })?;
     Ok(BasicSignatureBatch { signatures_map })
 }
 
@@ -142,6 +132,7 @@ mod tests {
     use crate::consensus::UpgradePermitRequest;
     use crate::crypto::{BasicSig, BasicSigOf};
     use ic_base_types::PrincipalId;
+    use std::collections::BTreeMap;
 
     fn node(node_index: u64) -> NodeId {
         NodeId::from(PrincipalId::new_node_test_id(node_index))
@@ -229,6 +220,32 @@ mod tests {
         assert_eq!(
             decoded.actions,
             vec![UpgradePermitAction::ReturnPermit { node: node(3) }]
+        );
+    }
+
+    #[test]
+    fn test_authorize_permit_signers_are_distinct() {
+        let action = UpgradePermitAction::AuthorizePermit(Signed {
+            content: UpgradeAuthorizationContent {
+                requestor: node(1),
+                request_height: 1.into(),
+            },
+            signature: BasicSignatureBatch {
+                signatures_map: BTreeMap::from([(
+                    node(2),
+                    BasicSigOf::new(BasicSig(vec![0x42; 64])),
+                )]),
+            },
+        });
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &pb::UpgradePermitAction::from(&action),
+            UpgradePermitAction::try_from,
+            &[|proto| {
+                let Some(Action::AuthorizePermit(authorize)) = proto.action.as_mut() else {
+                    panic!("Expected an authorization");
+                };
+                authorize.signatures.push(authorize.signatures[0].clone());
+            }],
         );
     }
 
