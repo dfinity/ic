@@ -1,4 +1,4 @@
-//! Deserializers for blobs and text bounded in length or of a fixed length,
+//! Deserializers for blobs and text bounded in length or of an exact length,
 //! for use with `#[serde(deserialize_with = "...")]` on fields whose Rust type
 //! stays a plain `Vec<u8>`, `ByteBuf` or `String`.
 //!
@@ -12,7 +12,7 @@ use crate::{BOUND_EXCEEDED_MARKER, LENGTH_MISMATCH_MARKER};
 use serde::{Deserialize, Deserializer, de::Error};
 use serde_bytes::ByteBuf;
 
-fn check_len<E: Error>(kind: &str, len: usize, max_allowed_len: usize) -> Result<(), E> {
+fn check_max_len<E: Error>(kind: &str, len: usize, max_allowed_len: usize) -> Result<(), E> {
     if len > max_allowed_len {
         return Err(E::custom(format!(
             "The {kind} length {len} {BOUND_EXCEEDED_MARKER} {max_allowed_len}"
@@ -28,7 +28,7 @@ fn length_mismatch_error<E: Error>(len: usize, expected: impl std::fmt::Display)
 }
 
 /// Checks that a blob is exactly `expected_len` bytes long.
-pub(crate) fn check_fixed_len<E: Error>(len: usize, expected_len: usize) -> Result<(), E> {
+pub(crate) fn check_exact_len<E: Error>(len: usize, expected_len: usize) -> Result<(), E> {
     if len != expected_len {
         return Err(length_mismatch_error(len, expected_len));
     }
@@ -36,7 +36,7 @@ pub(crate) fn check_fixed_len<E: Error>(len: usize, expected_len: usize) -> Resu
 }
 
 /// Checks that a blob is either empty or exactly `expected_len` bytes long.
-fn check_empty_or_fixed_len<E: Error>(len: usize, expected_len: usize) -> Result<(), E> {
+fn check_empty_or_exact_len<E: Error>(len: usize, expected_len: usize) -> Result<(), E> {
     if len != 0 && len != expected_len {
         return Err(length_mismatch_error(len, format!("0 or {expected_len}")));
     }
@@ -51,7 +51,7 @@ where
     D: Deserializer<'de>,
 {
     let blob = ByteBuf::deserialize(deserializer)?;
-    check_len("blob", blob.len(), MAX_ALLOWED_LEN)?;
+    check_max_len("blob", blob.len(), MAX_ALLOWED_LEN)?;
     Ok(blob)
 }
 
@@ -66,27 +66,27 @@ where
 }
 
 /// Deserializes a blob of exactly `LEN` bytes.
-pub(crate) fn deserialize_fixed_len_blob<'de, D, const LEN: usize>(
+pub(crate) fn deserialize_exact_len_blob<'de, D, const LEN: usize>(
     deserializer: D,
 ) -> Result<Vec<u8>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let blob = ByteBuf::deserialize(deserializer)?;
-    check_fixed_len(blob.len(), LEN)?;
+    check_exact_len(blob.len(), LEN)?;
     Ok(blob.into_vec())
 }
 
 /// Deserializes a blob that is either empty or exactly `LEN` bytes long into
 /// a `ByteBuf`.
-pub(crate) fn deserialize_empty_or_fixed_len_byte_buf<'de, D, const LEN: usize>(
+pub(crate) fn deserialize_empty_or_exact_len_byte_buf<'de, D, const LEN: usize>(
     deserializer: D,
 ) -> Result<ByteBuf, D::Error>
 where
     D: Deserializer<'de>,
 {
     let blob = ByteBuf::deserialize(deserializer)?;
-    check_empty_or_fixed_len(blob.len(), LEN)?;
+    check_empty_or_exact_len(blob.len(), LEN)?;
     Ok(blob)
 }
 
@@ -99,7 +99,7 @@ where
 {
     let blob = ic_utils::deserialize::deserialize_option_blob(deserializer)?;
     if let Some(blob) = &blob {
-        check_len("blob", blob.len(), MAX_ALLOWED_LEN)?;
+        check_max_len("blob", blob.len(), MAX_ALLOWED_LEN)?;
     }
     Ok(blob)
 }
@@ -112,7 +112,7 @@ where
     D: Deserializer<'de>,
 {
     let text = String::deserialize(deserializer)?;
-    check_len("text", text.len(), MAX_ALLOWED_LEN)?;
+    check_max_len("text", text.len(), MAX_ALLOWED_LEN)?;
     Ok(text)
 }
 
@@ -254,23 +254,23 @@ mod tests {
     }
 
     #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-    struct FixedLen {
-        #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, MAX_LEN>")]
+    struct ExactLen {
+        #[serde(deserialize_with = "deserialize_exact_len_blob::<_, MAX_LEN>")]
         blob: Vec<u8>,
-        #[serde(deserialize_with = "deserialize_empty_or_fixed_len_byte_buf::<_, MAX_LEN>")]
+        #[serde(deserialize_with = "deserialize_empty_or_exact_len_byte_buf::<_, MAX_LEN>")]
         byte_buf: ByteBuf,
     }
-    impl Payload<'_> for FixedLen {}
+    impl Payload<'_> for ExactLen {}
 
-    fn fixed_len_value(blob: usize, byte_buf: usize) -> FixedLen {
-        FixedLen {
+    fn exact_len_value(blob: usize, byte_buf: usize) -> ExactLen {
+        ExactLen {
             blob: vec![1; blob],
             byte_buf: ByteBuf::from(vec![2; byte_buf]),
         }
     }
 
-    fn assert_length_mismatch(value: FixedLen, expected: &str) {
-        let error = FixedLen::decode(&value.encode()).unwrap_err();
+    fn assert_length_mismatch(value: ExactLen, expected: &str) {
+        let error = ExactLen::decode(&value.encode()).unwrap_err();
         assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
         assert!(
             error
@@ -284,8 +284,8 @@ mod tests {
     #[test]
     fn values_of_expected_length_are_decoded() {
         for byte_buf in [0, MAX_LEN] {
-            let value = fixed_len_value(MAX_LEN, byte_buf);
-            assert_eq!(FixedLen::decode(&value.encode()).unwrap(), value);
+            let value = exact_len_value(MAX_LEN, byte_buf);
+            assert_eq!(ExactLen::decode(&value.encode()).unwrap(), value);
         }
     }
 
@@ -293,12 +293,12 @@ mod tests {
     fn values_of_unexpected_length_are_rejected() {
         for len in (0..=MAX_LEN + 3).filter(|len| *len != MAX_LEN) {
             assert_length_mismatch(
-                fixed_len_value(len, 0),
+                exact_len_value(len, 0),
                 &format!("The blob length {len} does not match expected {MAX_LEN}"),
             );
             if len != 0 {
                 assert_length_mismatch(
-                    fixed_len_value(MAX_LEN, len),
+                    exact_len_value(MAX_LEN, len),
                     &format!("The blob length {len} does not match expected 0 or {MAX_LEN}"),
                 );
             }

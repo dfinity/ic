@@ -188,156 +188,6 @@ pub struct ReplicationCounts {
     pub max_responses: u32,
 }
 
-#[test]
-fn test_http_headers_max_number() {
-    // This test verifies the number of HTTP headers stays within the allowed limit.
-    use ic_error_types::ErrorCode;
-
-    const THRESHOLD: usize = 64;
-    for headers_count in (52..=76).step_by(2) {
-        // Arrange.
-        let header = HttpHeader {
-            name: "name".to_string(),
-            value: "value".to_string(),
-        };
-        let headers = BoundedHttpHeaders::new(vec![header; headers_count]);
-        let args = CanisterHttpRequestArgs {
-            url: "http://example.com".to_string(),
-            max_response_bytes: None,
-            headers,
-            body: None,
-            method: HttpMethod::GET,
-            transform: None,
-            is_replicated: None,
-            pricing_version: None,
-        };
-
-        // Act.
-        let result = CanisterHttpRequestArgs::decode(&args.encode());
-
-        // Assert.
-        if headers_count <= THRESHOLD {
-            // Verify decoding without errors for allowed sizes.
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap(), args);
-        } else {
-            // Verify decoding with errors for disallowed sizes.
-            assert!(result.is_err());
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {THRESHOLD}"
-                )),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
-#[test]
-fn test_http_headers_max_total_size() {
-    // This test verifies the size of HTTP headers stays within the allowed limit.
-    use ic_error_types::ErrorCode;
-
-    const THRESHOLD: usize = 48 * KIB;
-    // Don't use fractional step size, it must not overlap with the threshold.
-    let step_size = THRESHOLD / 20 + 1;
-    assert_ne!(THRESHOLD % step_size, 0);
-    for aimed_headers_total_size in (16 * KIB..=64 * KIB).step_by(step_size) {
-        // Arrange.
-        let header = HttpHeader {
-            name: String::from_utf8(vec![b'x'; step_size]).unwrap(),
-            value: String::new(),
-        };
-        let item_size = header.data_size();
-        let headers_count = aimed_headers_total_size / item_size;
-        let headers = BoundedHttpHeaders::new(vec![header; headers_count]);
-        let actual_headers_total_size = headers.get().data_size();
-        let args = CanisterHttpRequestArgs {
-            url: "http://example.com".to_string(),
-            max_response_bytes: None,
-            headers,
-            body: None,
-            method: HttpMethod::GET,
-            transform: None,
-            is_replicated: None,
-            pricing_version: None,
-        };
-
-        // Act.
-        let result = CanisterHttpRequestArgs::decode(&args.encode());
-
-        // Assert.
-        if actual_headers_total_size <= THRESHOLD {
-            // Verify decoding without errors for allowed sizes.
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap(), args);
-        } else {
-            // Verify decoding with errors for disallowed sizes.
-            assert!(result.is_err());
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&format!(
-                    "Deserialize error: The total data size exceeds maximum allowed {THRESHOLD}"
-                )),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
-#[test]
-fn test_http_headers_max_element_size() {
-    // This test verifies the size of any single HTTP header in headers stays within the allowed limit.
-    use ic_error_types::ErrorCode;
-
-    const THRESHOLD: usize = 16 * KIB;
-    for single_header_size in (4 * KIB..=24 * KIB).step_by(2 * KIB) {
-        // Arrange.
-        let header = HttpHeader {
-            name: String::from_utf8(vec![b'x'; single_header_size]).unwrap(),
-            value: String::new(),
-        };
-        let headers = BoundedHttpHeaders::new(vec![header; 2]);
-        let args = CanisterHttpRequestArgs {
-            url: "http://example.com".to_string(),
-            max_response_bytes: None,
-            headers,
-            body: None,
-            method: HttpMethod::GET,
-            transform: None,
-            is_replicated: None,
-            pricing_version: None,
-        };
-
-        // Act.
-        let result = CanisterHttpRequestArgs::decode(&args.encode());
-
-        // Assert.
-        if single_header_size <= THRESHOLD {
-            // Verify decoding without errors for allowed sizes.
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap(), args);
-        } else {
-            // Verify decoding with errors for disallowed sizes.
-            assert!(result.is_err());
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&format!(
-                    "Deserialize error: The single element data size exceeds maximum allowed {THRESHOLD}"
-                )),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
@@ -356,122 +206,6 @@ impl Payload<'_> for HttpHeader {}
 impl DataSize for HttpHeader {
     fn data_size(&self) -> usize {
         self.name.data_size() + self.value.data_size()
-    }
-}
-
-#[cfg(test)]
-fn http_request_payloads(url: String, body: Option<Vec<u8>>) -> [Vec<u8>; 2] {
-    [
-        CanisterHttpRequestArgs {
-            url: url.clone(),
-            max_response_bytes: None,
-            headers: BoundedHttpHeaders::new(vec![]),
-            body: body.clone(),
-            method: HttpMethod::POST,
-            transform: None,
-            is_replicated: None,
-            pricing_version: None,
-        }
-        .encode(),
-        FlexibleCanisterHttpRequestArgs {
-            url,
-            max_response_bytes: None,
-            headers: BoundedHttpHeaders::new(vec![]),
-            body,
-            method: HttpMethod::POST,
-            transform: None,
-            replication: None,
-        }
-        .encode(),
-    ]
-}
-
-#[cfg(test)]
-type UrlAndBody = (String, Option<Vec<u8>>);
-
-#[cfg(test)]
-fn decode_http_request_url_and_body(
-    payloads: [Vec<u8>; 2],
-) -> [Result<UrlAndBody, ic_error_types::UserError>; 2] {
-    let [payload, flexible_payload] = payloads;
-    [
-        CanisterHttpRequestArgs::decode(&payload).map(|args| (args.url, args.body)),
-        FlexibleCanisterHttpRequestArgs::decode(&flexible_payload)
-            .map(|args| (args.url, args.body)),
-    ]
-}
-
-#[test]
-fn test_http_url_and_body_within_max_size() {
-    for (url, body) in [
-        (String::new(), None),
-        (String::new(), Some(vec![])),
-        (
-            "u".repeat(HTTP_URL_MAX_SIZE),
-            Some(vec![1; HTTP_BODY_MAX_SIZE]),
-        ),
-    ] {
-        let payloads = http_request_payloads(url.clone(), body.clone());
-        for result in decode_http_request_url_and_body(payloads) {
-            assert_eq!(result.unwrap(), (url.clone(), body.clone()));
-        }
-    }
-}
-
-#[test]
-fn test_http_url_and_body_exceeding_max_size() {
-    use ic_error_types::ErrorCode;
-
-    for (url_size, body_size, expected) in [
-        (
-            HTTP_URL_MAX_SIZE + 1,
-            0,
-            format!(
-                "The text length {} exceeds maximum allowed {HTTP_URL_MAX_SIZE}",
-                HTTP_URL_MAX_SIZE + 1
-            ),
-        ),
-        (
-            0,
-            HTTP_BODY_MAX_SIZE + 1,
-            format!(
-                "The blob length {} exceeds maximum allowed {HTTP_BODY_MAX_SIZE}",
-                HTTP_BODY_MAX_SIZE + 1
-            ),
-        ),
-    ] {
-        let payloads = http_request_payloads("u".repeat(url_size), Some(vec![1; body_size]));
-        for result in decode_http_request_url_and_body(payloads) {
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&expected),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
-#[test]
-fn test_http_header_data_size() {
-    let test_cases = vec![
-        // name, value, expected_size
-        ("", "", 0),
-        ("a", "", 1),
-        ("", "b", 1),
-        ("a", "b", 2),
-    ];
-    for (name, value, expected_size) in test_cases {
-        let header = HttpHeader {
-            name: name.to_string(),
-            value: value.to_string(),
-        };
-        assert_eq!(
-            header.data_size(),
-            expected_size,
-            "Header size does not match for {header:?}"
-        );
     }
 }
 
@@ -605,4 +339,265 @@ pub enum ResourceUsage<T> {
 pub struct FlexibleHttpNodeError {
     pub code: String,
     pub message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_error_types::{ErrorCode, UserError};
+
+    #[test]
+    fn test_http_headers_max_number() {
+        // This test verifies the number of HTTP headers stays within the allowed limit.
+        const THRESHOLD: usize = 64;
+        for headers_count in (52..=76).step_by(2) {
+            // Arrange.
+            let header = HttpHeader {
+                name: "name".to_string(),
+                value: "value".to_string(),
+            };
+            let headers = BoundedHttpHeaders::new(vec![header; headers_count]);
+            let args = CanisterHttpRequestArgs {
+                url: "http://example.com".to_string(),
+                max_response_bytes: None,
+                headers,
+                body: None,
+                method: HttpMethod::GET,
+                transform: None,
+                is_replicated: None,
+                pricing_version: None,
+            };
+
+            // Act.
+            let result = CanisterHttpRequestArgs::decode(&args.encode());
+
+            // Assert.
+            if headers_count <= THRESHOLD {
+                // Verify decoding without errors for allowed sizes.
+                assert!(result.is_ok());
+                assert_eq!(result.unwrap(), args);
+            } else {
+                // Verify decoding with errors for disallowed sizes.
+                assert!(result.is_err());
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+                assert!(
+                    error.description().contains(&format!(
+                        "Deserialize error: The number of elements exceeds maximum allowed {THRESHOLD}"
+                    )),
+                    "Actual: {}",
+                    error.description()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_http_headers_max_total_size() {
+        // This test verifies the size of HTTP headers stays within the allowed limit.
+        const THRESHOLD: usize = 48 * KIB;
+        // Don't use fractional step size, it must not overlap with the threshold.
+        let step_size = THRESHOLD / 20 + 1;
+        assert_ne!(THRESHOLD % step_size, 0);
+        for aimed_headers_total_size in (16 * KIB..=64 * KIB).step_by(step_size) {
+            // Arrange.
+            let header = HttpHeader {
+                name: String::from_utf8(vec![b'x'; step_size]).unwrap(),
+                value: String::new(),
+            };
+            let item_size = header.data_size();
+            let headers_count = aimed_headers_total_size / item_size;
+            let headers = BoundedHttpHeaders::new(vec![header; headers_count]);
+            let actual_headers_total_size = headers.get().data_size();
+            let args = CanisterHttpRequestArgs {
+                url: "http://example.com".to_string(),
+                max_response_bytes: None,
+                headers,
+                body: None,
+                method: HttpMethod::GET,
+                transform: None,
+                is_replicated: None,
+                pricing_version: None,
+            };
+
+            // Act.
+            let result = CanisterHttpRequestArgs::decode(&args.encode());
+
+            // Assert.
+            if actual_headers_total_size <= THRESHOLD {
+                // Verify decoding without errors for allowed sizes.
+                assert!(result.is_ok());
+                assert_eq!(result.unwrap(), args);
+            } else {
+                // Verify decoding with errors for disallowed sizes.
+                assert!(result.is_err());
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+                assert!(
+                    error.description().contains(&format!(
+                        "Deserialize error: The total data size exceeds maximum allowed {THRESHOLD}"
+                    )),
+                    "Actual: {}",
+                    error.description()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_http_headers_max_element_size() {
+        // This test verifies the size of any single HTTP header in headers stays within the allowed limit.
+        const THRESHOLD: usize = 16 * KIB;
+        for single_header_size in (4 * KIB..=24 * KIB).step_by(2 * KIB) {
+            // Arrange.
+            let header = HttpHeader {
+                name: String::from_utf8(vec![b'x'; single_header_size]).unwrap(),
+                value: String::new(),
+            };
+            let headers = BoundedHttpHeaders::new(vec![header; 2]);
+            let args = CanisterHttpRequestArgs {
+                url: "http://example.com".to_string(),
+                max_response_bytes: None,
+                headers,
+                body: None,
+                method: HttpMethod::GET,
+                transform: None,
+                is_replicated: None,
+                pricing_version: None,
+            };
+
+            // Act.
+            let result = CanisterHttpRequestArgs::decode(&args.encode());
+
+            // Assert.
+            if single_header_size <= THRESHOLD {
+                // Verify decoding without errors for allowed sizes.
+                assert!(result.is_ok());
+                assert_eq!(result.unwrap(), args);
+            } else {
+                // Verify decoding with errors for disallowed sizes.
+                assert!(result.is_err());
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+                assert!(
+                    error.description().contains(&format!(
+                        "Deserialize error: The single element data size exceeds maximum allowed {THRESHOLD}"
+                    )),
+                    "Actual: {}",
+                    error.description()
+                );
+            }
+        }
+    }
+
+    fn http_request_payloads(url: String, body: Option<Vec<u8>>) -> [Vec<u8>; 2] {
+        [
+            CanisterHttpRequestArgs {
+                url: url.clone(),
+                max_response_bytes: None,
+                headers: BoundedHttpHeaders::new(vec![]),
+                body: body.clone(),
+                method: HttpMethod::POST,
+                transform: None,
+                is_replicated: None,
+                pricing_version: None,
+            }
+            .encode(),
+            FlexibleCanisterHttpRequestArgs {
+                url,
+                max_response_bytes: None,
+                headers: BoundedHttpHeaders::new(vec![]),
+                body,
+                method: HttpMethod::POST,
+                transform: None,
+                replication: None,
+            }
+            .encode(),
+        ]
+    }
+
+    type UrlAndBody = (String, Option<Vec<u8>>);
+
+    fn decode_http_request_url_and_body(
+        payloads: [Vec<u8>; 2],
+    ) -> [Result<UrlAndBody, UserError>; 2] {
+        let [payload, flexible_payload] = payloads;
+        [
+            CanisterHttpRequestArgs::decode(&payload).map(|args| (args.url, args.body)),
+            FlexibleCanisterHttpRequestArgs::decode(&flexible_payload)
+                .map(|args| (args.url, args.body)),
+        ]
+    }
+
+    #[test]
+    fn test_http_url_and_body_within_max_size() {
+        for (url, body) in [
+            (String::new(), None),
+            (String::new(), Some(vec![])),
+            (
+                "u".repeat(HTTP_URL_MAX_SIZE),
+                Some(vec![1; HTTP_BODY_MAX_SIZE]),
+            ),
+        ] {
+            let payloads = http_request_payloads(url.clone(), body.clone());
+            for result in decode_http_request_url_and_body(payloads) {
+                assert_eq!(result.unwrap(), (url.clone(), body.clone()));
+            }
+        }
+    }
+
+    #[test]
+    fn test_http_url_and_body_exceeding_max_size() {
+        for (url_size, body_size, expected) in [
+            (
+                HTTP_URL_MAX_SIZE + 1,
+                0,
+                format!(
+                    "The text length {} exceeds maximum allowed {HTTP_URL_MAX_SIZE}",
+                    HTTP_URL_MAX_SIZE + 1
+                ),
+            ),
+            (
+                0,
+                HTTP_BODY_MAX_SIZE + 1,
+                format!(
+                    "The blob length {} exceeds maximum allowed {HTTP_BODY_MAX_SIZE}",
+                    HTTP_BODY_MAX_SIZE + 1
+                ),
+            ),
+        ] {
+            let payloads = http_request_payloads("u".repeat(url_size), Some(vec![1; body_size]));
+            for result in decode_http_request_url_and_body(payloads) {
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+                assert!(
+                    error.description().contains(&expected),
+                    "Actual: {}",
+                    error.description()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_http_header_data_size() {
+        let test_cases = vec![
+            // name, value, expected_size
+            ("", "", 0),
+            ("a", "", 1),
+            ("", "b", 1),
+            ("a", "b", 2),
+        ];
+        for (name, value, expected_size) in test_cases {
+            let header = HttpHeader {
+                name: name.to_string(),
+                value: value.to_string(),
+            };
+            assert_eq!(
+                header.data_size(),
+                expected_size,
+                "Header size does not match for {header:?}"
+            );
+        }
+    }
 }

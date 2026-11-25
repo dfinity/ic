@@ -8,8 +8,8 @@ mod provisional;
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use bounded_bytes::{
-    check_fixed_len, deserialize_bounded_blob, deserialize_empty_or_fixed_len_byte_buf,
-    deserialize_fixed_len_blob,
+    check_exact_len, deserialize_bounded_blob, deserialize_empty_or_exact_len_byte_buf,
+    deserialize_exact_len_blob,
 };
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
@@ -3652,7 +3652,7 @@ impl ReshareChainKeyResponse {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct SignWithBip341Aux {
     /// Either empty or a hash of `HASH_LENGTH` bytes.
-    #[serde(deserialize_with = "deserialize_empty_or_fixed_len_byte_buf::<_, HASH_LENGTH>")]
+    #[serde(deserialize_with = "deserialize_empty_or_exact_len_byte_buf::<_, HASH_LENGTH>")]
     pub merkle_root_hash: ByteBuf,
 }
 
@@ -4215,7 +4215,7 @@ where
 {
     let chunk_hashes = BoundedChunkHashes::deserialize(deserializer)?;
     for chunk_hash in chunk_hashes.get() {
-        check_fixed_len(chunk_hash.hash.len(), HASH_LENGTH)?;
+        check_exact_len(chunk_hash.hash.len(), HASH_LENGTH)?;
     }
     Ok(chunk_hashes)
 }
@@ -4253,7 +4253,7 @@ pub struct InstallChunkedCodeArgs {
     pub store_canister: Option<PrincipalId>,
     #[serde(deserialize_with = "deserialize_chunk_hashes")]
     pub chunk_hashes_list: BoundedChunkHashes,
-    #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, HASH_LENGTH>")]
+    #[serde(deserialize_with = "deserialize_exact_len_blob::<_, HASH_LENGTH>")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -4338,7 +4338,7 @@ where
 {
     let chunk_hashes = BoundedChunkHashesLegacy::deserialize(deserializer)?;
     for chunk_hash in chunk_hashes.get() {
-        check_fixed_len(chunk_hash.len(), HASH_LENGTH)?;
+        check_exact_len(chunk_hash.len(), HASH_LENGTH)?;
     }
     Ok(chunk_hashes)
 }
@@ -4369,7 +4369,7 @@ pub struct InstallChunkedCodeArgsLegacy {
     pub store_canister: Option<PrincipalId>,
     #[serde(deserialize_with = "deserialize_chunk_hashes_legacy")]
     pub chunk_hashes_list: BoundedChunkHashesLegacy,
-    #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, HASH_LENGTH>")]
+    #[serde(deserialize_with = "deserialize_exact_len_blob::<_, HASH_LENGTH>")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -5067,7 +5067,7 @@ pub enum CanisterSnapshotDataKind {
     WasmChunk {
         #[serde(
             serialize_with = "serde_bytes::serialize",
-            deserialize_with = "deserialize_fixed_len_blob::<_, HASH_LENGTH>"
+            deserialize_with = "deserialize_exact_len_blob::<_, HASH_LENGTH>"
         )]
         hash: Vec<u8>,
     },
@@ -6204,9 +6204,9 @@ mod tests {
         // Each of the fixed-length deserializers of `bounded_bytes`.
         #[derive(Debug, CandidType, Deserialize)]
         struct FixedLen {
-            #[serde(deserialize_with = "deserialize_fixed_len_blob::<_, MAX_LEN>")]
+            #[serde(deserialize_with = "deserialize_exact_len_blob::<_, MAX_LEN>")]
             blob: Vec<u8>,
-            #[serde(deserialize_with = "deserialize_empty_or_fixed_len_byte_buf::<_, MAX_LEN>")]
+            #[serde(deserialize_with = "deserialize_empty_or_exact_len_byte_buf::<_, MAX_LEN>")]
             byte_buf: ByteBuf,
         }
         let value = |blob, byte_buf| FixedLen {
