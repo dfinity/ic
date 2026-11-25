@@ -9,7 +9,7 @@ use crate::{
         CheckRoutingTableStep, CheckSourceSubnetDeletedStep, ComputeExpectedMergedManifestStep,
         DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
         StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
-        WaitForHaltingCupStep, WaitForRecoveryCupStep,
+        WaitForHaltingCupStep, WaitForRecoveryCupStep, registry_holds_subnet,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -34,7 +34,7 @@ use ic_subnet_tools::{
     utils::print_url_and_ask_for_confirmation,
 };
 use serde::{Deserialize, Serialize};
-use slog::{Logger, warn};
+use slog::{Logger, info, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
@@ -249,10 +249,24 @@ impl SubnetMerging {
 
         // Once the proposal deleting the source subnet has been submitted, the
         // registry may no longer hold that subnet, so the preconditions cannot
-        // be checked when resuming after `DeleteSourceSubnet`.
-        let source_subnet_may_be_deleted = subnet_merging_args
-            .next_step
-            .is_some_and(|next_step| next_step as usize > StepType::DeleteSourceSubnet as usize);
+        // be checked when resuming after `DeleteSourceSubnet`. When resuming at
+        // `DeleteSourceSubnet` itself, the proposal may have been submitted, and
+        // even executed, before the tool could record that the step was done.
+        // The preconditions are then checked only if the source subnet is still
+        // there, and the step submits no proposal otherwise.
+        let source_subnet_may_be_deleted = match subnet_merging_args.next_step {
+            Some(StepType::DeleteSourceSubnet) => {
+                let (_, holds_source_subnet) = registry_holds_subnet(
+                    &recovery.registry_helper,
+                    subnet_merging_args.source_subnet_id,
+                )
+                .expect("Failed to read the subnet list from the registry");
+                !holds_source_subnet
+            }
+            next_step => next_step.is_some_and(|next_step| {
+                next_step as usize > StepType::DeleteSourceSubnet as usize
+            }),
+        };
         if !source_subnet_may_be_deleted {
             Self::check_subnets_preconditions(
                 &recovery,
@@ -541,6 +555,40 @@ impl SubnetMerging {
                 self.params.destination_subnet_id,
             ),
         }
+    }
+
+    /// Submits a proposal to delete the source subnet, unless the registry no
+    /// longer holds it, e.g. because an earlier run submitted that proposal
+    /// but stopped before recording that the step was done.
+    ///
+    /// If the registry cannot be read, the proposal is submitted anyway: were
+    /// the source subnet already gone, it would just fail to execute.
+    fn delete_source_subnet_step(&self) -> RecoveryResult<Box<dyn Step>> {
+        let source_subnet_id = self.params.source_subnet_id;
+        match registry_holds_subnet(&self.recovery.registry_helper, source_subnet_id) {
+            Ok((registry_version, false)) => {
+                info!(
+                    self.logger,
+                    "Subnet {source_subnet_id} is already gone from the registry as of version \
+                     {registry_version}"
+                );
+                return Err(RecoveryError::StepSkipped);
+            }
+            Ok((_, true)) => {}
+            Err(err) => warn!(
+                self.logger,
+                "Failed to check whether the registry still holds subnet {source_subnet_id}: \
+                 {err}"
+            ),
+        }
+        Ok(AdminStep {
+            logger: self.recovery.logger.clone(),
+            ic_admin_cmd: get_propose_to_delete_subnet_command(
+                &self.recovery.admin_helper,
+                source_subnet_id,
+            ),
+        }
+        .into())
     }
 
     fn halt_subnet_at_cup_height_step(&self, target_subnet: TargetSubnet) -> AdminStep {
@@ -907,14 +955,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 logger: self.recovery.logger.clone(),
             }
             .into(),
-            StepType::DeleteSourceSubnet => AdminStep {
-                logger: self.recovery.logger.clone(),
-                ic_admin_cmd: get_propose_to_delete_subnet_command(
-                    &self.recovery.admin_helper,
-                    self.params.source_subnet_id,
-                ),
-            }
-            .into(),
+            StepType::DeleteSourceSubnet => self.delete_source_subnet_step()?,
             StepType::CheckRegistryForSourceSubnetDeletion => CheckSourceSubnetDeletedStep {
                 source_subnet_id: self.params.source_subnet_id,
                 registry_helper: self.recovery.registry_helper.clone(),

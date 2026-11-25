@@ -33,7 +33,7 @@ use ic_subnet_tools::{
     validation::validate_artifacts,
 };
 use ic_types::{
-    Height, Time,
+    Height, RegistryVersion, Time,
     consensus::{CatchUpPackage, HasHeight},
 };
 use slog::{Logger, info};
@@ -1018,6 +1018,32 @@ impl Step for CheckRegistryVersionOnAllSubnetsStep {
     }
 }
 
+/// Reads whether the latest registry version holds the given subnet, i.e.
+/// whether its subnet list includes it. Returns that registry version, too.
+///
+/// A missing subnet list is a registry error, not a sign that the subnet is
+/// gone.
+pub(crate) fn registry_holds_subnet(
+    registry_helper: &RegistryHelper,
+    subnet_id: SubnetId,
+) -> RecoveryResult<(RegistryVersion, bool)> {
+    let registry_version = registry_helper.latest_registry_version()?;
+    let subnet_ids = registry_helper
+        .registry_client()
+        .get_subnet_ids(registry_version)
+        .map_err(|err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to get the subnet ids at registry version {registry_version}: {err}"
+            ))
+        })?
+        .ok_or_else(|| {
+            RecoveryError::RegistryError(format!(
+                "No subnet list at registry version {registry_version}"
+            ))
+        })?;
+    Ok((registry_version, subnet_ids.contains(&subnet_id)))
+}
+
 /// Waits until the registry no longer holds the source subnet, i.e. until the
 /// proposal deleting it has been executed. `ic-admin` returns once the proposal
 /// is submitted, which does not mean that it is adopted and executed.
@@ -1045,23 +1071,9 @@ impl Step for CheckSourceSubnetDeletedStep {
             self.poll_interval,
             &self.logger,
             || {
-                let registry_version = self.registry_helper.latest_registry_version()?;
-                let subnet_ids = self
-                    .registry_helper
-                    .registry_client()
-                    .get_subnet_ids(registry_version)
-                    .map_err(|err| {
-                        RecoveryError::RegistryError(format!(
-                            "Failed to get the subnet ids at registry version \
-                             {registry_version}: {err}"
-                        ))
-                    })?
-                    .ok_or_else(|| {
-                        RecoveryError::RegistryError(format!(
-                            "No subnet list at registry version {registry_version}"
-                        ))
-                    })?;
-                if subnet_ids.contains(&source_subnet_id) {
+                let (registry_version, holds_source_subnet) =
+                    registry_holds_subnet(&self.registry_helper, source_subnet_id)?;
+                if holds_source_subnet {
                     return Err(RecoveryError::RegistryError(format!(
                         "Subnet {source_subnet_id} is still in the registry at version \
                          {registry_version}"
