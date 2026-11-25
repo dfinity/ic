@@ -156,6 +156,7 @@ impl RequestType {
                 | RequestType::ListNeurons { .. }
                 | RequestType::Follow { .. }
                 | RequestType::DisburseMaturity { .. }
+                | RequestType::RefreshVotingPower { .. }
         )
     }
 }
