@@ -53,7 +53,7 @@ pub trait BatchPayloadBuilder: Send + Sync {
     /// Builds a payload and returns it in serialized form.
     ///
     /// # Arguments
-    /// - `max_size`: The maximum size the payload is supposed to have, as
+    /// - `max_size`: The maximum size the payload is supposed to have on the wire, as
     ///   [`Self::validate_payload`] returns it
     /// - `past_payloads`: A collection of past payloads. Allows the payload builder
     ///   to deduplicate messages.
@@ -80,9 +80,9 @@ pub trait BatchPayloadBuilder: Send + Sync {
     ///
     /// # Returns
     ///
-    /// - On success, the size of the payload in a block proposal sent to peers, which is
-    ///   what counts against the block's payload size limit. It may be an estimate, as long
-    ///   as every node computes the same one.
+    /// - On success, the size of the payload on the wire, i.e. in a block proposal sent to
+    ///   peers, which is what counts against the block's payload size limit. It may be an
+    ///   estimate, as long as every node computes the same one.
     /// - A [`BatchPayloadValidationError`] describing the problem otherwise
     fn validate_payload(
         &self,
