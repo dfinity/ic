@@ -234,9 +234,6 @@ impl TryFrom<&models::Request> for Request {
     fn try_from(req: &models::Request) -> Result<Self, Self::Error> {
         let (request_type, calls) = req;
 
-        // `do_request` broadcasts whichever envelope is currently valid rather
-        // than the first, so the one described here stands for the rest only
-        // once they all agree.
         let update = representative_envelope(calls)?;
 
         let pid = PrincipalId::try_from(update.sender.clone().0).map_err(|e| {

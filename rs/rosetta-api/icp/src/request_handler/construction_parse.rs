@@ -40,10 +40,6 @@ impl RosettaRequestHandler {
                 .requests
                 .iter()
                 .map(|(request_type, envelopes)| {
-                    // Each envelope carries its own signature and the submit
-                    // path broadcasts whichever one is currently valid, not the
-                    // first, so one of them stands for the rest only once they
-                    // all agree.
                     Ok((
                         request_type.clone(),
                         representative_envelope(envelopes)?.clone(),
@@ -878,8 +874,6 @@ mod tests {
 
     fn submitted_set_dissolve_timestamp(arg: Vec<u8>) -> Result<Request, ApiError> {
         let update = set_dissolve_timestamp_update(arg);
-        // Pair the update with the read-state call that reads its own result,
-        // as `construction/combine` does.
         let read_state = crate::convert::make_read_state_from_update(&update);
         let envelope_pair = EnvelopePair {
             update: HttpRequestEnvelope {
