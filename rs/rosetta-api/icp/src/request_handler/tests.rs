@@ -177,14 +177,18 @@ pub(super) mod construction {
     use crate::{
         ledger_client::LedgerClient,
         models::{
-            Amount, ConstructionDeriveRequest, Currency, CurveType, NetworkIdentifier, Operation,
-            OperationIdentifier, PublicKey, operation::OperationType,
+            Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
+            ConstructionPayloadsRequest, ConstructionPayloadsResponse, Currency, CurveType,
+            NetworkIdentifier, Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
+            operation::OperationType,
         },
+        request::Request,
         request_handler::RosettaRequestHandler,
+        request_types::Disburse,
     };
     use ic_base_types::CanisterId;
     use rand_chacha::rand_core::OsRng;
-    use rosetta_core::metrics::RosettaMetrics;
+    use rosetta_core::{convert::principal_id_from_public_key, metrics::RosettaMetrics};
     use std::{
         str::FromStr,
         sync::{Arc, atomic::AtomicBool},
@@ -307,6 +311,74 @@ pub(super) mod construction {
         ];
 
         (handler, network_identifier, operations, pub_key, key)
+    }
+
+    pub(crate) fn sign_and_combine(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        pub_key: &PublicKey,
+        key: &ic_ed25519::PrivateKey,
+        payloads: ConstructionPayloadsResponse,
+    ) -> String {
+        let signatures = payloads
+            .payloads
+            .into_iter()
+            .map(|payload| {
+                let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
+                Signature {
+                    signing_payload: payload,
+                    public_key: pub_key.clone(),
+                    signature_type: SignatureType::Ed25519,
+                    hex_bytes: hex::encode(key.sign_message(&bytes)),
+                }
+            })
+            .collect();
+
+        handler
+            .construction_combine(ConstructionCombineRequest {
+                network_identifier: network_identifier.clone(),
+                unsigned_transaction: payloads.unsigned_transaction,
+                signatures,
+            })
+            .unwrap()
+            .signed_transaction
+    }
+
+    pub(crate) fn signed_disburse(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        pub_key: &PublicKey,
+        key: &ic_ed25519::PrivateKey,
+        neuron_index: u64,
+    ) -> (Vec<Operation>, String, String) {
+        let account =
+            icp_ledger::AccountIdentifier::from(principal_id_from_public_key(pub_key).unwrap());
+        let operations = Request::requests_to_operations(
+            &[Request::Disburse(Disburse {
+                account,
+                amount: None,
+                recipient: Some(icp_ledger::AccountIdentifier::from(
+                    ic_types::PrincipalId::new_user_test_id(42),
+                )),
+                neuron_index,
+            })],
+            "TKN",
+        )
+        .unwrap();
+
+        let payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: None,
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+        let unsigned_transaction = payloads.unsigned_transaction.clone();
+        let signed_transaction =
+            sign_and_combine(handler, network_identifier, pub_key, key, payloads);
+
+        (operations, unsigned_transaction, signed_transaction)
     }
 }
 

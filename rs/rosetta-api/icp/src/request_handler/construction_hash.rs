@@ -56,3 +56,6 @@ impl RosettaRequestHandler {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

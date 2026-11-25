@@ -1,8 +1,7 @@
-use ic_base_types::CanisterId;
 use proptest::{
     prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
 };
-use std::time::SystemTime;
+use std::{str::FromStr, time::SystemTime};
 
 use crate::{
     errors::ApiError,
@@ -12,7 +11,12 @@ use crate::{
         NetworkIdentifier, PublicKey, Signature, SignatureType, UnsignedTransaction,
     },
     request::Request,
-    request_handler::{RosettaRequestHandler, tests::construction::setup_transfer_test},
+    request_handler::{
+        RosettaRequestHandler,
+        tests::construction::{
+            setup_handler, setup_transfer_test, sign_and_combine, signed_disburse,
+        },
+    },
     request_types::RequestType,
 };
 use candid::Encode;
@@ -21,7 +25,7 @@ use ic_nns_governance_api::{
     manage_neuron::{self, NeuronIdOrSubaccount},
 };
 use ic_types::{
-    PrincipalId,
+    CanisterId, PrincipalId,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
     },
@@ -165,14 +169,21 @@ fn manage_neuron_args_exceeding_decoding_quotas() -> Vec<(&'static str, Vec<u8>)
     .collect()
 }
 
-fn set_dissolve_timestamp_update(arg: Vec<u8>) -> HttpCanisterUpdate {
+fn set_dissolve_timestamp_sender() -> PrincipalId {
+    PrincipalId::new_user_test_id(1)
+}
+
+fn set_dissolve_timestamp_update(
+    governance_canister_id: &CanisterId,
+    arg: Vec<u8>,
+) -> HttpCanisterUpdate {
     HttpCanisterUpdate {
-        canister_id: Blob(CanisterId::from_u64(1).get().to_vec()),
+        canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "manage_neuron".to_string(),
         arg: Blob(arg),
-        sender: Blob(PrincipalId::new_user_test_id(1).to_vec()),
+        sender: Blob(set_dissolve_timestamp_sender().to_vec()),
         ingress_expiry: 1,
-        nonce: None,
+        nonce: Some(Blob(Encode!(&0_u64).unwrap())),
         sender_info: None,
     }
 }
@@ -185,7 +196,7 @@ fn parse_unsigned_set_dissolve_timestamp(
     let unsigned_transaction = UnsignedTransaction {
         updates: vec![(
             RequestType::SetDissolveTimestamp { neuron_index: 0 },
-            set_dissolve_timestamp_update(arg),
+            set_dissolve_timestamp_update(handler.ledger.governance_canister_id(), arg),
         )],
         ingress_expiries: vec![1],
     };
@@ -200,7 +211,7 @@ fn submitted_set_dissolve_timestamp(
     handler: &RosettaRequestHandler,
     arg: Vec<u8>,
 ) -> Result<Request, ApiError> {
-    let update = set_dissolve_timestamp_update(arg);
+    let update = set_dissolve_timestamp_update(handler.ledger.governance_canister_id(), arg);
     let read_state = crate::convert::make_read_state_from_update(&update);
     let envelope_pair = EnvelopePair {
         update: HttpRequestEnvelope {
@@ -242,7 +253,7 @@ fn test_parse_and_submit_reject_args_exceeding_decoding_quotas() {
 
         let err = submitted_set_dissolve_timestamp(&handler, args).unwrap_err();
         assert!(
-            format!("{err:?}").contains("Could not parse manage_neuron")
+            format!("{err:?}").contains("Could not decode manage_neuron argument")
                 && format!("{err:?}").contains("Decoding cost exceeds the limit"),
             "{name}: unexpected submit error: {err:?}"
         );
@@ -256,7 +267,13 @@ fn test_parse_and_submit_accept_args_with_short_unexpected_vec() {
     let args = Encode!(
         &ManageNeuronRequest {
             id: None,
-            neuron_id_or_subaccount: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
+                crate::convert::neuron_subaccount_bytes_from_principal(
+                    &set_dissolve_timestamp_sender(),
+                    0,
+                )
+                .to_vec(),
+            )),
             command: set_dissolve_timestamp_command(),
         },
         &vec![(); 100]
@@ -521,4 +538,292 @@ fn test_payloads_without_memo_is_deterministic() {
         .expect("memo should always be present")
         .clone();
     assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
+}
+
+#[test]
+fn test_parse_accepts_a_genuine_signed_transaction() {
+    use crate::{models::SignedTransaction, request::Request, request_types::Disburse};
+    use rosetta_core::convert::principal_id_from_public_key;
+
+    const NEURON_INDEX: u64 = 7;
+    const NANOS: u64 = 1_000_000_000;
+
+    let (handler, network_identifier, pub_key, key) = setup_handler();
+
+    let (operations, _unsigned, signed) =
+        signed_disburse(&handler, &network_identifier, &pub_key, &key, NEURON_INDEX);
+    let parsed = handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier: network_identifier.clone(),
+            signed: true,
+            transaction: signed.clone(),
+        })
+        .expect("a genuine signed transaction must parse");
+    assert_eq!(operations, parsed.operations);
+    Request::from_signed_request(
+        &SignedTransaction::from_str(&signed).unwrap().requests[0],
+        handler.ledger.ledger_canister_id(),
+        handler.ledger.governance_canister_id(),
+    )
+    .expect("the submit path must accept a genuine signed transaction");
+
+    let account =
+        icp_ledger::AccountIdentifier::from(principal_id_from_public_key(&pub_key).unwrap());
+    let operations = Request::requests_to_operations(
+        &[Request::Disburse(Disburse {
+            account,
+            amount: None,
+            recipient: None,
+            neuron_index: NEURON_INDEX,
+        })],
+        "TKN",
+    )
+    .unwrap();
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    let payloads = handler
+        .construction_payloads(ConstructionPayloadsRequest {
+            network_identifier: network_identifier.clone(),
+            operations: operations.clone(),
+            metadata: Some(
+                ConstructionPayloadsRequestMetadata {
+                    memo: None,
+                    created_at_time: Some(now),
+                    ingress_start: Some(now),
+                    ingress_end: Some(now + 600 * NANOS),
+                }
+                .try_into()
+                .unwrap(),
+            ),
+            public_keys: Some(vec![pub_key.clone()]),
+        })
+        .unwrap();
+    let signed = sign_and_combine(&handler, &network_identifier, &pub_key, &key, payloads);
+
+    let envelopes = SignedTransaction::from_str(&signed).unwrap().requests[0]
+        .1
+        .len();
+    assert!(
+        envelopes > 1,
+        "expected a multi-envelope transaction, got {envelopes}"
+    );
+
+    let parsed = handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier,
+            signed: true,
+            transaction: signed.clone(),
+        })
+        .expect("a genuine multi-envelope transaction must parse");
+    assert_eq!(operations, parsed.operations);
+    Request::from_signed_request(
+        &SignedTransaction::from_str(&signed).unwrap().requests[0],
+        handler.ledger.ledger_canister_id(),
+        handler.ledger.governance_canister_id(),
+    )
+    .expect("the submit path must accept a genuine multi-envelope transaction");
+}
+
+#[test]
+fn test_parse_rejects_rewritten_neuron_index() {
+    use crate::{
+        models::{SignedTransaction, UnsignedTransaction},
+        request::Request,
+        request_types::{Disburse, RequestType},
+    };
+    use rosetta_core::convert::principal_id_from_public_key;
+
+    const DISPLAYED_INDEX: u64 = 0;
+    const SIGNED_INDEX: u64 = 7;
+
+    let (handler, network_identifier, pub_key, key) = setup_handler();
+    let signer = principal_id_from_public_key(&pub_key).unwrap();
+    let account = icp_ledger::AccountIdentifier::from(signer);
+
+    let operations = Request::requests_to_operations(
+        &[Request::Disburse(Disburse {
+            account,
+            amount: None,
+            recipient: Some(icp_ledger::AccountIdentifier::from(
+                ic_types::PrincipalId::new_user_test_id(42),
+            )),
+            neuron_index: SIGNED_INDEX,
+        })],
+        "TKN",
+    )
+    .unwrap();
+
+    let payloads = handler
+        .construction_payloads(ConstructionPayloadsRequest {
+            network_identifier: network_identifier.clone(),
+            operations: operations.clone(),
+            metadata: None,
+            public_keys: Some(vec![pub_key.clone()]),
+        })
+        .unwrap();
+
+    let parsed = handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier: network_identifier.clone(),
+            signed: false,
+            transaction: payloads.unsigned_transaction.clone(),
+        })
+        .unwrap();
+    assert_eq!(operations, parsed.operations);
+
+    let mut unsigned = UnsignedTransaction::from_str(&payloads.unsigned_transaction).unwrap();
+    for (request_type, _) in unsigned.updates.iter_mut() {
+        assert_eq!(
+            *request_type,
+            RequestType::Disburse {
+                neuron_index: SIGNED_INDEX
+            }
+        );
+        *request_type = RequestType::Disburse {
+            neuron_index: DISPLAYED_INDEX,
+        };
+    }
+
+    let err = handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier: network_identifier.clone(),
+            signed: false,
+            transaction: unsigned.to_string(),
+        })
+        .expect_err("parse must reject a wrapper that disagrees with the signed payload");
+    assert!(
+        format!("{err:?}").contains("neuron_index"),
+        "unexpected error: {err:?}"
+    );
+
+    let mut signatures = vec![];
+    for payload in payloads.payloads {
+        let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
+        let signature = key.sign_message(&bytes);
+        signatures.push(Signature {
+            signing_payload: payload,
+            public_key: pub_key.clone(),
+            signature_type: SignatureType::Ed25519,
+            hex_bytes: hex::encode(signature),
+        });
+    }
+    let signed_transaction = handler
+        .construction_combine(ConstructionCombineRequest {
+            network_identifier: network_identifier.clone(),
+            unsigned_transaction: payloads.unsigned_transaction,
+            signatures,
+        })
+        .unwrap()
+        .signed_transaction;
+
+    let mut signed = SignedTransaction::from_str(&signed_transaction).unwrap();
+    for (request_type, _) in signed.requests.iter_mut() {
+        *request_type = RequestType::Disburse {
+            neuron_index: DISPLAYED_INDEX,
+        };
+    }
+    let tampered_signed = hex::encode(serde_cbor::to_vec(&signed).unwrap());
+
+    let err = handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier,
+            signed: true,
+            transaction: tampered_signed,
+        })
+        .expect_err("signed parse must reject a wrapper that disagrees with the payload");
+    assert!(
+        format!("{err:?}").contains("neuron_index"),
+        "unexpected error: {err:?}"
+    );
+
+    let err = Request::from_signed_request(
+        &signed.requests[0],
+        handler.ledger.ledger_canister_id(),
+        handler.ledger.governance_canister_id(),
+    )
+    .expect_err("the submit path must reject the same mismatch");
+    assert!(
+        format!("{err:?}").contains("neuron_index"),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn test_submit_path_rejects_substituted_command() {
+    use crate::{models::SignedTransaction, request::Request, request_types::RequestType};
+
+    const NEURON_INDEX: u64 = 7;
+
+    let (handler, network_identifier, pub_key, key) = setup_handler();
+    let (_, _, signed_transaction) =
+        signed_disburse(&handler, &network_identifier, &pub_key, &key, NEURON_INDEX);
+
+    let mut signed = SignedTransaction::from_str(&signed_transaction).unwrap();
+    for (request_type, _) in signed.requests.iter_mut() {
+        *request_type = RequestType::StartDissolve {
+            neuron_index: NEURON_INDEX,
+        };
+    }
+
+    let err = Request::from_signed_request(
+        &signed.requests[0],
+        handler.ledger.ledger_canister_id(),
+        handler.ledger.governance_canister_id(),
+    )
+    .expect_err("the submit path must reject a substituted operation");
+    assert!(
+        format!("{err:?}").contains("manage_neuron command"),
+        "unexpected error: {err:?}"
+    );
+
+    handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier,
+            signed: true,
+            transaction: hex::encode(serde_cbor::to_vec(&signed).unwrap()),
+        })
+        .expect_err("parse must reject a substituted operation");
+}
+
+#[test]
+fn test_rejects_divergent_envelopes() {
+    use crate::{models::SignedTransaction, request::Request, request_types::RequestType};
+
+    let (handler, network_identifier, pub_key, key) = setup_handler();
+    let (_, _, displayed) = signed_disburse(&handler, &network_identifier, &pub_key, &key, 0);
+    let (_, _, hidden) = signed_disburse(&handler, &network_identifier, &pub_key, &key, 7);
+
+    let displayed = SignedTransaction::from_str(&displayed).unwrap();
+    let hidden = SignedTransaction::from_str(&hidden).unwrap();
+
+    let mut envelopes = vec![displayed.requests[0].1[0].clone()];
+    envelopes.push(hidden.requests[0].1[0].clone());
+    let spliced = SignedTransaction {
+        requests: vec![(RequestType::Disburse { neuron_index: 0 }, envelopes)],
+    };
+
+    let err = Request::from_signed_request(
+        &spliced.requests[0],
+        handler.ledger.ledger_canister_id(),
+        handler.ledger.governance_canister_id(),
+    )
+    .expect_err("the submit path must reject envelopes that disagree");
+    assert!(
+        format!("{err:?}").contains("ingress"),
+        "unexpected error: {err:?}"
+    );
+
+    let err = handler
+        .construction_parse(ConstructionParseRequest {
+            network_identifier,
+            signed: true,
+            transaction: hex::encode(serde_cbor::to_vec(&spliced).unwrap()),
+        })
+        .expect_err("parse must reject envelopes that disagree");
+    assert!(
+        format!("{err:?}").contains("ingress"),
+        "unexpected error: {err:?}"
+    );
 }

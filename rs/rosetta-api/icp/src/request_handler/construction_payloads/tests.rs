@@ -13,6 +13,188 @@ fn t(nanos: u64) -> Time {
 }
 
 #[test]
+fn every_neuron_payload_passes_signed_target_verification() {
+    let ledger_canister_id = CanisterId::from_u64(0x1233);
+    let governance_canister_id = CanisterId::from_u64(0x1234);
+
+    let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+    let pub_key = PublicKey {
+        hex_bytes: hex::encode(key.public_key().serialize_raw()),
+        curve_type: CurveType::Edwards25519,
+    };
+    let account =
+        icp_ledger::AccountIdentifier::from(principal_id_from_public_key(&pub_key).unwrap());
+    let pks_map = HashMap::from([(account, &pub_key)]);
+    let ingress_expiries = [1_u64];
+    let neuron_index = 7;
+    let other = PrincipalId::new_user_test_id(42);
+
+    let mut updates = vec![];
+    macro_rules! build {
+        ($handle:ident, $req:expr) => {
+            $handle(
+                $req,
+                &governance_canister_id,
+                &mut vec![],
+                &mut updates,
+                &pks_map,
+                &ingress_expiries,
+            )
+            .unwrap()
+        };
+    }
+
+    build!(
+        handle_stake,
+        Stake {
+            account,
+            neuron_index
+        }
+    );
+    for controller in [None, Some(other)] {
+        build!(
+            handle_neuron_info,
+            NeuronInfo {
+                account,
+                controller,
+                neuron_index,
+            }
+        );
+    }
+    for page_number in [None, Some(3)] {
+        build!(
+            handle_list_neurons,
+            ListNeurons {
+                account,
+                page_number
+            }
+        );
+    }
+    build!(
+        handle_set_dissolve_timestamp,
+        SetDissolveTimestamp {
+            account,
+            neuron_index,
+            timestamp: crate::models::seconds::Seconds(1_000),
+        }
+    );
+    build!(
+        handle_change_auto_stake_maturity,
+        ChangeAutoStakeMaturity {
+            account,
+            neuron_index,
+            requested_setting_for_auto_stake_maturity: true,
+        }
+    );
+    build!(
+        handle_start_dissolve,
+        StartDissolve {
+            account,
+            neuron_index
+        }
+    );
+    build!(
+        handle_stop_dissolve,
+        StopDissolve {
+            account,
+            neuron_index
+        }
+    );
+    build!(
+        handle_disburse,
+        Disburse {
+            account,
+            amount: Some(Tokens::from_e8s(1)),
+            recipient: Some(icp_ledger::AccountIdentifier::from(other)),
+            neuron_index,
+        }
+    );
+    build!(
+        handle_disburse_maturity,
+        DisburseMaturity {
+            account,
+            percentage_to_disburse: 100,
+            recipient: None,
+            neuron_index,
+        }
+    );
+    build!(
+        handle_add_hotkey,
+        AddHotKey {
+            account,
+            neuron_index,
+            key: PublicKeyOrPrincipal::Principal(other),
+        }
+    );
+    build!(
+        handle_remove_hotkey,
+        RemoveHotKey {
+            account,
+            neuron_index,
+            key: PublicKeyOrPrincipal::Principal(other),
+        }
+    );
+    build!(
+        handle_spawn,
+        Spawn {
+            account,
+            spawned_neuron_index: neuron_index + 1,
+            controller: Some(other),
+            percentage_to_spawn: Some(50),
+            neuron_index,
+        }
+    );
+    build!(
+        handle_stake_maturity,
+        StakeMaturity {
+            account,
+            percentage_to_stake: Some(50),
+            neuron_index,
+        }
+    );
+    build!(
+        handle_register_vote,
+        RegisterVote {
+            account,
+            proposal: Some(1),
+            vote: 1,
+            neuron_index,
+        }
+    );
+    for controller in [None, Some(other)] {
+        build!(
+            handle_follow,
+            Follow {
+                account,
+                topic: 0,
+                followees: vec![1],
+                controller,
+                neuron_index,
+            }
+        );
+        build!(
+            handle_refresh_voting_power,
+            RefreshVotingPower {
+                account,
+                neuron_index,
+                controller,
+            }
+        );
+    }
+
+    assert_eq!(updates.len(), 20);
+    for (request_type, update) in &updates {
+        crate::signed_target::verify_signed_target(
+            request_type,
+            update,
+            &ledger_canister_id,
+            &governance_canister_id,
+        )
+        .unwrap_or_else(|e| panic!("{request_type:?} was rejected: {e:?}"));
+    }
+}
+
+#[test]
 fn neuron_requests_are_addressed_to_the_configured_governance_canister() {
     let governance_canister_id = CanisterId::from_u64(0x1234);
     assert_ne!(

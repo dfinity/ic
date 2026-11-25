@@ -1,21 +1,56 @@
 //! Checks that a signed request is described by the metadata Rosetta displays.
 //!
-//! A signed request carries one envelope per ingress expiry, and
-//! `/construction/submit` broadcasts whichever one is currently valid. Its
-//! [`RequestType`] is unsigned metadata, while the `canister_id`,
-//! `method_name`, `arg`, `nonce` and `sender` of each update are signed.
-//! `/construction/parse`, `/construction/hash` and `/construction/submit` read
-//! a signed request through this module, so what they describe is what is
-//! sent.
+//! A request pairs a [`RequestType`], which is unsigned metadata, with an
+//! [`HttpCanisterUpdate`], whose `canister_id`, `method_name`, `arg`, `nonce`
+//! and `sender` are signed. Every field Rosetta displays must follow from the
+//! signed update:
+//!
+//! * A transfer must call the configured ledger and debit the sender's default
+//!   account.
+//! * A neuron request must call the configured governance canister. A
+//!   `manage_neuron` request names its neuron in the `nonce` and in the
+//!   subaccount `H(controller, neuron_index)` of its `arg`, and its command
+//!   must be the displayed operation.
+//! * A signed request carries one envelope per ingress expiry, and
+//!   `/construction/submit` broadcasts whichever one is currently valid, so all
+//!   envelopes must carry the same update.
+//!
+//! `/construction/parse`, `/construction/hash` and `/construction/submit` all
+//! read a signed request through this module.
 
-use crate::{convert, errors::ApiError, models::EnvelopePair, request_types::RequestType};
+use crate::{
+    convert,
+    errors::ApiError,
+    models::EnvelopePair,
+    request_types::{PublicKeyOrPrincipal, RequestType},
+};
+use ic_nns_governance_api::{
+    ClaimOrRefreshNeuronFromAccount, ListNeurons, ManageNeuronCommandRequest, ManageNeuronRequest,
+    manage_neuron, manage_neuron::NeuronIdOrSubaccount,
+};
 use ic_types::{
-    CanisterId,
+    CanisterId, PrincipalId,
     messages::{HttpCanisterUpdate, HttpReadStateContent},
 };
 
-/// Ledger method behind `RequestType::Send`.
+const MANAGE_NEURON: &str = "manage_neuron";
+const CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT: &str = "claim_or_refresh_neuron_from_account";
+const GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT: &str = "get_full_neuron_by_id_or_subaccount";
+const LIST_NEURONS: &str = "list_neurons";
 const SEND_PB: &str = "send_pb";
+
+/// The `list_neurons` argument `/construction/payloads` builds for a page.
+pub fn list_neurons_arg(page_number: Option<u64>) -> ListNeurons {
+    ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: true,
+        include_empty_neurons_readable_by_caller: None,
+        include_public_neurons_in_full_neurons: None,
+        page_number,
+        page_size: None,
+        neuron_subaccounts: None,
+    }
+}
 
 /// Returns the [`representative_envelope`] of a signed request after checking
 /// it against `request_type` with [`verify_signed_target`].
@@ -92,8 +127,12 @@ pub fn verify_signed_target(
     request_type: &RequestType,
     update: &HttpCanisterUpdate,
     ledger_canister_id: &CanisterId,
-    _governance_canister_id: &CanisterId,
+    governance_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
+    let sender = PrincipalId::try_from(update.sender.0.as_slice()).map_err(|e| {
+        ApiError::invalid_request(format!("Could not parse the signed update's sender: {e}"))
+    })?;
+
     match request_type {
         RequestType::Send => {
             verify_canister(update, ledger_canister_id, "A transfer")?;
@@ -111,25 +150,253 @@ pub fn verify_signed_target(
             Ok(())
         }
 
-        // Not checked yet. Listed explicitly so that a new request type has to
-        // be considered here.
-        RequestType::Stake { .. }
-        | RequestType::NeuronInfo { .. }
-        | RequestType::ListNeurons { .. }
-        | RequestType::SetDissolveTimestamp { .. }
-        | RequestType::ChangeAutoStakeMaturity { .. }
-        | RequestType::StartDissolve { .. }
-        | RequestType::StopDissolve { .. }
-        | RequestType::Disburse { .. }
-        | RequestType::DisburseMaturity { .. }
-        | RequestType::AddHotKey { .. }
-        | RequestType::RemoveHotKey { .. }
-        | RequestType::Spawn { .. }
-        | RequestType::StakeMaturity { .. }
-        | RequestType::RegisterVote { .. }
-        | RequestType::Follow { .. }
-        | RequestType::RefreshVotingPower { .. } => Ok(()),
+        RequestType::Stake { neuron_index } => {
+            verify_governance_canister(update, governance_canister_id)?;
+            verify_method_name(update, CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT)?;
+            verify_nonce_neuron_index(update, *neuron_index)?;
+            // The neuron is `H(controller, memo)`, displayed against the signer.
+            let args: ClaimOrRefreshNeuronFromAccount = decode_arg(update, "stake")?;
+            if args.memo != *neuron_index {
+                return Err(mismatch(
+                    "neuron_index",
+                    *neuron_index,
+                    args.memo,
+                    "the signed claim_or_refresh_neuron_from_account memo",
+                ));
+            }
+            match args.controller {
+                None => Ok(()),
+                Some(controller) if controller == sender => Ok(()),
+                Some(controller) => Err(ApiError::invalid_request(format!(
+                    "The signed stake request names controller {controller}, but Rosetta \
+                     would display it against the signer {sender}."
+                ))),
+            }
+        }
+
+        RequestType::NeuronInfo {
+            neuron_index,
+            controller,
+        } => {
+            verify_governance_canister(update, governance_canister_id)?;
+            verify_method_name(update, GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT)?;
+            let id_or_subaccount: NeuronIdOrSubaccount = decode_arg(update, "neuron info")?;
+            verify_neuron_subaccount(
+                &id_or_subaccount,
+                controller.as_ref(),
+                sender,
+                *neuron_index,
+            )
+        }
+
+        RequestType::ListNeurons { page_number } => {
+            verify_governance_canister(update, governance_canister_id)?;
+            verify_method_name(update, LIST_NEURONS)?;
+            let args: ListNeurons = decode_arg(update, "list neurons")?;
+            let signed_page_number = args.page_number.unwrap_or_default();
+            if signed_page_number != *page_number {
+                return Err(mismatch(
+                    "page_number",
+                    *page_number,
+                    signed_page_number,
+                    "the signed list_neurons argument",
+                ));
+            }
+            if args != list_neurons_arg(args.page_number) {
+                return Err(ApiError::invalid_request(
+                    "The signed list_neurons argument sets fields other than the page \
+                     number, which Rosetta would not display.",
+                ));
+            }
+            Ok(())
+        }
+
+        RequestType::SetDissolveTimestamp { neuron_index }
+        | RequestType::ChangeAutoStakeMaturity { neuron_index }
+        | RequestType::StartDissolve { neuron_index }
+        | RequestType::StopDissolve { neuron_index }
+        | RequestType::Disburse { neuron_index }
+        | RequestType::DisburseMaturity { neuron_index }
+        | RequestType::AddHotKey { neuron_index }
+        | RequestType::RemoveHotKey { neuron_index }
+        | RequestType::Spawn { neuron_index }
+        | RequestType::StakeMaturity { neuron_index }
+        | RequestType::RegisterVote { neuron_index } => verify_manage_neuron(
+            request_type,
+            update,
+            *neuron_index,
+            None,
+            sender,
+            governance_canister_id,
+        ),
+
+        RequestType::Follow {
+            neuron_index,
+            controller,
+        }
+        | RequestType::RefreshVotingPower {
+            neuron_index,
+            controller,
+        } => verify_manage_neuron(
+            request_type,
+            update,
+            *neuron_index,
+            controller.as_ref(),
+            sender,
+            governance_canister_id,
+        ),
     }
+}
+
+fn verify_manage_neuron(
+    request_type: &RequestType,
+    update: &HttpCanisterUpdate,
+    neuron_index: u64,
+    controller: Option<&PublicKeyOrPrincipal>,
+    sender: PrincipalId,
+    governance_canister_id: &CanisterId,
+) -> Result<(), ApiError> {
+    verify_governance_canister(update, governance_canister_id)?;
+    verify_method_name(update, MANAGE_NEURON)?;
+    verify_nonce_neuron_index(update, neuron_index)?;
+
+    let manage: ManageNeuronRequest = decode_arg(update, "manage_neuron")?;
+
+    verify_command_matches(request_type, manage.command.as_ref())?;
+
+    // `/construction/payloads` identifies the neuron by subaccount only.
+    if manage.id.is_some() {
+        return Err(ApiError::invalid_request(
+            "The signed manage_neuron request sets the legacy `id` field, whose \
+             target cannot be verified against the displayed neuron_index.",
+        ));
+    }
+
+    let id_or_subaccount = manage.neuron_id_or_subaccount.ok_or_else(|| {
+        ApiError::invalid_request(
+            "The signed manage_neuron request does not identify a neuron, so the \
+             displayed neuron_index cannot be verified.",
+        )
+    })?;
+
+    verify_neuron_subaccount(&id_or_subaccount, controller, sender, neuron_index)
+}
+
+/// Checks that the signed `manage_neuron` command is the displayed operation.
+fn verify_command_matches(
+    request_type: &RequestType,
+    command: Option<&ManageNeuronCommandRequest>,
+) -> Result<(), ApiError> {
+    use ManageNeuronCommandRequest as Cmd;
+    use manage_neuron::configure::Operation as Op;
+
+    let operation = match command {
+        Some(Cmd::Configure(manage_neuron::Configure { operation })) => operation.as_ref(),
+        _ => None,
+    };
+
+    let bound = match request_type {
+        RequestType::SetDissolveTimestamp { .. } => {
+            matches!(operation, Some(Op::SetDissolveTimestamp(_)))
+        }
+        RequestType::ChangeAutoStakeMaturity { .. } => {
+            matches!(operation, Some(Op::ChangeAutoStakeMaturity(_)))
+        }
+        RequestType::StartDissolve { .. } => matches!(operation, Some(Op::StartDissolving(_))),
+        RequestType::StopDissolve { .. } => matches!(operation, Some(Op::StopDissolving(_))),
+        RequestType::AddHotKey { .. } => matches!(operation, Some(Op::AddHotKey(_))),
+        RequestType::RemoveHotKey { .. } => matches!(operation, Some(Op::RemoveHotKey(_))),
+        RequestType::Disburse { .. } => matches!(command, Some(Cmd::Disburse(_))),
+        RequestType::DisburseMaturity { .. } => matches!(command, Some(Cmd::DisburseMaturity(_))),
+        RequestType::Spawn { .. } => matches!(command, Some(Cmd::Spawn(_))),
+        RequestType::StakeMaturity { .. } => matches!(command, Some(Cmd::StakeMaturity(_))),
+        RequestType::RegisterVote { .. } => matches!(command, Some(Cmd::RegisterVote(_))),
+        RequestType::Follow { .. } => matches!(command, Some(Cmd::Follow(_))),
+        RequestType::RefreshVotingPower { .. } => {
+            matches!(command, Some(Cmd::RefreshVotingPower(_)))
+        }
+        RequestType::Send
+        | RequestType::Stake { .. }
+        | RequestType::NeuronInfo { .. }
+        | RequestType::ListNeurons { .. } => false,
+    };
+
+    if !bound {
+        return Err(ApiError::invalid_request(format!(
+            "The signed manage_neuron command is not the {} operation Rosetta would \
+             display. Refusing to name an operation other than the one being signed.",
+            request_type.clone().into_str()
+        )));
+    }
+    Ok(())
+}
+
+/// Checks that the signed subaccount is `H(controller, neuron_index)` for the
+/// displayed controller, or the signer if none is displayed.
+fn verify_neuron_subaccount(
+    id_or_subaccount: &NeuronIdOrSubaccount,
+    controller: Option<&PublicKeyOrPrincipal>,
+    sender: PrincipalId,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let signed_subaccount = match id_or_subaccount {
+        NeuronIdOrSubaccount::Subaccount(subaccount) => subaccount,
+        NeuronIdOrSubaccount::NeuronId(_) => {
+            return Err(ApiError::invalid_request(
+                "The signed request identifies the neuron by id, whose target cannot \
+                 be verified against the displayed neuron_index.",
+            ));
+        }
+    };
+
+    let controller = match controller {
+        Some(controller) => convert::principal_id_from_public_key_or_principal(controller.clone())?,
+        None => sender,
+    };
+
+    let expected = convert::neuron_subaccount_bytes_from_principal(&controller, neuron_index);
+    if signed_subaccount.as_slice() != expected.as_slice() {
+        return Err(ApiError::invalid_request(format!(
+            "The signed neuron subaccount does not belong to the neuron Rosetta would \
+             display (controller {controller}, neuron_index {neuron_index}). Refusing to \
+             describe a request that targets a different neuron than it appears to."
+        )));
+    }
+    Ok(())
+}
+
+fn verify_nonce_neuron_index(
+    update: &HttpCanisterUpdate,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let nonce = update.nonce.as_ref().ok_or_else(|| {
+        ApiError::invalid_request(
+            "The signed update carries no nonce, so the displayed neuron_index \
+             cannot be verified against it.",
+        )
+    })?;
+    let signed_neuron_index: u64 = crate::convert::decode_canister_method_arg(nonce.0.as_ref())
+        .map_err(|e| {
+            ApiError::invalid_request(format!(
+                "Could not decode the neuron index from the signed nonce: {e:#}"
+            ))
+        })?;
+    if signed_neuron_index != neuron_index {
+        return Err(mismatch(
+            "neuron_index",
+            neuron_index,
+            signed_neuron_index,
+            "the signed nonce",
+        ));
+    }
+    Ok(())
+}
+
+fn verify_governance_canister(
+    update: &HttpCanisterUpdate,
+    governance_canister_id: &CanisterId,
+) -> Result<(), ApiError> {
+    verify_canister(update, governance_canister_id, "A neuron request")
 }
 
 fn verify_canister(
@@ -154,6 +421,21 @@ fn verify_method_name(update: &HttpCanisterUpdate, expected: &str) -> Result<(),
         )));
     }
     Ok(())
+}
+
+fn decode_arg<T>(update: &HttpCanisterUpdate, what: &str) -> Result<T, ApiError>
+where
+    T: candid::CandidType + serde::de::DeserializeOwned,
+{
+    crate::convert::decode_canister_method_arg(update.arg.0.as_ref())
+        .map_err(|e| ApiError::invalid_request(format!("Could not decode {what} argument: {e:#}")))
+}
+
+fn mismatch(field: &str, displayed: u64, signed: u64, source: &str) -> ApiError {
+    ApiError::invalid_request(format!(
+        "Rosetta would display {field} {displayed}, but {source} says {signed}. Refusing \
+         to describe a request that differs from the payload being signed."
+    ))
 }
 
 #[cfg(test)]

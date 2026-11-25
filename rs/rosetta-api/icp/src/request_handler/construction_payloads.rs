@@ -611,15 +611,7 @@ fn handle_list_neurons(
     })?;
 
     // Argument for the method called on the governance canister.
-    let args = ic_nns_governance_api::ListNeurons {
-        neuron_ids: vec![],
-        include_neurons_readable_by_caller: true,
-        include_empty_neurons_readable_by_caller: None,
-        include_public_neurons_in_full_neurons: None,
-        page_number: req.page_number,
-        page_size: None,
-        neuron_subaccounts: None,
-    };
+    let args = crate::signed_target::list_neurons_arg(req.page_number);
     let update = HttpCanisterUpdate {
         canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "list_neurons".to_string(),
