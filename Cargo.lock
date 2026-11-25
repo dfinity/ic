@@ -1507,7 +1507,7 @@ dependencies = [
  "rand 0.8.8",
  "serde",
  "sev",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -2086,7 +2086,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_bytes",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "time",
 ]
 
@@ -7352,7 +7352,7 @@ dependencies = [
  "scrypt",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "static_assertions",
  "tempfile",
  "thiserror 2.0.21",
@@ -8041,7 +8041,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "test-strategy",
  "tokio",
 ]
@@ -8812,6 +8812,7 @@ dependencies = [
  "rand 0.8.8",
  "rand_chacha 0.3.1",
  "sha2 0.10.9",
+ "sha2 0.11.1",
  "subtle",
  "zeroize",
 ]
@@ -9214,7 +9215,7 @@ name = "ic-crypto-sha2"
 version = "0.9.0"
 dependencies = [
  "hex",
- "sha2 0.10.9",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -11427,7 +11428,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "strum 0.28.0",
  "strum_macros 0.28.0",
  "tempfile",
@@ -14106,14 +14107,14 @@ dependencies = [
  "bitcoin-dogecoin",
  "hex",
  "hex-literal 1.1.0",
- "hmac 0.12.1",
+ "hmac 0.13.0",
  "ic_principal",
  "k256 0.14.0",
  "num-bigint 0.4.8",
  "pem 4.0.0",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "simple_asn1",
  "wycheproof",
  "zeroize",
@@ -14125,14 +14126,14 @@ version = "0.3.0"
 dependencies = [
  "hex",
  "hex-literal 1.1.0",
- "hmac 0.12.1",
+ "hmac 0.13.0",
  "ic_principal",
  "num-bigint 0.4.8",
  "p256 0.14.0",
  "pem 4.0.0",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "simple_asn1",
  "wycheproof",
  "zeroize",
@@ -14183,7 +14184,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "sha2 0.10.9",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -15907,7 +15908,7 @@ dependencies = [
  "candid",
  "lazy_static",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "universal-canister",
 ]
 
@@ -16551,7 +16552,7 @@ dependencies = [
  "p256 0.14.0",
  "registry-canister",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "slog",
  "tokio",
 ]
@@ -16817,7 +16818,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "strum 0.28.0",
  "strum_macros 0.28.0",
  "time",
@@ -17638,7 +17639,7 @@ dependencies = [
  "ic-certified-map",
  "serde",
  "serde_cbor",
- "sha2 0.10.9",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -20381,7 +20382,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "slog",
  "strum 0.28.0",
  "strum_macros 0.28.0",
@@ -23265,14 +23266,14 @@ dependencies = [
  "attestation",
  "base64 0.23.1",
  "config_types",
- "hkdf 0.12.4",
+ "hkdf 0.13.0",
  "linux_kernel_command_line",
  "pem 4.0.0",
  "rand 0.8.8",
  "sev",
  "sev_guest_firmware",
  "sev_guest_testing",
- "sha2 0.10.9",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -24163,7 +24164,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "tokio",
 ]
 
@@ -24615,9 +24616,10 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
+ "hex",
  "local_key",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "tla_instrumentation_proc_macros",
  "tokio-test",
  "uuid",

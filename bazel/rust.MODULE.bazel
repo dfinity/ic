@@ -652,6 +652,11 @@ crate.spec(
 )
 crate.spec(
     package = "hkdf",
+    version = "^0.13",
+)
+crate.spec(
+    package = "hkdf",
+    package_alias = "hkdf_0_12",
     version = "^0.12",
 )
 crate.spec(
@@ -668,7 +673,7 @@ crate.spec(
 )
 crate.spec(
     package = "hmac",
-    version = "^0.12",
+    version = "^0.13",
 )
 crate.spec(
     default_features = False,
@@ -1517,6 +1522,11 @@ crate.spec(
 )
 crate.spec(
     package = "sha2",
+    version = "^0.11.1",
+)
+crate.spec(
+    package = "sha2",
+    package_alias = "sha2_0_10",
     version = "^0.10.9",
 )
 crate.spec(

@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "be4d50ecd5d85c98512b7852766c0dffa2c23ccee8f885d5125d48b611798c87",
+  "checksum": "79f868872e18fd82e8ff6bda23b12b34cbb41a18505b171bc8c3be3585a39804",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17844,11 +17844,16 @@
             "target": "hickory_resolver"
           },
           {
+            "alias": "hkdf_0_12",
             "id": "hkdf 0.12.4",
             "target": "hkdf"
           },
           {
-            "id": "hmac 0.12.1",
+            "id": "hkdf 0.13.0",
+            "target": "hkdf"
+          },
+          {
+            "id": "hmac 0.13.0",
             "target": "hmac"
           },
           {
@@ -18470,7 +18475,12 @@
             "target": "sev"
           },
           {
+            "alias": "sha2_0_10",
             "id": "sha2 0.10.9",
+            "target": "sha2"
+          },
+          {
+            "id": "sha2 0.11.1",
             "target": "sha2"
           },
           {
@@ -68807,7 +68817,8 @@
     "hex-literal 1.1.0",
     "hickory-resolver 0.26.3",
     "hkdf 0.12.4",
-    "hmac 0.12.1",
+    "hkdf 0.13.0",
+    "hmac 0.13.0",
     "hpke 0.15.1",
     "http 1.5.0",
     "http-body 1.1.0",
@@ -68966,6 +68977,7 @@
     "serde_yaml 0.9.34+deprecated",
     "sev 7.1.0",
     "sha2 0.10.9",
+    "sha2 0.11.1",
     "sha3 0.10.9",
     "signal-hook 0.4.6",
     "signature 3.0.0",
