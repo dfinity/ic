@@ -34,7 +34,7 @@ use ic_tests_ckbtc::{
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
-use k256::elliptic_curve::SecretKey;
+use k256::{SecretKey, pkcs8::LineEnding};
 use rand::{SeedableRng, rngs::OsRng};
 use rand_chacha::ChaChaRng;
 use slog::{debug, info};
@@ -266,7 +266,10 @@ pub fn test_update_balance(env: TestEnv) {
         // to have caller != new_caller
         let mut mutable_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
-        let identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+        let key = SecretKey::random(&mut rng)
+            .to_sec1_pem(LineEnding::LF)
+            .unwrap();
+        let identity = Secp256k1Identity::from_pem(key.as_bytes()).unwrap();
         mutable_agent.set_identity(identity);
         let minter_agent = CkBtcMinterAgent {
             agent: mutable_agent.clone(),

@@ -57,7 +57,6 @@ pub enum InitialIDkgDealingsValidationError {
     InvalidTranscriptOperation,
     MismatchingDealing,
     MultipleDealingsFromSameDealer { node_id: NodeId },
-    MultipleSupportSharesFromSameReceiver { node_id: NodeId },
     UnsatisfiedCollectionThreshold { threshold: u32, dealings_count: u32 },
 }
 impl_display_using_debug!(InitialIDkgDealingsValidationError);

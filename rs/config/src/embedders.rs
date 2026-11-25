@@ -23,7 +23,7 @@ pub const MAX_GLOBALS: usize = 1000;
 // NOTE. The following constant is contained in the public Interface Specification.
 // Please update the corresponding section (https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/)
 // if you change its value.
-pub(crate) const MAX_FUNCTIONS: usize = 50000;
+pub const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.
 // NOTE. The following constant is contained in the public Interface Specification.
 // Please update the corresponding section (https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/)
@@ -124,11 +124,8 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
     NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
 // Maximum number of Wasm heap OS pages (4KiB) that a single message execution
-// is allowed to access. The default equals the maximum heap size, so the limit
-// is never hit; it is lowered through the config once all heap accesses are
-// covered by the limit checks.
-const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages =
-    NumOsPages::new(MAX_WASM64_MEMORY_IN_BYTES / (PAGE_SIZE as u64));
+// is allowed to access. The default equals the old maximum heap size.
+const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages = NumOsPages::new(6 * GIB / (PAGE_SIZE as u64));
 
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
@@ -151,7 +148,7 @@ impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            wasm_memory_accessed_page_limit: FlagStatus::Disabled,
+            wasm_memory_accessed_page_limit: FlagStatus::Enabled,
         }
     }
 }

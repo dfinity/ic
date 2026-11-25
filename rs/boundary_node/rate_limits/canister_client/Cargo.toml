@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 ic-agent = { workspace = true }
-k256 = { workspace = true }
 rate-limits-api = { path = "../api" }
 serde = { workspace = true }
 serde_yaml = { workspace = true }

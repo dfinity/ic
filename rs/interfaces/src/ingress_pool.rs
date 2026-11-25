@@ -1,10 +1,11 @@
 //! The ingress pool public interface.
 use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
-    CountBytes, NodeId, Time,
+    CanisterId, CountBytes, NodeId, Time,
     artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress},
+    messages::{MessageId, SignedIngress, extract_effective_canister_id},
 };
+use std::sync::OnceLock;
 
 // tag::interface[]
 
@@ -14,7 +15,7 @@ use ic_types::{
 #[derive(Clone)]
 pub struct IngressPoolObject {
     /// The received ingress message
-    pub signed_ingress: SignedIngress,
+    signed_ingress: SignedIngress,
 
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
@@ -26,7 +27,17 @@ pub struct IngressPoolObject {
 
     /// Byte size of the ingress message.
     byte_size: usize,
+
+    /// The result of [`extract_effective_canister_id`] for the ingress message,
+    /// computed on first use by the method
+    /// [`IngressPoolObject::effective_canister_id`].
+    effective_canister_id: OnceLock<Result<Option<CanisterId>, InvalidManagementMessage>>,
 }
+
+/// The effective canister ID of an ingress message addressed to the management
+/// canister cannot be determined.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct InvalidManagementMessage;
 
 impl IngressPoolObject {
     pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
@@ -38,7 +49,27 @@ impl IngressPoolObject {
             message_id,
             originator_id,
             byte_size,
+            effective_canister_id: OnceLock::new(),
         }
+    }
+
+    /// Returns the signed ingress message wrapped by this pool object.
+    ///
+    /// The message is immutable because the cached effective canister ID is
+    /// derived from its contents.
+    pub fn signed_ingress(&self) -> &SignedIngress {
+        &self.signed_ingress
+    }
+
+    /// Returns the effective canister ID of the ingress message, as determined by
+    /// [`extract_effective_canister_id`]. It is computed on the first call (decoding
+    /// the method payload of management canister messages) and cached afterwards,
+    /// including if it cannot be determined.
+    pub fn effective_canister_id(&self) -> Result<Option<CanisterId>, InvalidManagementMessage> {
+        *self.effective_canister_id.get_or_init(|| {
+            extract_effective_canister_id(self.signed_ingress.content())
+                .map_err(|_| InvalidManagementMessage)
+        })
     }
 }
 
@@ -50,7 +81,7 @@ impl CountBytes for IngressPoolObject {
 
 impl From<&IngressPoolObject> for IngressMessageId {
     fn from(obj: &IngressPoolObject) -> IngressMessageId {
-        IngressMessageId::new(obj.signed_ingress.expiry_time(), obj.message_id.clone())
+        IngressMessageId::new(obj.signed_ingress().expiry_time(), obj.message_id.clone())
     }
 }
 

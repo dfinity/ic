@@ -22,7 +22,10 @@ use hyper_util::{
     server::conn::auto::Builder,
 };
 use rand::Rng;
-use rustls::ServerConfig;
+use rustls::{
+    ServerConfig,
+    pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+};
 use serde_json::json;
 use tokio::{
     net::TcpListener,
@@ -293,11 +296,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             // Load public certificate.
             let cert_file = tokio::fs::read(cert_file).await?;
             let certs =
-                rustls_pemfile::certs(&mut cert_file.as_ref()).collect::<Result<Vec<_>, _>>()?;
+                CertificateDer::pem_slice_iter(&cert_file).collect::<Result<Vec<_>, _>>()?;
 
             // Load private key.
             let key_file = tokio::fs::read(key_file).await?;
-            let key = rustls_pemfile::private_key(&mut key_file.as_ref())?.unwrap();
+            let key = PrivateKeyDer::from_pem_slice(&key_file)?;
 
             let mut config = ServerConfig::builder()
                 .with_no_client_auth()

@@ -55,7 +55,7 @@ rust.toolchain(
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
-BUILD_INFO_REV = "27ba16a68aa312de66f2ebd0f16665f1429eee36"
+BUILD_INFO_REV = "b96be92274ec232fedba53a0c9c4b807b96ff17e"
 
 # Fork of `comparable` migrated to syn 2 (upstream still uses syn 1).
 COMPARABLE_REV = "8338f595496454f9e770389e2edc0d96e137a4e9"
@@ -154,15 +154,18 @@ crate.spec(
     version = "^1.0.93",
 )
 crate.spec(
+    default_features = False,
     features = [
+        "derive",
         "serde_json",
+        "std",
     ],
     package = "askama",
     version = "^0.16.1",
 )
 crate.spec(
     package = "assert_cmd",
-    version = "^2.0.16",
+    version = "^2.2.2",
 )
 crate.spec(
     package = "assert_matches",
@@ -214,7 +217,7 @@ crate.spec(
 )
 crate.spec(
     package = "bech32",
-    version = "^0.9.0",
+    version = "^0.12.0",
 )
 crate.spec(
     package = "bincode",
@@ -393,7 +396,7 @@ crate.spec(
 )
 crate.spec(
     package = "darling",
-    version = "^0.20.11",
+    version = "^0.24.1",
 )
 crate.spec(
     package = "dashmap",
@@ -438,10 +441,6 @@ crate.spec(
     ],
     package = "ed25519-dalek",
     version = "^2.2.0",
-)
-crate.spec(
-    package = "educe",
-    version = "^0.5",
 )
 crate.spec(
     package = "erased-serde",
@@ -553,6 +552,79 @@ rust_library(
     override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.2.17//:getrandom_no_wasm_bindgen",
     version = "^0.2",
 )
+
+# quinn-proto and vrl select getrandom 0.4's `wasm_js` feature for wasm32, which causes cargo-bazel to
+# enable wasm-bindgen in getrandom 0.4.x for wasm32-unknown-unknown. Because features are unified per
+# platform, a crate that enables `getrandom` on crypto-common 0.2 or crypto-bigint 0.7 (ic-agent 0.50
+# does, via k256/p256 0.14 `std`) then pulls wasm-bindgen into every canister linking those crates, and
+# such modules cannot be installed. We override the getrandom lib target with an identical copy that,
+# on wasm32 only, omits wasm-bindgen and `wasm_js` and selects the `unsupported` backend: canisters have
+# no synchronous source of system randomness, so getrandom returns `Error::UNSUPPORTED` at runtime.
+# A cfg-only `crate.annotation_select` for wasm32 (as for secp256k1-sys below) is not enough: with
+# `wasm_js` still enabled, getrandom 0.4.3 refers to `Error::WEB_CRYPTO`, which only its wasm_js
+# backend defines. TODO: replace this copy with such an annotation_select once we upgrade to a
+# getrandom that includes https://github.com/rust-random/getrandom/pull/876.
+# The labels below pin getrandom 0.4.3 and rand_core 0.10.1: update them when either is repinned.
+crate.annotation(
+    additive_build_file_content = """\
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "getrandom_no_wasm_bindgen",
+    srcs = glob(
+        allow_empty = True,
+        include = ["**/*.rs"],
+    ),
+    compile_data = glob(
+        allow_empty = True,
+        include = ["**"],
+        exclude = [
+            "**/* *",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
+    crate_features = ["std", "sys_rng"],
+    crate_name = "getrandom",
+    crate_root = "src/lib.rs",
+    deps = [
+        ":build_script_build",
+        "@crate_index//:cfg-if",
+        "@crate_index__rand_core-0.10.1//:rand_core",
+    ] + select({
+        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index//:libc"],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index//:libc"],
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index//:libc"],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index//:libc"],
+        "//conditions:default": [],
+    }),
+    edition = "2024",
+    rustc_env_files = [":cargo_toml_env_vars"],
+    rustc_flags = ["--cap-lints=allow"] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": ['--cfg=getrandom_backend="unsupported"'],
+        "//conditions:default": [],
+    }),
+    tags = ["cargo-bazel", "crate-name=getrandom", "manual", "noclippy", "norustfmt"],
+    target_compatible_with = select({
+        "@rules_rust//rust/platform:aarch64-apple-darwin": [],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": [],
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": [],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    version = "0.4.3",
+    visibility = ["//visibility:public"],
+)
+""",
+    crate = "getrandom",
+    override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.4.3//:getrandom_no_wasm_bindgen",
+    version = "^0.4",
+)
 crate.spec(
     package = "gpt",
     version = "4.1",
@@ -603,11 +675,12 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "p384",
+        "nistp",
+        "aes",
         "alloc",
     ],
     package = "hpke",
-    version = "^0.13",
+    version = "^0.15.1",
 )
 crate.spec(
     package = "humantime",
@@ -649,7 +722,7 @@ crate.spec(
         "pem",
     ],
     package = "ic-agent",
-    version = "^0.49.1",
+    version = "^0.50.0",
 )
 crate.spec(
     features = [
@@ -659,7 +732,7 @@ crate.spec(
         "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "^0.9",
+    version = "^0.11",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -721,7 +794,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-identity-hsm",
-    version = "^0.49.1",
+    version = "^0.50.0",
 )
 crate.spec(
     package = "ic-metrics-encoder",
@@ -765,12 +838,12 @@ crate.spec(
 )
 crate.spec(
     package = "ic-transport-types",
-    version = "^0.49.1",
+    version = "^0.50.0",
 )
 crate.spec(
     features = ["raw"],
     package = "ic-utils",
-    version = "^0.49.1",
+    version = "^0.50.0",
 )
 crate.spec(
     default_features = False,
@@ -896,19 +969,15 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "libfuzzer-sys",
-    version = "^0.4.7",
+    version = "^0.4.13",
 )
 crate.spec(
     package = "libnss",
-    version = "^0.5.0",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "libsystemd",
     version = "0.7.2",
-)
-crate.spec(
-    package = "little-loadshedder",
-    version = "^0.2.0",
 )
 crate.spec(
     git = "https://github.com/dfinity-lab/lmdb-rs",
@@ -944,7 +1013,7 @@ crate.spec(
 )
 crate.spec(
     package = "maxminddb",
-    version = "^0.29",
+    version = "^0.32",
 )
 crate.spec(
     features = [
@@ -981,7 +1050,7 @@ crate.spec(
 )
 crate.spec(
     package = "nftables",
-    version = "^0.4.1",
+    version = "^0.6.3",
 )
 crate.spec(
     features = [
@@ -1095,7 +1164,7 @@ crate.spec(
 )
 crate.spec(
     package = "ping",
-    version = "^0.5.0",
+    version = "^0.10.0",
 )
 crate.spec(
     default_features = False,
@@ -1139,7 +1208,7 @@ crate.spec(
 )
 crate.spec(
     package = "proptest",
-    version = "=1.6.0",
+    version = "^1.12.0",
 )
 crate.spec(
     package = "prometheus-parse",
@@ -1195,11 +1264,12 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "os_rng",
+        "std_rng",
+        "sys_rng",
     ],
     package = "rand",
-    package_alias = "rand_0_9",
-    version = "^0.9.3",
+    package_alias = "rand_0_10",
+    version = "^0.10.4",
 )
 crate.spec(
     package = "rand_chacha",
@@ -1208,8 +1278,8 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "rand_chacha",
-    package_alias = "rand_chacha_0_9",
-    version = "^0.9.0",
+    package_alias = "rand_chacha_0_10",
+    version = "^0.10.0",
 )
 crate.spec(
     package = "rand_distr",
@@ -1217,11 +1287,22 @@ crate.spec(
 )
 crate.spec(
     package = "ratelimit",
-    version = "^0.9.1",
+    version = "^0.10.1",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "all-widgets",
+        "crossterm",
+        "layout-cache",
+        "macros",
+    ],
     package = "ratatui",
-    version = "^0.29",
+    version = "^0.30.2",
+)
+crate.spec(
+    package = "ratatui-textarea",
+    version = "^0.9.4",
 )
 crate.spec(
     package = "rayon",
@@ -1263,7 +1344,7 @@ crate.spec(
 )
 crate.spec(
     package = "rexpect",
-    version = "0.6",
+    version = "^0.7.1",
 )
 crate.spec(
     package = "ripemd",
@@ -1314,7 +1395,7 @@ crate.spec(
         "hooks",
     ],
     package = "rusqlite",
-    version = "^0.42.0",
+    version = "^0.43.0",
 )
 crate.spec(
     default_features = False,
@@ -1354,10 +1435,6 @@ crate.spec(
     version = "^0.23.46",
 )
 crate.spec(
-    package = "rustls-pemfile",
-    version = "^2.1.2",
-)
-crate.spec(
     package = "rusty-fork",
     version = "^0.3.0",
 )
@@ -1385,15 +1462,6 @@ crate.spec(
     default_features = False,
     package = "scrypt",
     version = "^0.11.0",
-)
-crate.spec(
-    features = [
-        "global-context",
-        "rand",
-        "std",
-    ],
-    package = "secp256k1",
-    version = "^0.29",
 )
 crate.spec(
     package = "security-framework",
@@ -1540,13 +1608,13 @@ crate.spec(
     version = "1.1.0",
 )
 crate.spec(
-    default_features = False,
+    features = ["derive"],
     package = "strum",
-    version = "^0.26.3",
+    version = "^0.28.0",
 )
 crate.spec(
     package = "strum_macros",
-    version = "^0.26.4",
+    version = "^0.28.0",
 )
 crate.spec(
     package = "stubborn-io",
@@ -1562,7 +1630,7 @@ crate.spec(
         "full",
     ],
     package = "syn",
-    version = "^2.0.110",
+    version = "^3.0.10",
 )
 crate.spec(
     package = "syscalls",
@@ -1598,10 +1666,6 @@ crate.spec(
 crate.spec(
     package = "textplots",
     version = "^0.8",
-)
-crate.spec(
-    package = "tui-textarea",
-    version = "^0.7",
 )
 crate.spec(
     package = "thiserror",
@@ -1666,7 +1730,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-rusqlite",
-    version = "^0.9",
+    version = "^0.10",
 )
 crate.spec(
     package = "tokio-tungstenite",
@@ -1848,7 +1912,7 @@ crate.spec(
 crate.spec(
     features = ["parallel"],
     package = "wirm",
-    version = "4.0.4",
+    version = "5.2.0",
 )
 crate.spec(
     default_features = False,
@@ -2025,6 +2089,17 @@ crate.annotation(
         "-C",
         "opt-level=3",
     ],
+)
+
+# Build p384 0.14 with its formally verified fiat-crypto field and scalar
+# arithmetic instead of its default crypto-bigint backend. p384 depends on
+# fiat-crypto only under `cfg(p384_backend = "fiat")`, which crate_universe maps
+# to no platform, so the annotation adds that dependency too.
+crate.annotation(
+    crate = "p384",
+    rustc_flags = ["--cfg=p384_backend=\"fiat\""],
+    version = "^0.14",
+    deps = ["@@rules_rust++crate+crate_index__fiat-crypto-0.3.0//:fiat_crypto"],
 )
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)

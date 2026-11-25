@@ -21,7 +21,7 @@ use ic_protobuf::{
 };
 use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
@@ -389,21 +389,20 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             .ok_or(ProxyDecodeError::MissingField("response"))?;
         let id = CanisterHttpRequestId::new(response.id);
 
-        let mut signatures = BTreeMap::new();
-        for signature in payload.signatures {
+        let signatures = crate::decode_map(payload.signatures, |signature| {
             let signer = NodeId::from(PrincipalId::try_from(signature.signer)?);
             let payment_receipt = try_from_option_field(
                 signature.payment_receipt,
                 "CanisterHttpResponseSignature::payment_receipt",
             )?;
-            signatures.insert(
+            Ok((
                 signer,
                 CanisterHttpResponseSignature {
                     payment_receipt,
                     signature: BasicSigOf::new(BasicSig(signature.signature)),
                 },
-            );
-        }
+            ))
+        })?;
 
         Ok(CanisterHttpResponseWithConsensus {
             content: CanisterHttpResponse {
@@ -841,6 +840,7 @@ mod tests {
     use crate::exhaustive::ExhaustiveSet;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_types_cycles::Cycles;
+    use std::collections::BTreeMap;
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.
@@ -913,6 +913,52 @@ mod tests {
         let new_artifact_without_response =
             CanisterHttpResponseArtifact::try_from(pb_artifact_without_response).unwrap();
         assert_eq!(artifact_without_response, new_artifact_without_response);
+    }
+
+    /// The signers of a response's proof must be distinct.
+    #[test]
+    fn canister_http_response_with_consensus_signers_are_distinct() {
+        let id = CanisterHttpRequestId::new(1);
+        let signer = NodeId::from(PrincipalId::new_node_test_id(1));
+        let response = CanisterHttpResponseWithConsensus {
+            content: CanisterHttpResponse {
+                id,
+                content: CanisterHttpResponseContent::Success(vec![1, 2, 3]),
+            },
+            proof: CanisterHttpResponseProof {
+                metadata: CanisterHttpResponseMetadata {
+                    id,
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                    content_size: 3,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::try_from("test_replica_version").unwrap(),
+                },
+                signatures: BTreeMap::from([(
+                    signer,
+                    CanisterHttpResponseSignature {
+                        payment_receipt: CanisterHttpPaymentReceipt {
+                            spent: Cycles::new(42),
+                        },
+                        signature: BasicSigOf::new(BasicSig(vec![1; 64])),
+                    },
+                )]),
+            },
+            initial_spent: Cycles::new(42),
+        };
+        let mut proto = pb::CanisterHttpResponseWithConsensus::from(response.clone());
+        assert_eq!(
+            CanisterHttpResponseWithConsensus::try_from(proto.clone()).unwrap(),
+            response
+        );
+
+        let mut repeated = proto.signatures[0].clone();
+        repeated.signature = vec![2; 64];
+        proto.signatures.insert(0, repeated);
+
+        assert_matches::assert_matches!(
+            CanisterHttpResponseWithConsensus::try_from(proto),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == format!("{signer:?}")
+        );
     }
 
     #[test]

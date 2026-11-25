@@ -203,7 +203,6 @@ system_test_nns(
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:itertools",
-        "@crate_index//:k256",
         "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:wat",
