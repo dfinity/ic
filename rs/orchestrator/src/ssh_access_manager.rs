@@ -148,7 +148,11 @@ impl SshAccessManager {
 
         match cmd.wait_with_output() {
             Ok(output) if output.status.success() => Ok(()),
-            Ok(output) => Err(format!("Script failed ({})", output.status)),
+            Ok(output) => Err(format!(
+                "Script failed ({}): {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )),
             Err(e) => Err(e.to_string()),
         }
     }
