@@ -63,19 +63,16 @@ impl TryFrom<pb::IngressPayload> for IngressPayload {
     type Error = ProxyDecodeError;
 
     fn try_from(payload: pb::IngressPayload) -> Result<Self, Self::Error> {
-        let mut serialized_ingress_messages = BTreeMap::new();
-
-        for ingress_message_proto in payload.ingress_messages {
+        let serialized_ingress_messages = crate::decode_map(payload.ingress_messages, |message| {
             let ingress_message_id = IngressMessageId::new(
-                Time::from_nanos_since_unix_epoch(ingress_message_proto.expiry),
-                MessageId::try_from(ingress_message_proto.message_id.as_slice())?,
+                Time::from_nanos_since_unix_epoch(message.expiry),
+                MessageId::try_from(message.message_id.as_slice())?,
             );
-
-            serialized_ingress_messages.insert(
+            Ok((
                 ingress_message_id,
-                SignedRequestBytes::from(ingress_message_proto.signed_request_bytes),
-            );
-        }
+                SignedRequestBytes::from(message.signed_request_bytes),
+            ))
+        })?;
 
         Ok(Self {
             serialized_ingress_messages,
@@ -204,6 +201,27 @@ mod tests {
         time::expiry_time_from_now,
     };
     use std::convert::TryFrom;
+
+    #[test]
+    fn ingress_payload_messages_are_distinct() {
+        use crate::exhaustive::ExhaustiveSet;
+        use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+        let rng = &mut ReproducibleRng::new();
+        let payload = IngressPayload::exhaustive_set(rng)
+            .into_iter()
+            .find(|payload| payload.message_count() > 0)
+            .unwrap();
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &pb::IngressPayload::from(&payload),
+            IngressPayload::try_from,
+            &[|proto| {
+                proto
+                    .ingress_messages
+                    .push(proto.ingress_messages[0].clone())
+            }],
+        );
+    }
 
     fn fake_http_call_content(method_name: &str) -> HttpCallContent {
         HttpCallContent::Call {

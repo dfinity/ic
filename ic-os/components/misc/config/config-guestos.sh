@@ -20,3 +20,11 @@ function get_config_value() {
         echo "${value}"
     fi
 }
+
+# Returns success if running in an Upgrade VM, which does not open the encrypted
+# store. Like maybe-disable-store-mounts.service, this treats every VM type
+# other than "default" as such. init-config.service records the VM type, so
+# this also returns success before it has run or if it failed.
+function is_upgrade_vm() {
+    [ ! -e /run/config/guest_vm_type/default ]
+}

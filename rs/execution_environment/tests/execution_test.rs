@@ -3554,9 +3554,8 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
 
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
-/// canisters it loads, exactly as the refresh on every committed state does. From
-/// certification version `V29` on, that aggregate (or, from `V30` on, its
-/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a
+/// canisters it loads, exactly as the refresh on every committed state does. Its
+/// monotonic counterpart is what `/subnet/<subnet_id>/metrics` certifies, so a
 /// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
 /// as one that kept running.
 #[test]
@@ -3656,8 +3655,7 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
 
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is refreshed on every committed state, not only on the rounds that happen to
-/// touch the subnet-level fields. From certification version `V29` on the aggregate
-/// (or, from `V30` on, its monotonic counterpart) is certified at
+/// touch the subnet-level fields. Its monotonic counterpart is certified at
 /// `/subnet/<subnet_id>/metrics`, so a stale one would be served to
 /// users as the current consumption of the subnet.
 ///

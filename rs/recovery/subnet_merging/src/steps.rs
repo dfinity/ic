@@ -692,6 +692,19 @@ impl Step for CheckRoutingTableStep {
     }
 }
 
+/// The height of the merged state assembled by [MergeStatesStep], which follows
+/// from the heights of the CUPs the two subnets halted at.
+fn merged_state_height(
+    layout: &Layout,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
+) -> RecoveryResult<Height> {
+    let source_height = read_cup_file(&layout.halting_cup_file(source_subnet_id))?.height();
+    let destination_height =
+        read_cup_file(&layout.halting_cup_file(destination_subnet_id))?.height();
+    Ok(merged_recovery_height(source_height, destination_height))
+}
+
 /// The state hash of the merged state assembled by [MergeStatesStep]: the root
 /// hash of its manifest, which has to match the expected one.
 fn merged_state_hash(layout: &Layout) -> RecoveryResult<String> {
@@ -745,7 +758,8 @@ fn check_time_is_past_halting_times(
 ///
 /// Its height and state hash are read when the step is described or executed
 /// rather than when it is created: a step that fails to be created is skipped,
-/// and the tool would then carry on without a recovery CUP.
+/// and the tool would then upload the merged state and unhalt the destination
+/// subnet without a recovery CUP.
 pub(crate) struct ProposeRecoveryCupStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
@@ -757,21 +771,19 @@ pub(crate) struct ProposeRecoveryCupStep {
 
 impl ProposeRecoveryCupStep {
     /// The proposal for the recovery CUP at the merged state, stamped with
-    /// `time`. The height of the merged state follows from the heights of the
-    /// CUPs the two subnets halted at, as in [MergeStatesStep].
+    /// `time`.
     fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
-        let source_height =
-            read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
-        let destination_height =
-            read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
-
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: get_propose_recovery_cup_command(
                 &self.admin_helper,
                 self.source_subnet_id,
                 self.destination_subnet_id,
-                merged_recovery_height(source_height, destination_height),
+                merged_state_height(
+                    &self.layout,
+                    self.source_subnet_id,
+                    self.destination_subnet_id,
+                )?,
                 merged_state_hash(&self.layout)?,
                 time,
             ),
@@ -933,5 +945,35 @@ impl Step for RestartDestinationReplicaStep {
         self.node
             .execute(CMD_RESTART_REPLICA.to_string(), confirmation_logger)?;
         Ok(())
+    }
+}
+
+/// Waits until the destination subnet came up on the merged state, i.e. until
+/// the node the merged state was uploaded to reports the recovery CUP.
+pub(crate) struct WaitForRecoveryCupStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for WaitForRecoveryCupStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until node {} reports the recovery CUP holding the merged state.",
+            self.node_ip,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let height = merged_state_height(
+            &self.layout,
+            self.source_subnet_id,
+            self.destination_subnet_id,
+        )?;
+        let state_hash = merged_state_hash(&self.layout)?;
+
+        Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, height, state_hash)
     }
 }

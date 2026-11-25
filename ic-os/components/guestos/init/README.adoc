@@ -10,7 +10,10 @@ The +ssh/generate-host-ssh-keys+ (and corresponding shell script) service perfor
 two things: If this is the first boot ever (on a newly installed system), it
 generates ssh keys and stashes them away in a location that is preserved across
 upgrades. On first boot after an upgrade, it integrates the keys from their
-storage location into the running system.
+storage location into the running system. Without TEE, the storage location is
+the +config+ partition. With TEE (SEV-SNP), the host can read and write the
++config+ partition, so the keys are kept in the SEV-encrypted store partition
+instead.
 
 == Encrypted data store setup
 The partition number 10 is used as encrypted LVM containing at least the

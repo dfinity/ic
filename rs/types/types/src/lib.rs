@@ -108,6 +108,7 @@ use ic_utils_thousands::separate_with_underscores;
 use more_asserts::debug_assert_gt;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
@@ -179,6 +180,46 @@ pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecod
     let principal_id: PrincipalId =
         try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))
+}
+
+/// Decodes protobuf entries into a map, rejecting a key that repeats an earlier one.
+pub(crate) fn decode_map<I: IntoIterator, K: Ord + fmt::Debug, V>(
+    entries: I,
+    mut decode: impl FnMut(I::Item) -> Result<(K, V), ProxyDecodeError>,
+) -> Result<BTreeMap<K, V>, ProxyDecodeError> {
+    let mut map = BTreeMap::new();
+    for entry in entries {
+        let (key, value) = decode(entry)?;
+        match map.entry(key) {
+            btree_map::Entry::Vacant(entry) => {
+                entry.insert(value);
+            }
+            btree_map::Entry::Occupied(entry) => return Err(duplicate_entry(entry.key())),
+        }
+    }
+    Ok(map)
+}
+
+/// Decodes protobuf items into a set, rejecting an item that repeats an earlier one.
+pub(crate) fn decode_set<I: IntoIterator, T: Ord + fmt::Debug>(
+    items: I,
+    mut decode: impl FnMut(I::Item) -> Result<T, ProxyDecodeError>,
+) -> Result<BTreeSet<T>, ProxyDecodeError> {
+    let mut set = BTreeSet::new();
+    for item in items {
+        if let Some(item) = set.replace(decode(item)?) {
+            return Err(duplicate_entry(&item));
+        }
+    }
+    Ok(set)
+}
+
+fn duplicate_entry(key: &impl fmt::Debug) -> ProxyDecodeError {
+    ProxyDecodeError::DuplicateEntry {
+        key: format!("{key:?}"),
+        v1: String::new(),
+        v2: String::new(),
+    }
 }
 
 pub struct NumInstructionsTag;
@@ -541,5 +582,64 @@ impl<T: DiskBytes, E: DiskBytes> DiskBytes for Result<T, E> {
 impl<T: DiskBytes> DiskBytes for Arc<T> {
     fn disk_bytes(&self) -> usize {
         self.as_ref().disk_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+
+    /// Checks that `proto` decodes, but no longer does once any of `repeats` repeats one of
+    /// its entries.
+    pub(crate) fn assert_repeated_entries_fail_to_decode<P: Clone, T: fmt::Debug>(
+        proto: &P,
+        decode: impl Fn(P) -> Result<T, ProxyDecodeError>,
+        repeats: &[fn(&mut P)],
+    ) {
+        decode(proto.clone()).expect("Failed to decode the original proto");
+        for repeat in repeats {
+            let mut repeated = proto.clone();
+            repeat(&mut repeated);
+            assert_matches!(
+                decode(repeated),
+                Err(ProxyDecodeError::DuplicateEntry { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn decode_map_requires_distinct_keys() {
+        assert_eq!(
+            decode_map([(1, 'a'), (2, 'b')], Ok).unwrap(),
+            BTreeMap::from([(1, 'a'), (2, 'b')])
+        );
+        assert_matches!(
+            decode_map([(1, 'a'), (2, 'b'), (1, 'c')], Ok),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
+        );
+        assert_matches!(
+            decode_map([(1, 'a'), (2, 'b')], |(key, value)| match key {
+                1 => Ok((key, value)),
+                _ => Err(ProxyDecodeError::MissingField("value")),
+            }),
+            Err(ProxyDecodeError::MissingField("value"))
+        );
+    }
+
+    #[test]
+    fn decode_set_requires_distinct_items() {
+        assert_eq!(decode_set([1, 2], Ok).unwrap(), BTreeSet::from([1, 2]));
+        assert_matches!(
+            decode_set([1, 2, 1], Ok),
+            Err(ProxyDecodeError::DuplicateEntry { key, .. }) if key == "1"
+        );
+        assert_matches!(
+            decode_set([1, 2], |item| match item {
+                1 => Ok(item),
+                _ => Err(ProxyDecodeError::MissingField("item")),
+            }),
+            Err(ProxyDecodeError::MissingField("item"))
+        );
     }
 }
