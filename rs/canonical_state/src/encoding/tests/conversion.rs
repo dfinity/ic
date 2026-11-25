@@ -2,7 +2,6 @@ use super::test_fixtures::*;
 use crate::encoding::types::{self, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS, StreamFlagBits};
 use crate::{MAX_SUPPORTED_CERTIFICATION_VERSION, all_supported_versions};
 use assert_matches::assert_matches;
-use ic_certification_version::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::messages::{Payload, RejectContext, StreamMessage};
@@ -204,9 +203,7 @@ fn roundtrip_conversion_reject_response() {
 
 #[test]
 fn roundtrip_conversion_anonymous_refund() {
-    for certification_version in
-        all_supported_versions().filter(|v| v >= &CertificationVersion::V22)
-    {
+    for certification_version in all_supported_versions() {
         let refund = anonymous_refund(certification_version);
 
         assert_eq!(

@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-11-24: Proposal 144971
+
+http://dashboard.internetcomputer.org/proposal/144971
+
+Just a maintenance release, i.e. no new features or fixes. This upgrade just
+makes sure that the code we have in production is not too far behind what's in
+master.
+
+
 # 2026-11-16: Proposal 144845
 
 http://dashboard.internetcomputer.org/proposal/144845

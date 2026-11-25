@@ -57,6 +57,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     path::PathBuf,
     sync::Arc,
     sync::atomic::AtomicU64,
@@ -147,11 +148,11 @@ struct Instance {
 
 struct HttpGateway {
     details: HttpGatewayDetails,
-    shutdown_handle: Handle,
+    shutdown_handle: Handle<SocketAddr>,
 }
 
 impl HttpGateway {
-    fn new(details: HttpGatewayDetails, shutdown_handle: Handle) -> Self {
+    fn new(details: HttpGatewayDetails, shutdown_handle: Handle<SocketAddr>) -> Self {
         Self {
             details,
             shutdown_handle,
@@ -935,6 +936,7 @@ impl ApiState {
             match https_config {
                 Some(config) => {
                     axum_server::from_tcp_rustls(listener, config)
+                        .unwrap()
                         .handle(axum_handle)
                         .serve(router)
                         .await
@@ -942,6 +944,7 @@ impl ApiState {
                 }
                 None => {
                     axum_server::from_tcp(listener)
+                        .unwrap()
                         .handle(axum_handle)
                         .serve(router)
                         .await

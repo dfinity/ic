@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "3365d965d2ee4c8f379c80ddc0cc205cc731a1802afeb59ec5c65b0881f879f9",
+  "checksum": "79f868872e18fd82e8ff6bda23b12b34cbb41a18505b171bc8c3be3585a39804",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4974,35 +4974,6 @@
       ],
       "version": "0.7.8"
     },
-    "as-any 0.3.2": {
-      "common_attrs": {
-        "edition": "2018"
-      },
-      "library_target_name": "as_any",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "as-any",
-      "package_url": "https://codeberg.org/fogti/as-any",
-      "repository": {
-        "Http": {
-          "sha256": "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063",
-          "url": "https://static.crates.io/crates/as-any/0.3.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "as_any",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.2"
-    },
     "ascii-canvas 3.0.0": {
       "common_attrs": {
         "deps": [
@@ -7055,13 +7026,12 @@
       ],
       "version": "0.14.1"
     },
-    "axum-server 0.7.3": {
+    "axum-server 0.9.2": {
       "common_attrs": {
         "crate_features": [
           "arc-swap",
           "default",
           "rustls",
-          "rustls-pemfile",
           "rustls-pki-types",
           "tls-rustls-no-provider",
           "tokio-rustls"
@@ -7074,6 +7044,10 @@
           {
             "id": "bytes 1.12.2",
             "target": "bytes"
+          },
+          {
+            "id": "either 1.19.0",
+            "target": "either"
           },
           {
             "id": "fs-err 3.3.2",
@@ -7104,12 +7078,12 @@
             "target": "rustls"
           },
           {
-            "id": "rustls-pemfile 2.2.0",
-            "target": "rustls_pemfile"
-          },
-          {
             "id": "rustls-pki-types 1.16.0",
             "target": "rustls_pki_types"
+          },
+          {
+            "id": "socket2 0.6.5",
+            "target": "socket2"
           },
           {
             "id": "tokio 1.54.1",
@@ -7136,8 +7110,8 @@
       "package_url": "https://github.com/programatik29/axum-server",
       "repository": {
         "Http": {
-          "sha256": "c1ab4a3ec9ea8a657c72d99a03a824af695bd0fb5ec639ccbd9cd3543b41a5f9",
-          "url": "https://static.crates.io/crates/axum-server/0.7.3/download"
+          "sha256": "3766086d344b8f8d2a9cf6fb211b581de5b160e052d7bc75a92e58cc41909054",
+          "url": "https://static.crates.io/crates/axum-server/0.9.2/download"
         }
       },
       "targets": [
@@ -7148,7 +7122,7 @@
           }
         }
       ],
-      "version": "0.7.3"
+      "version": "0.9.2"
     },
     "backon 1.6.0": {
       "common_attrs": {
@@ -7928,6 +7902,45 @@
       ],
       "version": "0.6.0"
     },
+    "bit-set 0.11.1": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "bit-vec 0.10.2",
+            "target": "bit_vec"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "bit_set",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "bit-set",
+      "package_url": "https://github.com/contain-rs/bit-vec",
+      "repository": {
+        "Http": {
+          "sha256": "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c",
+          "url": "https://static.crates.io/crates/bit-set/0.11.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bit_set",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.1"
+    },
     "bit-set 0.5.3": {
       "common_attrs": {
         "deps": [
@@ -7966,7 +7979,6 @@
     "bit-set 0.8.0": {
       "common_attrs": {
         "crate_features": [
-          "default",
           "std"
         ],
         "deps": [
@@ -8067,7 +8079,6 @@
     "bit-vec 0.8.0": {
       "common_attrs": {
         "crate_features": [
-          "default",
           "std"
         ],
         "edition": "2015"
@@ -10346,7 +10357,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -10430,7 +10441,7 @@
       ],
       "version": "0.7.0"
     },
-    "candid 0.10.40": {
+    "candid 0.10.41": {
       "common_attrs": {
         "crate_features": [
           "all",
@@ -10503,7 +10514,7 @@
         "edition": "2021",
         "proc_macro_deps": [
           {
-            "id": "candid_derive 0.10.40",
+            "id": "candid_derive 0.10.41",
             "target": "candid_derive"
           },
           {
@@ -10545,8 +10556,8 @@
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "sha256": "eabf7c87ac020b0d9e07b02b63e6a109224044a524ce5b7ce98307bc5ea4d7e1",
-          "url": "https://static.crates.io/crates/candid/0.10.40/download"
+          "sha256": "a253dd9596f4b17d3fab70379d4a6b421a996b2e556f2389fdd18d1d988ff733",
+          "url": "https://static.crates.io/crates/candid/0.10.41/download"
         }
       },
       "targets": [
@@ -10557,9 +10568,9 @@
           }
         }
       ],
-      "version": "0.10.40"
+      "version": "0.10.41"
     },
-    "candid_derive 0.10.40": {
+    "candid_derive 0.10.41": {
       "common_attrs": {
         "deps": [
           {
@@ -10591,8 +10602,8 @@
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "sha256": "b6d61cd9491fc0ef12a5d2106b742e0e166026afc9e20cadd82d3f1e695cf7fc",
-          "url": "https://static.crates.io/crates/candid_derive/0.10.40/download"
+          "sha256": "48fb0884cb905b01bc3e7566e3d01f33cace6779b76384f70aea8552cef6a942",
+          "url": "https://static.crates.io/crates/candid_derive/0.10.41/download"
         }
       },
       "targets": [
@@ -10603,9 +10614,9 @@
           }
         }
       ],
-      "version": "0.10.40"
+      "version": "0.10.41"
     },
-    "candid_parser 0.1.4": {
+    "candid_parser 0.4.2": {
       "build_script_attrs": {
         "deps": [
           {
@@ -10621,94 +10632,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
-            "target": "candid"
-          },
-          {
-            "id": "codespan-reporting 0.11.1",
-            "target": "codespan_reporting"
-          },
-          {
-            "id": "convert_case 0.6.0",
-            "target": "convert_case"
-          },
-          {
-            "id": "hex 0.4.3",
-            "target": "hex"
-          },
-          {
-            "id": "lalrpop-util 0.20.2",
-            "target": "lalrpop_util"
-          },
-          {
-            "id": "logos 0.13.0",
-            "target": "logos"
-          },
-          {
-            "id": "num-bigint 0.4.8",
-            "target": "num_bigint"
-          },
-          {
-            "id": "pretty 0.12.5",
-            "target": "pretty"
-          },
-          {
-            "id": "thiserror 1.0.69",
-            "target": "thiserror"
-          }
-        ],
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "candid_parser",
-      "license": "Apache-2.0",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "candid_parser",
-      "package_url": "https://github.com/dfinity/candid",
-      "repository": {
-        "Http": {
-          "sha256": "48a3da76f989cd350b7342c64c6c6008341bb6186f6832ef04e56dc50ba0fd76",
-          "url": "https://static.crates.io/crates/candid_parser/0.1.4/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "candid_parser",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.1.4"
-    },
-    "candid_parser 0.4.1": {
-      "build_script_attrs": {
-        "deps": [
-          {
-            "id": "lalrpop 0.20.2",
-            "target": "lalrpop"
-          }
-        ]
-      },
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "anyhow 1.0.104",
-            "target": "anyhow"
-          },
-          {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -10771,8 +10695,8 @@
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "sha256": "b4d1368a4edc90c239b652b675a99fb21e5ce600c7ef3da082a3fcdb07bd1e1f",
-          "url": "https://static.crates.io/crates/candid_parser/0.4.1/download"
+          "sha256": "0869423fd06018874025dcde34b6c094cf679faa9d552ba2cbbb1d7b62177aa4",
+          "url": "https://static.crates.io/crates/candid_parser/0.4.2/download"
         }
       },
       "targets": [
@@ -10789,7 +10713,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.4.2"
     },
     "canlog 0.2.0": {
       "common_attrs": {
@@ -10798,7 +10722,7 @@
         ],
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -17681,7 +17605,7 @@
             "target": "axum_otel_metrics"
           },
           {
-            "id": "axum-server 0.7.3",
+            "id": "axum-server 0.9.2",
             "target": "axum_server"
           },
           {
@@ -17739,11 +17663,11 @@
             "target": "canbench_rs"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
-            "id": "candid_parser 0.1.4",
+            "id": "candid_parser 0.4.2",
             "target": "candid_parser"
           },
           {
@@ -17828,7 +17752,7 @@
             "target": "dashmap"
           },
           {
-            "id": "der 0.7.10",
+            "id": "der 0.8.3",
             "target": "der"
           },
           {
@@ -18098,11 +18022,11 @@
             "target": "ic_principal"
           },
           {
-            "id": "icrc1-test-env 0.1.1",
+            "id": "icrc1-test-env 0.2.0",
             "target": "icrc1_test_env"
           },
           {
-            "id": "icrc1-test-suite 0.1.1",
+            "id": "icrc1-test-suite 0.2.0",
             "target": "icrc1_test_suite"
           },
           {
@@ -18130,7 +18054,7 @@
             "target": "insta"
           },
           {
-            "id": "intmap 1.1.0",
+            "id": "intmap 3.1.3",
             "target": "intmap"
           },
           {
@@ -18138,11 +18062,11 @@
             "target": "ipnet"
           },
           {
-            "id": "itertools 0.12.1",
+            "id": "itertools 0.15.0",
             "target": "itertools"
           },
           {
-            "id": "json5 0.4.1",
+            "id": "json5 1.3.8",
             "target": "json5"
           },
           {
@@ -18341,7 +18265,7 @@
             "target": "prometheus_parse"
           },
           {
-            "id": "proptest 1.6.0",
+            "id": "proptest 1.12.0",
             "target": "proptest"
           },
           {
@@ -18367,10 +18291,6 @@
           {
             "id": "quinn 0.11.12",
             "target": "quinn"
-          },
-          {
-            "id": "quinn-udp 0.5.16",
-            "target": "quinn_udp"
           },
           {
             "id": "quote 1.0.47",
@@ -18616,7 +18536,7 @@
             "target": "socket2"
           },
           {
-            "id": "socks5-impl 0.6.2",
+            "id": "socks5-impl 0.10.3",
             "target": "socks5_impl"
           },
           {
@@ -18792,7 +18712,7 @@
             "target": "tracing_subscriber"
           },
           {
-            "id": "turmoil 0.6.6",
+            "id": "turmoil 0.7.2",
             "target": "turmoil"
           },
           {
@@ -21138,7 +21058,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -21198,7 +21118,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -26440,7 +26360,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.40",
+              "id": "candid 0.10.41",
               "target": "candid"
             },
             {
@@ -26651,7 +26571,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.40",
+              "id": "candid 0.10.41",
               "target": "candid"
             },
             {
@@ -26877,7 +26797,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27247,7 +27167,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27582,7 +27502,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27661,7 +27581,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27721,7 +27641,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27795,7 +27715,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27844,7 +27764,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -27908,7 +27828,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28003,7 +27923,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28053,7 +27973,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28171,7 +28091,7 @@
             "target": "cached"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28290,7 +28210,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28336,7 +28256,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28387,7 +28307,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28574,7 +28494,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28789,7 +28709,7 @@
             "target": "base64"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28855,7 +28775,7 @@
             "target": "bytes"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -28980,7 +28900,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29021,7 +28941,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29063,7 +28983,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29105,7 +29025,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29215,7 +29135,7 @@
             "target": "base64"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29452,7 +29372,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29498,7 +29418,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29569,7 +29489,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29640,7 +29560,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29730,7 +29650,7 @@
         ],
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -29885,7 +29805,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -30009,11 +29929,11 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
-            "id": "candid_parser 0.4.1",
+            "id": "candid_parser 0.4.2",
             "target": "candid_parser"
           },
           {
@@ -30089,7 +30009,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -30290,7 +30210,7 @@
       ],
       "version": "0.1.5"
     },
-    "icrc1-test-env 0.1.1": {
+    "icrc1-test-env 0.2.0": {
       "common_attrs": {
         "deps": [
           {
@@ -30298,7 +30218,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -30327,12 +30247,9 @@
       "name": "icrc1-test-env",
       "package_url": "https://github.com/dfinity/ICRC-1",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "26a80d777e079644cd69e883e18dad1a201f5b1a"
-          },
-          "remote": "https://github.com/dfinity/ICRC-1",
-          "strip_prefix": "test/env"
+        "Http": {
+          "sha256": "434895e78ad887188e8f9c4beda993a3a18aacea7892ddd9797b7266ec7b60c5",
+          "url": "https://static.crates.io/crates/icrc1-test-env/0.2.0/download"
         }
       },
       "targets": [
@@ -30343,9 +30260,9 @@
           }
         }
       ],
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
-    "icrc1-test-suite 0.1.1": {
+    "icrc1-test-suite 0.2.0": {
       "common_attrs": {
         "deps": [
           {
@@ -30353,7 +30270,7 @@
             "target": "anyhow"
           },
           {
-            "id": "candid 0.10.40",
+            "id": "candid 0.10.41",
             "target": "candid"
           },
           {
@@ -30361,7 +30278,7 @@
             "target": "futures"
           },
           {
-            "id": "icrc1-test-env 0.1.1",
+            "id": "icrc1-test-env 0.2.0",
             "target": "icrc1_test_env"
           }
         ],
@@ -30376,12 +30293,9 @@
       "name": "icrc1-test-suite",
       "package_url": "https://github.com/dfinity/ICRC-1",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "26a80d777e079644cd69e883e18dad1a201f5b1a"
-          },
-          "remote": "https://github.com/dfinity/ICRC-1",
-          "strip_prefix": "test/suite"
+        "Http": {
+          "sha256": "2e544e494fc0560be38838cf0bd1505ade364fc712d57e93559cee06629dea13",
+          "url": "https://static.crates.io/crates/icrc1-test-suite/0.2.0/download"
         }
       },
       "targets": [
@@ -30392,7 +30306,7 @@
           }
         }
       ],
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     "icu_collections 2.4.0": {
       "common_attrs": {
@@ -31686,7 +31600,7 @@
       ],
       "version": "0.8.5"
     },
-    "intmap 1.1.0": {
+    "intmap 3.1.3": {
       "common_attrs": {
         "crate_features": [
           "serde"
@@ -31697,7 +31611,7 @@
             "target": "serde"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "intmap",
       "license": "MIT",
@@ -31709,8 +31623,8 @@
       "package_url": "https://github.com/JesperAxelsson/rust-intmap",
       "repository": {
         "Http": {
-          "sha256": "b357564d111300f8a33b79e06795235529a627a1f7078d2b1db7f7dcdf032874",
-          "url": "https://static.crates.io/crates/intmap/1.1.0/download"
+          "sha256": "a2e611826a1868311677fdcdfbec9e8621d104c732d080f546a854530232f0ee",
+          "url": "https://static.crates.io/crates/intmap/3.1.3/download"
         }
       },
       "targets": [
@@ -31721,7 +31635,7 @@
           }
         }
       ],
-      "version": "1.1.0"
+      "version": "3.1.3"
     },
     "iocuddle 0.1.1": {
       "common_attrs": {
@@ -32083,11 +31997,6 @@
     },
     "itertools 0.12.1": {
       "common_attrs": {
-        "crate_features": [
-          "default",
-          "use_alloc",
-          "use_std"
-        ],
         "deps": [
           {
             "id": "either 1.19.0",
@@ -32923,37 +32832,32 @@
       ],
       "version": "0.3.107"
     },
-    "json5 0.4.1": {
+    "json5 1.3.8": {
       "common_attrs": {
         "deps": [
           {
-            "id": "pest 2.9.6",
-            "target": "pest"
-          },
-          {
             "id": "serde 1.0.229",
             "target": "serde"
+          },
+          {
+            "id": "ucd-trie 0.1.7",
+            "target": "ucd_trie"
           }
         ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "pest_derive 2.9.6",
-            "target": "pest_derive"
-          }
-        ]
+        "edition": "2024"
       },
       "library_target_name": "json5",
-      "license": "ISC",
+      "license": "MIT",
+      "license_file": "LICENSE",
       "license_ids": [
-        "ISC"
+        "MIT"
       ],
       "name": "json5",
       "package_url": "https://github.com/callum-oakley/json5-rs",
       "repository": {
         "Http": {
-          "sha256": "96b0db21af676c1ce64250b5f40f3ce2cf27e4e47cb91ed91eb6fe9350b430c1",
-          "url": "https://static.crates.io/crates/json5/0.4.1/download"
+          "sha256": "6c1d229cedc4e210dd2e2a6cdc59e36ce28e7338fb69367d0d2566e26de7d599",
+          "url": "https://static.crates.io/crates/json5/1.3.8/download"
         }
       },
       "targets": [
@@ -32964,7 +32868,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "1.3.8"
     },
     "jsonrpc 0.21.1": {
       "common_attrs": {
@@ -35624,46 +35528,6 @@
       ],
       "version": "0.4.35"
     },
-    "logos 0.13.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "export_derive",
-          "logos-derive",
-          "std"
-        ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "logos-derive 0.13.0",
-            "target": "logos_derive"
-          }
-        ]
-      },
-      "library_target_name": "logos",
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "logos",
-      "package_url": "https://github.com/maciejhirsz/logos",
-      "repository": {
-        "Http": {
-          "sha256": "c000ca4d908ff18ac99b93a062cb8958d331c3220719c52e77cb19cc6ac5d2c1",
-          "url": "https://static.crates.io/crates/logos/0.13.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "logos",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.0"
-    },
     "logos 0.14.4": {
       "common_attrs": {
         "crate_features": [
@@ -35704,60 +35568,6 @@
         }
       ],
       "version": "0.14.4"
-    },
-    "logos-codegen 0.13.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "beef 0.5.2",
-            "target": "beef"
-          },
-          {
-            "id": "fnv 1.0.7",
-            "target": "fnv"
-          },
-          {
-            "id": "proc-macro2 1.0.107",
-            "target": "proc_macro2"
-          },
-          {
-            "id": "quote 1.0.47",
-            "target": "quote"
-          },
-          {
-            "id": "regex-syntax 0.6.29",
-            "target": "regex_syntax"
-          },
-          {
-            "id": "syn 2.0.119",
-            "target": "syn"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "logos_codegen",
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "logos-codegen",
-      "package_url": "https://github.com/maciejhirsz/logos",
-      "repository": {
-        "Http": {
-          "sha256": "dc487311295e0002e452025d6b580b77bb17286de87b57138f3b5db711cded68",
-          "url": "https://static.crates.io/crates/logos-codegen/0.13.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "logos_codegen",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.0"
     },
     "logos-codegen 0.14.4": {
       "common_attrs": {
@@ -35817,40 +35627,6 @@
         }
       ],
       "version": "0.14.4"
-    },
-    "logos-derive 0.13.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "logos-codegen 0.13.0",
-            "target": "logos_codegen"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "logos_derive",
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "logos-derive",
-      "package_url": "https://github.com/maciejhirsz/logos",
-      "repository": {
-        "Http": {
-          "sha256": "dbfc0d229f1f42d790440136d941afd806bc9e949e2bcb8faa813b0f00d1267e",
-          "url": "https://static.crates.io/crates/logos-derive/0.13.0/download"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "logos_derive",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.0"
     },
     "logos-derive 0.14.4": {
       "common_attrs": {
@@ -45036,13 +44812,12 @@
       ],
       "version": "0.2.5"
     },
-    "proptest 1.6.0": {
+    "proptest 1.12.0": {
       "common_attrs": {
         "crate_features": [
           "bit-set",
           "default",
           "fork",
-          "lazy_static",
           "regex-syntax",
           "rusty-fork",
           "std",
@@ -45051,11 +44826,11 @@
         ],
         "deps": [
           {
-            "id": "bit-set 0.8.0",
+            "id": "bit-set 0.11.1",
             "target": "bit_set"
           },
           {
-            "id": "bit-vec 0.8.0",
+            "id": "bit-vec 0.10.2",
             "target": "bit_vec"
           },
           {
@@ -45063,23 +44838,23 @@
             "target": "bitflags"
           },
           {
-            "id": "lazy_static 1.5.1",
-            "target": "lazy_static"
+            "id": "chacha20 0.10.2",
+            "target": "chacha20"
+          },
+          {
+            "id": "core_detect 1.0.0",
+            "target": "core_detect"
           },
           {
             "id": "num-traits 0.2.19",
             "target": "num_traits"
           },
           {
-            "id": "rand 0.8.8",
+            "id": "rand 0.10.4",
             "target": "rand"
           },
           {
-            "id": "rand_chacha 0.3.1",
-            "target": "rand_chacha"
-          },
-          {
-            "id": "rand_xorshift 0.3.0",
+            "id": "rand_xorshift 0.5.0",
             "target": "rand_xorshift"
           },
           {
@@ -45099,7 +44874,7 @@
             "target": "unarray"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "proptest",
       "license": "MIT OR Apache-2.0",
@@ -45112,8 +44887,8 @@
       "package_url": "https://github.com/proptest-rs/proptest",
       "repository": {
         "Http": {
-          "sha256": "14cae93065090804185d3b75f0bf93b8eeda30c7a9b4a33d3bdb3988d6229e50",
-          "url": "https://static.crates.io/crates/proptest/1.6.0/download"
+          "sha256": "b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0",
+          "url": "https://static.crates.io/crates/proptest/1.12.0/download"
         }
       },
       "targets": [
@@ -45124,7 +44899,7 @@
           }
         }
       ],
-      "version": "1.6.0"
+      "version": "1.12.0"
     },
     "proptest-derive 0.9.0": {
       "common_attrs": {
@@ -46223,7 +45998,6 @@
       },
       "common_attrs": {
         "crate_features": [
-          "default",
           "log",
           "tracing"
         ],
@@ -46890,6 +46664,50 @@
       ],
       "version": "0.4.3"
     },
+    "rand_distr 0.5.1": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "num-traits 0.2.19",
+            "target": "num_traits"
+          },
+          {
+            "id": "rand 0.9.5",
+            "target": "rand"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "rand_distr",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rand_distr",
+      "package_url": "https://github.com/rust-random/rand_distr",
+      "repository": {
+        "Http": {
+          "sha256": "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463",
+          "url": "https://static.crates.io/crates/rand_distr/0.5.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_distr",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.1"
+    },
     "rand_pcg 0.10.3": {
       "common_attrs": {
         "deps": [
@@ -46925,15 +46743,15 @@
       ],
       "version": "0.10.3"
     },
-    "rand_xorshift 0.3.0": {
+    "rand_xorshift 0.5.0": {
       "common_attrs": {
         "deps": [
           {
-            "id": "rand_core 0.6.4",
+            "id": "rand_core 0.10.1",
             "target": "rand_core"
           }
         ],
-        "edition": "2018"
+        "edition": "2024"
       },
       "library_target_name": "rand_xorshift",
       "license": "MIT OR Apache-2.0",
@@ -46946,8 +46764,8 @@
       "package_url": "https://github.com/rust-random/rngs",
       "repository": {
         "Http": {
-          "sha256": "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f",
-          "url": "https://static.crates.io/crates/rand_xorshift/0.3.0/download"
+          "sha256": "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf",
+          "url": "https://static.crates.io/crates/rand_xorshift/0.5.0/download"
         }
       },
       "targets": [
@@ -46958,7 +46776,7 @@
           }
         }
       ],
-      "version": "0.3.0"
+      "version": "0.5.0"
     },
     "rangemap 1.8.0": {
       "common_attrs": {
@@ -48265,46 +48083,6 @@
         }
       ],
       "version": "0.1.9"
-    },
-    "regex-syntax 0.6.29": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "unicode",
-          "unicode-age",
-          "unicode-bool",
-          "unicode-case",
-          "unicode-gencat",
-          "unicode-perl",
-          "unicode-script",
-          "unicode-segment"
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "regex_syntax",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "regex-syntax",
-      "package_url": "https://github.com/rust-lang/regex",
-      "repository": {
-        "Http": {
-          "sha256": "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1",
-          "url": "https://static.crates.io/crates/regex-syntax/0.6.29/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "regex_syntax",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.6.29"
     },
     "regex-syntax 0.8.12": {
       "common_attrs": {
@@ -55460,20 +55238,17 @@
       ],
       "version": "0.6.5"
     },
-    "socks5-impl 0.6.2": {
+    "socks5-impl 0.10.3": {
       "common_attrs": {
         "crate_features": [
-          "tokio"
+          "address",
+          "default",
+          "protocol",
+          "proxy-parameters",
+          "tokio",
+          "user-key"
         ],
         "deps": [
-          {
-            "id": "as-any 0.3.2",
-            "target": "as_any"
-          },
-          {
-            "id": "byteorder 1.5.0",
-            "target": "byteorder"
-          },
           {
             "id": "bytes 1.12.2",
             "target": "bytes"
@@ -55489,6 +55264,10 @@
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "url 2.5.9",
+            "target": "url"
           }
         ],
         "edition": "2024",
@@ -55509,8 +55288,8 @@
       "package_url": "https://github.com/ssrlive/socks5-impl",
       "repository": {
         "Http": {
-          "sha256": "4b7bef5922371adf8b6f1dd0b9fe3d86c77c22686e8f4236b778ed0215cdcd9b",
-          "url": "https://static.crates.io/crates/socks5-impl/0.6.2/download"
+          "sha256": "457c3c9183a19e67d12d8838e20b653d158ddcd86758dd992d8c60c08ef15d85",
+          "url": "https://static.crates.io/crates/socks5-impl/0.10.3/download"
         }
       },
       "targets": [
@@ -55521,7 +55300,7 @@
           }
         }
       ],
-      "version": "0.6.2"
+      "version": "0.10.3"
     },
     "spin 0.9.9": {
       "common_attrs": {
@@ -61683,7 +61462,7 @@
       ],
       "version": "0.30.0"
     },
-    "turmoil 0.6.6": {
+    "turmoil 0.7.2": {
       "common_attrs": {
         "crate_features": [
           "default"
@@ -61698,11 +61477,11 @@
             "target": "indexmap"
           },
           {
-            "id": "rand 0.8.8",
+            "id": "rand 0.9.5",
             "target": "rand"
           },
           {
-            "id": "rand_distr 0.4.3",
+            "id": "rand_distr 0.5.1",
             "target": "rand_distr"
           },
           {
@@ -61730,8 +61509,8 @@
       "package_url": "https://github.com/tokio-rs/turmoil",
       "repository": {
         "Http": {
-          "sha256": "1f0d6c134ef37268c94d50fb74252af1c34c5c88389e2c1af85654da944ceb52",
-          "url": "https://static.crates.io/crates/turmoil/0.6.6/download"
+          "sha256": "0061c28f1469e94771bb8aa626ce6b29265c2fb5034115046a170b0cba2e33d2",
+          "url": "https://static.crates.io/crates/turmoil/0.7.2/download"
         }
       },
       "targets": [
@@ -61742,7 +61521,7 @@
           }
         }
       ],
-      "version": "0.6.6"
+      "version": "0.7.2"
     },
     "twox-hash 2.1.5": {
       "common_attrs": {
@@ -61885,6 +61664,7 @@
     "ucd-trie 0.1.7": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "std"
         ],
         "edition": "2021"
@@ -68976,7 +68756,7 @@
     "axum 0.8.9",
     "axum-extra 0.12.6",
     "axum-otel-metrics 0.14.1",
-    "axum-server 0.7.3",
+    "axum-server 0.9.2",
     "backon 1.6.0",
     "base64 0.23.1",
     "bech32 0.12.0",
@@ -68990,8 +68770,8 @@
     "build-info-build 0.0.47",
     "bytes 1.12.2",
     "canbench-rs 0.7.0",
-    "candid 0.10.40",
-    "candid_parser 0.1.4",
+    "candid 0.10.41",
+    "candid_parser 0.4.2",
     "cargo_metadata 0.23.1",
     "cc 1.11.2",
     "cfg-if 1.0.5",
@@ -69012,7 +68792,7 @@
     "curve25519-dalek 4.1.3",
     "darling 0.24.1",
     "dashmap 6.2.1",
-    "der 0.7.10",
+    "der 0.8.3",
     "derive-new 0.7.0",
     "devicemapper 0.34.8",
     "dialoguer 0.12.0",
@@ -69080,8 +68860,8 @@
     "ic0 1.2.0",
     "ic_bls12_381 0.10.1",
     "ic_principal 0.1.5",
-    "icrc1-test-env 0.1.1",
-    "icrc1-test-suite 0.1.1",
+    "icrc1-test-env 0.2.0",
+    "icrc1-test-suite 0.2.0",
     "idna 1.1.0",
     "indexmap 2.14.2",
     "indicatif 0.18.6",
@@ -69089,10 +68869,10 @@
     "inferno 0.12.8",
     "inotify 0.11.5",
     "insta 1.49.0",
-    "intmap 1.1.0",
+    "intmap 3.1.3",
     "ipnet 2.12.2",
-    "itertools 0.12.1",
-    "json5 0.4.1",
+    "itertools 0.15.0",
+    "json5 1.3.8",
     "jsonrpc 0.21.1",
     "k256 0.14.0",
     "keyring 3.6.3",
@@ -69142,7 +68922,7 @@
     "procfs 0.18.0",
     "prometheus 0.14.0",
     "prometheus-parse 0.2.5",
-    "proptest 1.6.0",
+    "proptest 1.12.0",
     "proptest-derive 0.9.0",
     "prost 0.14.6",
     "prost-build 0.14.6",
@@ -69150,7 +68930,6 @@
     "qrcode 0.14.1",
     "quickcheck 1.1.0",
     "quinn 0.11.12",
-    "quinn-udp 0.5.16",
     "quote 1.0.47",
     "rand 0.8.8",
     "rand 0.10.4",
@@ -69212,7 +68991,7 @@
     "slog-term 2.9.2",
     "slotmap 1.1.1",
     "socket2 0.6.5",
-    "socks5-impl 0.6.2",
+    "socks5-impl 0.10.3",
     "ssh2 0.9.7",
     "static_assertions 1.1.0",
     "strum 0.28.0",
@@ -69258,7 +69037,7 @@
     "tracing-opentelemetry 0.33.0",
     "tracing-serde 0.2.0",
     "tracing-subscriber 0.3.23",
-    "turmoil 0.6.6",
+    "turmoil 0.7.2",
     "url 2.5.9",
     "uuid 1.12.1",
     "virt 0.4.3",

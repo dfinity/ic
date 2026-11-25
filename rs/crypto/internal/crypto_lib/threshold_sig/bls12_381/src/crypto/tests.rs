@@ -14,7 +14,7 @@ use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
 use proptest::std_facade::HashSet;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 
 pub mod util {
