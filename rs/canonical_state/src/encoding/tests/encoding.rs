@@ -51,9 +51,7 @@ fn roundtrip_encoding_reject_response() {
 
 #[test]
 fn roundtrip_encoding_anonymous_refund() {
-    for certification_version in
-        all_supported_versions().filter(|v| v >= &CertificationVersion::V22)
-    {
+    for certification_version in all_supported_versions() {
         let refund = anonymous_refund(certification_version);
 
         assert_eq!(

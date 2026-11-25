@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "7bab60fe6c42400131224a9c37230d32ebc166c738826674955b440fdacf2908",
+  "checksum": "91ac8cfb7780a2a2fcc52b7bb7eb765a1e13181203117ff1a04106135882ea97",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7946,6 +7946,45 @@
       ],
       "version": "0.5.3"
     },
+    "bit-set 0.11.1": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "bit-vec 0.10.2",
+            "target": "bit_vec"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "bit_set",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "bit-set",
+      "package_url": "https://github.com/contain-rs/bit-vec",
+      "repository": {
+        "Http": {
+          "sha256": "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c",
+          "url": "https://static.crates.io/crates/bit-set/0.11.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bit_set",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.1"
+    },
     "bit-set 0.5.3": {
       "common_attrs": {
         "deps": [
@@ -7984,7 +8023,6 @@
     "bit-set 0.8.0": {
       "common_attrs": {
         "crate_features": [
-          "default",
           "std"
         ],
         "deps": [
@@ -8085,7 +8123,6 @@
     "bit-vec 0.8.0": {
       "common_attrs": {
         "crate_features": [
-          "default",
           "std"
         ],
         "edition": "2015"
@@ -18354,7 +18391,7 @@
             "target": "prometheus_parse"
           },
           {
-            "id": "proptest 1.6.0",
+            "id": "proptest 1.12.0",
             "target": "proptest"
           },
           {
@@ -45027,13 +45064,12 @@
       ],
       "version": "0.2.5"
     },
-    "proptest 1.6.0": {
+    "proptest 1.12.0": {
       "common_attrs": {
         "crate_features": [
           "bit-set",
           "default",
           "fork",
-          "lazy_static",
           "regex-syntax",
           "rusty-fork",
           "std",
@@ -45042,11 +45078,11 @@
         ],
         "deps": [
           {
-            "id": "bit-set 0.8.0",
+            "id": "bit-set 0.11.1",
             "target": "bit_set"
           },
           {
-            "id": "bit-vec 0.8.0",
+            "id": "bit-vec 0.10.2",
             "target": "bit_vec"
           },
           {
@@ -45054,23 +45090,23 @@
             "target": "bitflags"
           },
           {
-            "id": "lazy_static 1.5.1",
-            "target": "lazy_static"
+            "id": "chacha20 0.10.2",
+            "target": "chacha20"
+          },
+          {
+            "id": "core_detect 1.0.0",
+            "target": "core_detect"
           },
           {
             "id": "num-traits 0.2.19",
             "target": "num_traits"
           },
           {
-            "id": "rand 0.8.8",
+            "id": "rand 0.10.4",
             "target": "rand"
           },
           {
-            "id": "rand_chacha 0.3.1",
-            "target": "rand_chacha"
-          },
-          {
-            "id": "rand_xorshift 0.3.0",
+            "id": "rand_xorshift 0.5.0",
             "target": "rand_xorshift"
           },
           {
@@ -45090,7 +45126,7 @@
             "target": "unarray"
           }
         ],
-        "edition": "2018"
+        "edition": "2021"
       },
       "library_target_name": "proptest",
       "license": "MIT OR Apache-2.0",
@@ -45103,8 +45139,8 @@
       "package_url": "https://github.com/proptest-rs/proptest",
       "repository": {
         "Http": {
-          "sha256": "14cae93065090804185d3b75f0bf93b8eeda30c7a9b4a33d3bdb3988d6229e50",
-          "url": "https://static.crates.io/crates/proptest/1.6.0/download"
+          "sha256": "b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0",
+          "url": "https://static.crates.io/crates/proptest/1.12.0/download"
         }
       },
       "targets": [
@@ -45115,7 +45151,7 @@
           }
         }
       ],
-      "version": "1.6.0"
+      "version": "1.12.0"
     },
     "proptest-derive 0.9.0": {
       "common_attrs": {
@@ -46916,15 +46952,15 @@
       ],
       "version": "0.10.3"
     },
-    "rand_xorshift 0.3.0": {
+    "rand_xorshift 0.5.0": {
       "common_attrs": {
         "deps": [
           {
-            "id": "rand_core 0.6.4",
+            "id": "rand_core 0.10.1",
             "target": "rand_core"
           }
         ],
-        "edition": "2018"
+        "edition": "2024"
       },
       "library_target_name": "rand_xorshift",
       "license": "MIT OR Apache-2.0",
@@ -46937,8 +46973,8 @@
       "package_url": "https://github.com/rust-random/rngs",
       "repository": {
         "Http": {
-          "sha256": "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f",
-          "url": "https://static.crates.io/crates/rand_xorshift/0.3.0/download"
+          "sha256": "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf",
+          "url": "https://static.crates.io/crates/rand_xorshift/0.5.0/download"
         }
       },
       "targets": [
@@ -46949,7 +46985,7 @@
           }
         }
       ],
-      "version": "0.3.0"
+      "version": "0.5.0"
     },
     "rangemap 1.8.0": {
       "common_attrs": {
@@ -69247,7 +69283,7 @@
     "procfs 0.18.0",
     "prometheus 0.14.0",
     "prometheus-parse 0.2.5",
-    "proptest 1.6.0",
+    "proptest 1.12.0",
     "proptest-derive 0.9.0",
     "prost 0.14.6",
     "prost-build 0.14.6",
