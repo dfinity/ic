@@ -11,9 +11,12 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
+use ic_nns_governance_api::{
+    ManageNeuronResponse, MonthlyNodeProviderRewards, Proposal, Vote, manage_neuron_response,
+    proposal::Action,
+};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    get_pending_proposals, nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -204,6 +207,68 @@ fn vote_yes_with_well_known_public_neurons(state_machine: &StateMachine, proposa
     }
 }
 
+/// Makes DFINITY "leader" neurons (IDs 27 and 28) vote no on proposals that
+/// upgrade an NNS canister.
+///
+/// This is so that the upgrades performed by this test (via proposal) do not
+/// get clobbered by such pre-existing proposals.
+///
+/// Such votes are not absolutely guaranteed to block such proposals, but they
+/// would generally be very effective.
+/// assert_upgraded_canisters_still_run_checked_out_code catches when such
+/// proposals slip through.
+fn vote_down_pending_nns_canister_upgrades(state_machine: &StateMachine) {
+    for proposal_info in get_pending_proposals(state_machine) {
+        let proposal_id = proposal_info.id.unwrap();
+        let proposal = proposal_info.proposal.unwrap();
+        if !is_nns_canister_upgrade(&proposal) {
+            continue;
+        }
+
+        let title = proposal.title.unwrap_or_default();
+        println!(
+            "Voting down pre-existing proposal {} ({title:?}), so that it does not \
+             replace code that this test installs.",
+            proposal_id.id,
+        );
+
+        // Cycle through DFINITY's "leader" neurons...
+        for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
+            let vote_result = nns_cast_vote(
+                state_machine,
+                voter_controller,
+                voter_neuron_id,
+                proposal_id.id,
+                Vote::No,
+            );
+
+            // Print warning if voting did not succeed. If the canister gets
+            // clobbered, assert_upgraded_canisters_still_run_checked_out_code
+            // will detect that later.
+            match &vote_result {
+                Ok(ManageNeuronResponse {
+                    command: Some(manage_neuron_response::Command::RegisterVote(_)),
+                }) => continue,
+
+                _ => {
+                    println!(
+                        "🚨 Neuron {} FAILED to vote No on proposal {} ({title:?}). If that \
+                        proposal gets executed, it might replace code that this test \
+                        installs. Result: {vote_result:?}",
+                        voter_neuron_id.id, proposal_id.id,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Returns whether the proposal would install code in an NNS canister. To wit,
+/// whether its action is InstallCode.
+fn is_nns_canister_upgrade(proposal: &Proposal) -> bool {
+    matches!(proposal.action, Some(Action::InstallCode(_)))
+}
+
 #[test]
 fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 0: Read configuration. To wit, what canisters does the user want to upgrade in this
@@ -266,6 +331,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
     state_machine.reject_remote_callbacks();
+
+    // Keep pre-existing proposals from replacing code that this test installs.
+    vote_down_pending_nns_canister_upgrades(&state_machine);
 
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
@@ -367,9 +435,74 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
-    sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
+    sanity_check::fetch_and_check_metrics_after_advancing_time(
+        &state_machine,
+        metrics_before,
+        &nns_canister_upgrade_sequence,
+    );
 
     check_canisters_are_all_protocol_canisters(&state_machine);
+}
+
+/// Panics if any of the given canisters no longer runs the WASM that this test
+/// installed in it (via proposal).
+///
+/// A canister changing out from under this test is unusual, but can happen if
+/// the golden state has some upgrade proposals that go in later. When that
+/// happens, tests fail in confusing ways. This assert makes such situations
+/// less confusing.
+///
+/// Example of strange effect of canisters unexpectedly re-upgraded: node
+/// provider rewards never get distributed, because the replacement node-rewards
+/// canister lacks the hacky test feature that injects node performance metrics.
+fn assert_upgraded_canisters_still_run_checked_out_code(
+    state_machine: &StateMachine,
+    nns_canister_upgrades: &[NnsCanisterUpgrade],
+) {
+    let format_hash = |hash: &[u8]| -> String {
+        hash.iter()
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<Vec<String>>()
+            .join("")
+    };
+
+    let mut defects = vec![];
+
+    for nns_canister_upgrade in nns_canister_upgrades {
+        let NnsCanisterUpgrade {
+            nns_canister_name,
+            canister_id,
+            wasm_hash,
+            ..
+        } = nns_canister_upgrade;
+
+        let status_result = get_canister_status(
+            state_machine,
+            nns_canister_upgrade.controller_principal_id(),
+            *canister_id,
+            CanisterId::ic_00(), // callee: Management (virtual) canister.
+        )
+        .unwrap();
+
+        let observed_module_hash = status_result.module_hash.unwrap_or_default();
+        if observed_module_hash != wasm_hash {
+            defects.push(format!(
+                "{nns_canister_name} ({canister_id}): expected module hash {}, \
+                 but found {}.",
+                format_hash(wasm_hash),
+                format_hash(&observed_module_hash),
+            ));
+        }
+    }
+
+    assert!(
+        defects.is_empty(),
+        "Some canisters no longer run the WASM that this test installed. Most \
+         likely, an upgrade proposal that was already in the golden state got \
+         executed after this test upgraded the canister(s). To see which \
+         proposal(s), search the log for \"Successfully executed proposal\".\n{}",
+        defects.join("\n"),
+    );
 }
 
 // Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
@@ -425,6 +558,7 @@ mod sanity_check {
     pub fn fetch_and_check_metrics_after_advancing_time(
         state_machine: &StateMachine,
         before: Metrics,
+        nns_canister_upgrades: &[NnsCanisterUpgrade],
     ) {
         let most_recent_node_provider_rewards_timestamp_seconds = before
             .governance_most_recent_monthly_node_provider_rewards
@@ -432,6 +566,7 @@ mod sanity_check {
         advance_until_new_node_provider_rewards_distributed(
             state_machine,
             most_recent_node_provider_rewards_timestamp_seconds,
+            nns_canister_upgrades,
         );
 
         // Advance time to ensure at least one set of voting rewards, which
@@ -439,6 +574,8 @@ mod sanity_check {
         // time, the previous statement advances by more than 1 day. But since
         // it does not ALWAYS do that, we also do this.
         advance_for_voting_rewards(state_machine);
+
+        assert_upgraded_canisters_still_run_checked_out_code(state_machine, nns_canister_upgrades);
 
         let after = fetch_metrics(state_machine);
 
@@ -468,11 +605,14 @@ mod sanity_check {
     /// most recent one. This advances past that somewhat to allow the actual
     /// work of distributing node provider rewards to be performed.
     ///
-    /// Panics if no node provider rewards occurs after a generous amount of
-    /// time.
+    /// Panics if no node provider reward occurs after a generous amount of
+    /// time. Before doing so, checks whether any of nns_canister_upgrades got
+    /// replaced. This is to detect when a pre-existing proposal clobbers one of
+    /// the canisters with some other WASM.
     fn advance_until_new_node_provider_rewards_distributed(
         state_machine: &StateMachine,
         most_recent_node_provider_rewards_timestamp_seconds: u64,
+        nns_canister_upgrades: &[NnsCanisterUpgrade],
     ) {
         let expected_new_node_provider_rewards_timestamp_seconds =
             most_recent_node_provider_rewards_timestamp_seconds
@@ -516,6 +656,8 @@ mod sanity_check {
                 }
             }
         }
+
+        assert_upgraded_canisters_still_run_checked_out_code(state_machine, nns_canister_upgrades);
 
         let time_since_due = state_machine
             .get_time()
