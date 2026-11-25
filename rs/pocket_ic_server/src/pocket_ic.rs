@@ -2114,7 +2114,7 @@ impl PocketIcSubnets {
             //     record {
             //       doh_config = opt opt record {
             //         max_cache_age_secs = opt (3_600 : nat64);
-            //         allowed_domains = vec { "gmail.com"; "googlemail.com"; "outlook.com"; "hotmail.com"; "msn.com"; "live.com"; "icloud.com"; "me.com"; "mac.com"; "yahoo.com"; "ymail.com"; "aol.com"; "zoho.com"; "fastmail.com"; "fastmail.fm"; "hey.com"; "yandex.com"; "yandex.ru"; "mail.ru"; "qq.com"; "163.com"; "126.com"; "naver.com"; "daum.net";};
+            //         reserved_domains = opt vec { "gmail.com"; "outlook.com"; "hotmail.com"; "icloud.com"; "yahoo.com"; "yahoo.co.jp"; "aol.com"; "gmx.de"; "gmx.net"; "gmx.com"; "web.de"; "mail.com"; "proton.me"; "zohomail.com"; "mail.ru"; "yandex.ru"; "yandex.com"; "163.com"; "qq.com"; "naver.com";};
             //       };
             //       is_production = opt true;
             //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";

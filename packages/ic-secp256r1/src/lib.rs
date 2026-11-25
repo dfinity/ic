@@ -10,7 +10,7 @@ use p256::{
     AffinePoint, NistP256, Scalar,
     elliptic_curve::{
         Curve,
-        generic_array::{GenericArray, typenum::Unsigned},
+        array::{Array, typenum::Unsigned},
     },
 };
 use rand::{CryptoRng, RngCore};
@@ -106,8 +106,8 @@ impl DerivationPath {
 
         let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
 
-        let fb = p256::FieldBytes::from_slice(&hmac_output[..32]);
-        let next_offset = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb);
+        let fb = p256::FieldBytes::try_from(&hmac_output[..32]).expect("Correct size");
+        let next_offset = <p256::Scalar as Reduce<p256::FieldBytes>>::reduce(&fb);
         let next_chain_key: [u8; 32] = hmac_output[32..].to_vec().try_into().expect("Correct size");
 
         // If iL >= order, try again with the "next" index as described in SLIP-10
@@ -127,7 +127,7 @@ impl DerivationPath {
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
         use p256::ProjectivePoint;
-        use p256::elliptic_curve::{group::GroupEncoding, ops::MulByGenerator};
+        use p256::elliptic_curve::{Group, group::GroupEncoding};
 
         let mut ckd_input = pt.to_bytes();
 
@@ -384,8 +384,14 @@ impl PrivateKey {
 
     /// Generate a new random private key using some provided RNG
     pub fn generate_using_rng<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let key = p256::ecdsa::SigningKey::random(rng);
-        Self { key }
+        // Rejection sampling: draw 32 bytes until they encode a scalar in [1, n)
+        let mut bytes = zeroize::Zeroizing::new(p256::FieldBytes::default());
+        loop {
+            rng.fill_bytes(&mut bytes);
+            if let Ok(key) = p256::ecdsa::SigningKey::from_bytes(&bytes) {
+                return Self { key };
+            }
+        }
     }
 
     /// Deserialize a private key encoded in SEC1 format
@@ -395,7 +401,7 @@ impl PrivateKey {
                 KeyDecodingError::InvalidKeyEncoding(format!("invalid key size = {}.", bytes.len()))
             })?;
 
-        let key = p256::ecdsa::SigningKey::from_bytes(&GenericArray::from(byte_array))
+        let key = p256::ecdsa::SigningKey::from_bytes(&Array::from(byte_array))
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
@@ -486,11 +492,16 @@ impl PrivateKey {
     }
 
     /// Sign a message digest
+    ///
+    /// Returns None if the digest is shorter than 16 bytes
     pub fn sign_digest(&self, digest: &[u8]) -> Option<[u8; 64]> {
         if digest.len() < 16 {
-            // p256 arbitrarily rejects digests that are < 128 bits
+            // This crate does not sign digests shorter than 128 bits
             return None;
         }
+
+        // ECDSA uses only the leftmost 32 bytes of a longer digest
+        let digest = &digest[..digest.len().min(32)];
 
         use p256::ecdsa::{Signature, signature::hazmat::PrehashSigner};
         let sig: Signature = self
@@ -715,7 +726,7 @@ impl PublicKey {
     ///
     /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details of the format
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
-        self.key.to_encoded_point(compressed).to_bytes().to_vec()
+        self.key.to_sec1_point(compressed).to_bytes().to_vec()
     }
 
     /// Serialize a public key in DER as a SubjectPublicKeyInfo
@@ -767,8 +778,15 @@ impl PublicKey {
     }
 
     /// Verify a (message digest,signature) pair
+    ///
+    /// Returns false if the digest is shorter than 16 bytes
     pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        if digest.len() < 16 {
+            // This crate rejects digests shorter than 128 bits, as in `PrivateKey::sign_digest`
+            return false;
+        }
 
         if let Ok(sig) = Signature::deserialize(signature) {
             self.key.verify_prehash(digest, sig.inner()).is_ok()

@@ -111,6 +111,8 @@ pub struct Request {
     #[serde(with = "serde_bytes")]
     pub sender: Bytes,
     pub sender_reply_callback: u64,
+    /// No longer encoded (superseded by `cycles_payment`). The field must remain
+    /// in place, because packed CBOR identifies fields by their position.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payment: Option<Funds>,
     pub method_name: String,
@@ -132,6 +134,8 @@ pub struct Response {
     #[serde(with = "serde_bytes")]
     pub respondent: Bytes,
     pub originator_reply_callback: u64,
+    /// No longer encoded (superseded by `cycles_refund`). The field must remain
+    /// in place, because packed CBOR identifies fields by their position.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund: Option<Funds>,
     pub response_payload: Payload,
@@ -192,16 +196,6 @@ pub struct Payload {
 pub struct RejectContext {
     pub code: u8,
     pub message: String,
-}
-
-/// Canonical representation of state metadata leaf.
-#[derive(Debug, Serialize)]
-pub struct SystemMetadata {
-    /// The counter used to allocate canister ids.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deprecated_id_counter: Option<u64>,
-    /// Hash bytes of the previous (partial) canonical state.
-    pub prev_state_hash: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
@@ -300,7 +294,7 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
 
 impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for RejectSignals {
     fn from(
-        (reject_signals, signals_end, certification_version): (
+        (reject_signals, signals_end, _certification_version): (
             &VecDeque<RejectSignal>,
             StreamIndex,
             CertificationVersion,
@@ -327,14 +321,6 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
                 .unwrap_or_default()
         };
 
-        let engine_not_allowed_deltas = deltas_for(RejectReason::EngineNotAllowed);
-        assert!(
-            certification_version >= CertificationVersion::V26
-                || engine_not_allowed_deltas.is_empty(),
-            "`EngineNotAllowed` reject signals must not be encoded before certification version V26, \
-             got certification version {certification_version:?}",
-        );
-
         RejectSignals {
             canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
             canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
@@ -343,7 +329,7 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
             queue_full_deltas: deltas_for(RejectReason::QueueFull),
             out_of_memory_deltas: deltas_for(RejectReason::OutOfMemory),
             unknown_deltas: deltas_for(RejectReason::Unknown),
-            engine_not_allowed_deltas,
+            engine_not_allowed_deltas: deltas_for(RejectReason::EngineNotAllowed),
         }
     }
 }
@@ -473,27 +459,14 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
-        let cycles_payment: Cycles = (&request.payment, certification_version).into();
-        let funds = Funds {
-            cycles: cycles_payment.clone(),
-            icp: 0,
-        };
         Self {
             receiver: request.receiver.get().to_vec(),
             sender: request.sender.get().to_vec(),
             sender_reply_callback: request.sender_reply_callback.get(),
-            payment: if certification_version >= CertificationVersion::V23 {
-                None
-            } else {
-                Some(funds)
-            },
+            payment: None,
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
-            cycles_payment: if certification_version >= CertificationVersion::V23 {
-                Some(cycles_payment)
-            } else {
-                None
-            },
+            cycles_payment: Some((&request.payment, certification_version).into()),
             metadata: (&request.metadata).into(),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
@@ -532,26 +505,13 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
-        let cycles_refund: Cycles = (&response.refund, certification_version).into();
-        let funds = Funds {
-            cycles: cycles_refund.clone(),
-            icp: 0,
-        };
         Self {
             originator: response.originator.get().to_vec(),
             respondent: response.respondent.get().to_vec(),
             originator_reply_callback: response.originator_reply_callback.get(),
-            refund: if certification_version >= CertificationVersion::V23 {
-                None
-            } else {
-                Some(funds)
-            },
+            refund: None,
             response_payload: (&response.response_payload, certification_version).into(),
-            cycles_refund: if certification_version >= CertificationVersion::V23 {
-                Some(cycles_refund)
-            } else {
-                None
-            },
+            cycles_refund: Some((&response.refund, certification_version).into()),
             deadline: response.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -586,7 +546,6 @@ impl From<(&ic_types::messages::Refund, CertificationVersion)> for Refund {
     fn from(
         (refund, certification_version): (&ic_types::messages::Refund, CertificationVersion),
     ) -> Self {
-        assert!(certification_version >= CertificationVersion::V22);
         Self {
             recipient: refund.recipient().get().to_vec(),
             amount: (&refund.amount(), certification_version).into(),
@@ -702,58 +661,17 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
 
 impl
     From<(
-        &ic_replicated_state::metadata_state::SystemMetadata,
-        CertificationVersion,
-    )> for SystemMetadata
-{
-    fn from(
-        (metadata, _certification_version): (
-            &ic_replicated_state::metadata_state::SystemMetadata,
-            CertificationVersion,
-        ),
-    ) -> Self {
-        Self {
-            deprecated_id_counter: None,
-            prev_state_hash: metadata
-                .prev_state_hash
-                .as_ref()
-                .map(|h| h.get_ref().0.clone()),
-        }
-    }
-}
-
-impl
-    From<(
         &ic_replicated_state::metadata_state::SubnetMetrics,
         CertificationVersion,
     )> for SubnetMetrics
 {
     fn from(
-        (metrics, certification_version): (
+        (metrics, _certification_version): (
             &ic_replicated_state::metadata_state::SubnetMetrics,
             CertificationVersion,
         ),
     ) -> Self {
-        // Up to and including `V28`, the reported total uses the legacy
-        // `consumed_cycles_total_v28`, which double counts the cycles consumed
-        // by deleted canisters and does not account for non-deleted canisters.
-        //
-        // In `V29`, the reported total is the stored
-        // `SubnetMetrics::consumed_cycles_total_including_canisters`, which no
-        // longer double counts deleted canisters and does account for the existing
-        // ones (as the sum of their `CanisterMetrics::consumed_cycles` gauges).
-        //
-        // Starting with `V30`, the reported total is the stored
-        // `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`,
-        // which accounts for the existing canisters as the sum of their monotonic
-        // `CanisterMetrics::consumed_cycles_monotonic` instead.
-        let consumed_cycles_total = if certification_version >= CertificationVersion::V30 {
-            metrics.consumed_cycles_total_including_canisters_monotonic()
-        } else if certification_version >= CertificationVersion::V29 {
-            metrics.consumed_cycles_total_including_canisters()
-        } else {
-            metrics.consumed_cycles_total_v28()
-        };
+        let consumed_cycles_total = metrics.consumed_cycles_total_including_canisters_monotonic();
         let (high, low) = consumed_cycles_total.into_parts();
         Self {
             num_canisters: metrics.num_canisters,

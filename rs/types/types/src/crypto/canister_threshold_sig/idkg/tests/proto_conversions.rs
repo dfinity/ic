@@ -1,8 +1,9 @@
 use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscriptId, IDkgTranscriptOperation,
-    InitialIDkgDealings, SignedIDkgDealing,
+    IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, InitialIDkgDealings, SignedIDkgDealing,
 };
+use crate::exhaustive::ExhaustiveSet;
 use crate::{Height, NodeId, PrincipalId};
 
 use crate::Id;
@@ -20,6 +21,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
 use ic_protobuf::registry::subnet::v1::IDkgOpening as IDkgOpeningProto;
+use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
@@ -57,6 +59,65 @@ fn should_correctly_serialize_and_deserialize_initial_dealings() {
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(initial_dealings, parsed);
+}
+
+#[test]
+fn should_not_deserialize_initial_dealings_with_repeated_nodes() {
+    let rng = &mut reproducible_rng();
+    crate::tests::assert_repeated_entries_fail_to_decode(
+        &InitialIDkgDealingsProto::from(&initial_dealings(rng)),
+        InitialIDkgDealings::try_from,
+        &[
+            |proto| {
+                let params = proto.params.as_mut().unwrap();
+                let dealer = params.dealers[0].clone();
+                params.dealers.push(dealer);
+            },
+            |proto| {
+                let params = proto.params.as_mut().unwrap();
+                let receiver = params.receivers[0].clone();
+                params.receivers.push(receiver);
+            },
+            |proto| {
+                let params = proto.params.as_mut().unwrap();
+                let transcript = &mut params.idkg_transcript_operation_args[0];
+                let receiver = transcript.receivers[0].clone();
+                transcript.receivers.push(receiver);
+            },
+        ],
+    );
+}
+
+#[test]
+fn should_not_deserialize_a_transcript_with_repeated_entries() {
+    let rng = &mut reproducible_rng();
+    let transcript = IDkgTranscript::exhaustive_set(rng)
+        .into_iter()
+        .find(|transcript| {
+            transcript
+                .verified_dealings
+                .values()
+                .next()
+                .is_some_and(|dealing| !dealing.signature.signatures_map.is_empty())
+        })
+        .unwrap();
+    crate::tests::assert_repeated_entries_fail_to_decode(
+        &IDkgTranscriptProto::from(&transcript),
+        IDkgTranscript::try_from,
+        &[
+            |proto| proto.receivers.push(proto.receivers[0].clone()),
+            |proto| {
+                proto
+                    .verified_dealings
+                    .push(proto.verified_dealings[0].clone())
+            },
+            |proto| {
+                let dealing = &mut proto.verified_dealings[0];
+                let support = dealing.support_tuples[0].clone();
+                dealing.support_tuples.push(support);
+            },
+        ],
+    );
 }
 
 #[test]

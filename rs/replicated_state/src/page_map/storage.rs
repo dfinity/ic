@@ -1495,12 +1495,12 @@ impl MergeCandidate {
         // Group sorted `merged_iterator` by `page_index`. Elements within group are sorted by
         // priority; we need only the first element of each group.
         merged_iterator
-            .group_by(|page_with_priority| page_with_priority.page_index)
+            .chunk_by(|page_with_priority| page_with_priority.page_index)
             .into_iter()
             .map(move |(_, mut group)| {
                 let page_with_priority = group
                     .next()
-                    .expect("group_by is expected to create non-empty groups");
+                    .expect("chunk_by is expected to create non-empty groups");
                 (page_with_priority.page_index, page_with_priority.page_data)
             })
             .collect()
@@ -1618,7 +1618,7 @@ fn group_pages_into_ranges(page_indices: &[PageIndex]) -> Vec<PageIndexRange> {
         .enumerate()
         // (element value) - (element index) stay the same for consecutive groups,
         // but differs for different groups.
-        .group_by(|(i, page_index)| (page_index.get() as i64) - (*i as i64))
+        .chunk_by(|(i, page_index)| (page_index.get() as i64) - (*i as i64))
         .into_iter()
         .map(|(_, mut group)| {
             // Here we have all the original page indices enumerated and grouped into consecutive groups.

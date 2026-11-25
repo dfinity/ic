@@ -1,7 +1,6 @@
 use anyhow::{Result, bail};
 use candid::{Decode, Encode};
 use itertools::Itertools;
-use k256::SecretKey;
 use slog::{debug, info, warn};
 use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration, time::Instant};
 use tokio::time::sleep;
@@ -84,9 +83,7 @@ async fn test(env: TestEnv) {
     // Identity is needed to execute `update_node_domain_directly` as the caller is checked.
     let agent_with_identity = {
         let mut agent = nns_node.build_default_agent_async().await;
-        let identity = Secp256k1Identity::from_private_key(
-            SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap(),
-        );
+        let identity = Secp256k1Identity::from_pem(TEST_PRIVATE_KEY).unwrap();
         agent.set_identity(identity);
         agent
     };

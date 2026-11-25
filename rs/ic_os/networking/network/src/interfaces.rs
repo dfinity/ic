@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::vec::Vec;
 
 use anyhow::{Context, Result};
-use ping::dgramsock;
+use ping::{Pinger, SocketType};
 use rayon::prelude::*;
 
 use utils::{get_command_stdout, retry, retry_pred};
@@ -45,7 +45,10 @@ pub fn has_ipv6_connectivity(
                 ping_target,
                 wait_time.as_secs()
             );
-            dgramsock::ping(ping_target, Some(ping_timeout), None, None, None, None)
+            Pinger::builder()
+                .socket_type(SocketType::DGRAM)
+                .build()
+                .and_then(|mut pinger| pinger.ping(ping_target, ping_timeout))
                 .context("Ping failed.")
         },
         wait_time,
