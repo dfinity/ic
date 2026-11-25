@@ -27,7 +27,6 @@ ic-cdk = { workspace = true }
 ic-cdk-bitcoin-canister = { workspace = true }
 ic-cdk-management-canister = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
-ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = { workspace = true }
@@ -43,6 +42,9 @@ scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

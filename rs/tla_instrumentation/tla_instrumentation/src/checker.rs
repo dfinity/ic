@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Condvar, Mutex};
 use uuid::Uuid;
 
 use crate::ResolvedStatePair;
@@ -145,7 +146,56 @@ fn unique_tmp_dir() -> String {
         .to_string()
 }
 
-/* Check whether Apalache complains about deadlocks with traces of length one */
+/// The maximum number of Apalache processes that run at the same time in this process.
+///
+/// Each Apalache process is a JVM that holds a few hundred MiB of memory. Test binaries check the
+/// traces of many tests in parallel, so without this limit they can start dozens of JVMs at once.
+const MAX_CONCURRENT_APALACHE_PROCESSES: usize = 8;
+
+static APALACHE_PROCESS_PERMITS: Semaphore = Semaphore::new(MAX_CONCURRENT_APALACHE_PROCESSES);
+
+/// A counting semaphore: at most `permit_count` permits are held at the same time.
+struct Semaphore {
+    available_permit_count: Mutex<usize>,
+    permit_released: Condvar,
+}
+
+impl Semaphore {
+    const fn new(permit_count: usize) -> Self {
+        Self {
+            available_permit_count: Mutex::new(permit_count),
+            permit_released: Condvar::new(),
+        }
+    }
+
+    /// Blocks until a permit is available and takes it. Dropping the permit releases it.
+    fn acquire(&self) -> SemaphorePermit<'_> {
+        let available_permit_count = self.available_permit_count.lock().unwrap();
+        let mut available_permit_count = self
+            .permit_released
+            .wait_while(available_permit_count, |count| *count == 0)
+            .unwrap();
+        *available_permit_count -= 1;
+        SemaphorePermit { semaphore: self }
+    }
+}
+
+struct SemaphorePermit<'a> {
+    semaphore: &'a Semaphore,
+}
+
+impl Drop for SemaphorePermit<'_> {
+    fn drop(&mut self) {
+        *self.semaphore.available_permit_count.lock().unwrap() += 1;
+        self.semaphore.permit_released.notify_one();
+    }
+}
+
+/* Check whether Apalache complains about deadlocks with traces of length one.
+ *
+ * Before starting Apalache, waits until fewer than `MAX_CONCURRENT_APALACHE_PROCESSES`
+ * Apalache processes are running in this process.
+ */
 fn run_apalache(
     apalache_binary: &Path,
     tla_module: &Path,
@@ -166,6 +216,8 @@ fn run_apalache(
         .arg("--length=1")
         .arg(tla_module)
         .env("TEST_TMPDIR", &tmp_subdir_str);
+    // Held until Apalache exits.
+    let _permit = APALACHE_PROCESS_PERMITS.acquire();
     cmd.status()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {
@@ -329,4 +381,68 @@ pub fn check_tla_code_link_raw(
     // TODO: remove the temporary file if everything went well
     // fs::remove_file(new_module);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn available_permit_count(semaphore: &Semaphore) -> usize {
+        *semaphore.available_permit_count.lock().unwrap()
+    }
+
+    #[test]
+    fn test_semaphore_permits_are_taken_and_returned() {
+        let semaphore = Semaphore::new(2);
+
+        let first_permit = semaphore.acquire();
+        let second_permit = semaphore.acquire();
+        assert_eq!(available_permit_count(&semaphore), 0);
+
+        drop(first_permit);
+        assert_eq!(available_permit_count(&semaphore), 1);
+        drop(second_permit);
+        assert_eq!(available_permit_count(&semaphore), 2);
+    }
+
+    #[test]
+    fn test_semaphore_waiter_wakes_up_when_a_permit_is_released() {
+        let semaphore = Semaphore::new(1);
+        let permit = semaphore.acquire();
+
+        std::thread::scope(|scope| {
+            let (acquired_sender, acquired_receiver) = mpsc::channel();
+            let semaphore = &semaphore;
+            scope.spawn(move || {
+                let _permit = semaphore.acquire();
+                acquired_sender.send(()).unwrap();
+            });
+
+            // The waiter can't take a permit while the only one is held.
+            assert_eq!(
+                acquired_receiver.recv_timeout(Duration::from_millis(100)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            );
+
+            drop(permit);
+            acquired_receiver.recv().unwrap();
+        });
+
+        assert_eq!(available_permit_count(&semaphore), 1);
+    }
+
+    #[test]
+    fn test_semaphore_permit_is_released_when_its_holder_panics() {
+        let semaphore = Semaphore::new(1);
+
+        let result = std::panic::catch_unwind(|| {
+            let _permit = semaphore.acquire();
+            panic!("the holder of the permit panics");
+        });
+
+        assert!(result.is_err());
+        assert_eq!(available_permit_count(&semaphore), 1);
+    }
 }

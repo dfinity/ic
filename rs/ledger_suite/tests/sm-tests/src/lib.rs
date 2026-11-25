@@ -4040,7 +4040,7 @@ Charged for processing the transfer.
         "Expected: {new_exp_fields_message:?}, got: {fields_message:?}"
     );
 
-    // If the memo is not a valid UTF string, it should be hex encoded.
+    // If the memo is not valid UTF-8, it is shown as hex, labeled as such.
     args.arg = Encode!(&TransferArg {
         memo: Some(vec![0, 159, 146, 150].into()),
         ..transfer_args.clone()
@@ -4051,8 +4051,10 @@ Charged for processing the transfer.
             .unwrap()
             .consent_message,
     );
-    let expected_message =
-        expected_transfer_message.replace("test_bytes", &hex::encode(vec![0, 159, 146, 150]));
+    let expected_message = expected_transfer_message.replace(
+        "**Memo:**\n`test_bytes`",
+        &format!("**Memo (hex):**\n`{}`", hex::encode(vec![0, 159, 146, 150])),
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {expected_message}, got: {message}"
@@ -4065,13 +4067,15 @@ Charged for processing the transfer.
     )
     .unwrap();
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
-    let new_exp_fields_message = modify_field(
-        &expected_fields_message,
-        "Memo".to_string(),
-        Some(Icrc21Value::Text {
-            content: hex::encode(vec![0, 159, 146, 150]),
-        }),
-    );
+    let mut new_exp_fields_message = expected_fields_message.clone();
+    for (name, value) in new_exp_fields_message.fields.iter_mut() {
+        if name == "Memo" {
+            *name = "Memo (hex)".to_string();
+            *value = Icrc21Value::Text {
+                content: hex::encode(vec![0, 159, 146, 150]),
+            };
+        }
+    }
     assert_eq!(
         fields_message, new_exp_fields_message,
         "Expected: {new_exp_fields_message:?}, got: {fields_message:?}"

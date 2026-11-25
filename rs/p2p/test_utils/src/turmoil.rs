@@ -117,7 +117,7 @@ impl AsyncUdpSocket for CustomUdp {
         }))
     }
 
-    fn try_send(&self, transmit: &quinn_udp::Transmit<'_>) -> Result<(), std::io::Error> {
+    fn try_send(&self, transmit: &quinn::udp::Transmit<'_>) -> Result<(), std::io::Error> {
         let mut buffer = BytesMut::new();
         buffer.extend_from_slice(&transmit.segment_size.unwrap_or_default().to_le_bytes());
         buffer.extend_from_slice(transmit.contents);

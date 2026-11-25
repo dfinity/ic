@@ -308,11 +308,7 @@ impl From<&IDkgTranscriptAttributes> for pb::IDkgTranscriptAttributes {
 impl TryFrom<pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
     type Error = ProxyDecodeError;
     fn try_from(attributes: pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
-        let mut receivers = BTreeSet::new();
-        for pb_node_id in attributes.receivers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
-            receivers.insert(node_id);
-        }
+        let receivers = crate::decode_set(attributes.receivers, crate::node_id_try_from_protobuf)?;
         Ok(IDkgTranscriptAttributes::new(
             receivers,
             AlgorithmId::from(attributes.algorithm_id),
@@ -877,17 +873,9 @@ impl TryFrom<pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
             "IDkgTranscriptParamsRef::transcript_id",
         )?;
 
-        let mut dealers = BTreeSet::new();
-        for pb_node_id in params.dealers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
-            dealers.insert(node_id);
-        }
+        let dealers = crate::decode_set(params.dealers, crate::node_id_try_from_protobuf)?;
 
-        let mut receivers = BTreeSet::new();
-        for pb_node_id in params.receivers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
-            receivers.insert(node_id);
-        }
+        let receivers = crate::decode_set(params.receivers, crate::node_id_try_from_protobuf)?;
 
         let operation_ref = try_from_option_field(
             params.operation_type_ref,
@@ -1259,5 +1247,43 @@ impl TryFrom<pb::PreSignature> for PreSignature {
             Msg::Schnorr(x) => PreSignature::Schnorr(Arc::new(x.try_into()?)),
             Msg::Ecdsa(x) => PreSignature::Ecdsa(Arc::new(x.try_into()?)),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+    #[test]
+    fn idkg_transcript_attributes_receivers_are_distinct() {
+        let rng = &mut ReproducibleRng::new();
+        let attributes = IDkgTranscriptAttributes::exhaustive_set(rng)
+            .into_iter()
+            .find(|attributes| !attributes.receivers().is_empty())
+            .unwrap();
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &pb::IDkgTranscriptAttributes::from(&attributes),
+            IDkgTranscriptAttributes::try_from,
+            &[|proto| proto.receivers.push(proto.receivers[0].clone())],
+        );
+    }
+
+    #[test]
+    fn idkg_transcript_params_ref_dealers_and_receivers_are_distinct() {
+        let rng = &mut ReproducibleRng::new();
+        let params = IDkgTranscriptParamsRef::exhaustive_set(rng)
+            .into_iter()
+            .find(|params| !params.dealers.is_empty() && !params.receivers.is_empty())
+            .unwrap();
+        crate::tests::assert_repeated_entries_fail_to_decode(
+            &pb::IDkgTranscriptParamsRef::from(&params),
+            IDkgTranscriptParamsRef::try_from,
+            &[
+                |proto| proto.dealers.push(proto.dealers[0].clone()),
+                |proto| proto.receivers.push(proto.receivers[0].clone()),
+            ],
+        );
     }
 }

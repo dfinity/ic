@@ -33,7 +33,7 @@ use ic_nns_test_utils::{
     common::modify_wasm_bytes, governance::upgrade_nns_canister_by_proposal,
     itest_helpers::install_rust_canister_from_path,
 };
-use k256::elliptic_curve::SecretKey;
+use k256::{SecretKey, pkcs8::LineEnding};
 use rand::{SeedableRng, rngs::OsRng};
 use rand_chacha::ChaChaRng;
 use slog::info;
@@ -100,7 +100,10 @@ async fn test_async(env: TestEnv) {
     let logger = env.logger();
 
     let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
-    let full_access_identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+    let full_access_key = SecretKey::random(&mut rng)
+        .to_sec1_pem(LineEnding::LF)
+        .unwrap();
+    let full_access_identity = Secp256k1Identity::from_pem(full_access_key.as_bytes()).unwrap();
     let full_access_principal = full_access_identity.sender().unwrap();
 
     let nns_node = env.get_first_healthy_system_node_snapshot();

@@ -874,18 +874,12 @@ pub fn insert_dummy_canister(
     state.put_canister_state(canister_state);
 }
 
-/// Reject reasons encodable at `certification_version`. `EngineNotAllowed` is only encodable
-/// from V26.
+/// Reject reasons encodable at `certification_version`. All reject reasons are
+/// encodable at every supported certification version.
 pub fn reject_reasons_encodable_at(
-    certification_version: CertificationVersion,
+    _certification_version: CertificationVersion,
 ) -> Vec<RejectReason> {
     RejectReason::all()
-        .into_iter()
-        .filter(|reason| {
-            *reason != RejectReason::EngineNotAllowed
-                || certification_version >= CertificationVersion::V26
-        })
-        .collect()
 }
 
 prop_compose! {

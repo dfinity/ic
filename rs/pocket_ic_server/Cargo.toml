@@ -78,7 +78,6 @@ ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-types-cycles = { path = "../types/cycles" }
-ic-utils = { workspace = true }
 ic-validator-http-request-test-utils = { path = "../validator/http_request_test_utils" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
 icp-ledger = { path = "../ledger_suite/icp" }
@@ -112,6 +111,7 @@ flate2 = { workspace = true }
 ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
+ic-utils = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rcgen = { workspace = true }
