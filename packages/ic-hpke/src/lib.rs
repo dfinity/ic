@@ -30,7 +30,7 @@
 //! used is also authentic, and is associated with that ciphertext message. If the
 //! encryptor and decryptor disagree on the `associated_data` field, then decryption will
 //! fail. Commonly, the `associated_data` is used to bind additional information about the
-//! context which both the sender and receiver will know, for example a protocol identifer.
+//! context which both the sender and receiver will know, for example a protocol identifier.
 //! If no such information is available, the associated data can be set to an empty slice.
 //!
 //! # Example (Authenticated Encryption)
@@ -171,7 +171,7 @@ macro_rules! check_header {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-/// An error occured while deserializing a key
+/// An error occurred while deserializing a key
 pub enum KeyDeserializationError {
     /// The protocol identifier or version field was unknown to us
     UnknownMagic,
@@ -320,7 +320,7 @@ impl PublicKey {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-/// An error occured while decrypting a message
+/// An error occurred while decrypting a message
 pub enum DecryptionError {
     /// The protocol identifier/version field did not match
     UnknownMagic,
