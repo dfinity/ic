@@ -17,7 +17,6 @@ rust_library(
     crate_name = "ic_crypto_internal_csp",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:educe",
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
@@ -138,7 +137,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:educe",
         "@crate_index//:proptest-derive",
         "@crate_index//:strum_macros",
     ],

@@ -48,6 +48,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         vis,
         sig,
         block: body,
+        ..
     } = input_fn;
 
     let original_name = sig.ident.to_string();
@@ -227,6 +228,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
         vis,
         sig,
         block: body,
+        ..
     } = input_fn;
 
     let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
@@ -325,10 +327,7 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
 
     // Deconstruct the function elements
     let ItemFn {
-        attrs,
-        vis,
-        sig,
-        block: _,
+        attrs, vis, sig, ..
     } = input_fn;
 
     let mangled_name = syn::Ident::new(&format!("_tla_check_impl_{}", sig.ident), sig.ident.span());

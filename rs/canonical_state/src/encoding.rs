@@ -12,7 +12,7 @@
 
 use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
+use ic_replicated_state::metadata_state::SubnetMetrics;
 use ic_types::{PrincipalId, messages::StreamMessage, xnet::StreamHeader};
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -79,14 +79,6 @@ pub fn encode_stream_header(
 /// Decodes a `StreamHeader` from canonical CBOR representation.
 pub fn decode_stream_header(bytes: &[u8]) -> Result<StreamHeader, ProxyDecodeError> {
     types::StreamHeader::proxy_decode(bytes)
-}
-
-/// Encodes a `SystemMetadata` into canonical CBOR representation.
-pub fn encode_metadata(
-    metadata: &SystemMetadata,
-    certification_version: CertificationVersion,
-) -> Vec<u8> {
-    types::SystemMetadata::proxy_encode((metadata, certification_version)).unwrap()
 }
 
 /// Encodes the list of canister ID ranges assigned to a subnet according to
