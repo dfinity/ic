@@ -1078,21 +1078,3 @@ impl Step for CheckSourceSubnetDeletedStep {
         Ok(())
     }
 }
-
-/// Deletes the recovery directory of the tool. Unlike clearing only its
-/// contents, this also leaves no directory for the recovery state to be saved
-/// into after this last step, so a finished merge leaves nothing to resume:
-/// resuming it would fail anyway, as the source subnet is gone.
-pub(crate) struct CleanupStep {
-    pub(crate) recovery_dir: PathBuf,
-}
-
-impl Step for CleanupStep {
-    fn descr(&self) -> String {
-        format!("Deleting directory {}.", self.recovery_dir.display())
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        remove_dir(&self.recovery_dir)
-    }
-}
