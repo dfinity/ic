@@ -16,10 +16,6 @@ impl RosettaRequestHandler {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let signed_transaction = SignedTransaction::from_str(&msg.signed_transaction)
             .map_err(|err| ApiError::invalid_transaction(format!("{err:?}")))?;
-        // The envelope this hash describes is picked out of the request below,
-        // but the submit path broadcasts whichever envelope is currently valid.
-        // They have to agree, or the identifier returned here is not the
-        // identifier of the transaction the caller is about to submit.
         for (_, envelopes) in &signed_transaction.requests {
             representative_envelope(envelopes)?;
         }
