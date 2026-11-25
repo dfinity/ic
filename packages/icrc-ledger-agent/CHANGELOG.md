@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bump ic-agent dependency to v0.50.0. This is a breaking change: `Icrc1Agent::agent` and
+  `Icrc1AgentError::AgentError` now hold ic-agent 0.50 types, so callers must pass an
+  ic-agent 0.50 `Agent`.
+
 ## 0.2.0
 
 ### Changed
