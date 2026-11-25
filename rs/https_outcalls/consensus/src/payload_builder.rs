@@ -183,8 +183,6 @@ impl CanisterHttpPayloadBuilderImpl {
 
         let mut budget = PayloadBudget::new(memory_limit, wire_limit);
 
-        let mut messages = vec![];
-
         // Metrics counters
         let mut total_share_count = 0;
         let mut active_shares = 0;
@@ -227,7 +225,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     } else {
                         PayloadMessage::Timeout(*callback_id)
                     };
-                    budget.try_push(&mut messages, timeout);
+                    budget.try_push(timeout);
                     let groups = shares_by_callback_id.get(callback_id);
                     let (groups, success, reject) = groups.map_or((0, 0, 0), |groups| {
                         let (mut success, mut reject) = (0, 0);
@@ -288,10 +286,8 @@ impl CanisterHttpPayloadBuilderImpl {
                         ) {
                             // Checks the size before cloning the response.
                             if budget.fits(candidate.payload_size()) {
-                                budget.try_push(
-                                    &mut messages,
-                                    PayloadMessage::Response(candidate.into_response()),
-                                );
+                                budget
+                                    .try_push(PayloadMessage::Response(candidate.into_response()));
                             }
                         } else if grouped_shares_meet_divergence_criteria(
                             grouped_shares,
@@ -304,7 +300,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                     .map(|share| (*share).clone())
                                     .collect(),
                             };
-                            budget.try_push(&mut messages, PayloadMessage::Divergence(divergence));
+                            budget.try_push(PayloadMessage::Divergence(divergence));
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
                             grouped_shares,
@@ -312,7 +308,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             threshold,
                             request,
                         ) {
-                            budget.try_push(&mut messages, PayloadMessage::OutOfCycles(error));
+                            budget.try_push(PayloadMessage::OutOfCycles(error));
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
@@ -326,10 +322,8 @@ impl CanisterHttpPayloadBuilderImpl {
                         ) {
                             // Checks the size before cloning the response.
                             if budget.fits(candidate.payload_size()) {
-                                budget.try_push(
-                                    &mut messages,
-                                    PayloadMessage::Response(candidate.into_response()),
-                                );
+                                budget
+                                    .try_push(PayloadMessage::Response(candidate.into_response()));
                             }
                         } else if let Some(error) = find_non_flexible_out_of_cycles(
                             *callback_id,
@@ -340,7 +334,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             /* threshold = */ 1,
                             request,
                         ) {
-                            budget.try_push(&mut messages, PayloadMessage::OutOfCycles(error));
+                            budget.try_push(PayloadMessage::OutOfCycles(error));
                         }
                     }
                     Replication::Flexible {
@@ -359,11 +353,10 @@ impl CanisterHttpPayloadBuilderImpl {
                     ) {
                         FlexibleFindResult::OkResponses(group) => {
                             // `find_flexible_result` only returns a group that fits.
-                            budget
-                                .try_push(&mut messages, PayloadMessage::FlexibleResponses(group));
+                            budget.try_push(PayloadMessage::FlexibleResponses(group));
                         }
                         FlexibleFindResult::Error(error) => {
-                            budget.try_push(&mut messages, PayloadMessage::FlexibleError(error));
+                            budget.try_push(PayloadMessage::FlexibleError(error));
                         }
                         FlexibleFindResult::Pending => {}
                     },
@@ -395,8 +388,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 // according to the certified state or any past payload above it.
                 let already_refunded = RefundedNodes::new(*callback_id, request, &refunded_nodes);
                 for share in find_async_receipts(grouped_shares, &committee, &already_refunded) {
-                    if !budget.try_push(&mut messages, PayloadMessage::AsyncReceipt(share.clone()))
-                    {
+                    if !budget.try_push(PayloadMessage::AsyncReceipt(share.clone())) {
                         // All receipts are of (about) the same size, so once one does not
                         // fit, stop early to avoid iterating through all delivered contexts.
                         break 'delivered_contexts;
@@ -415,7 +407,7 @@ impl CanisterHttpPayloadBuilderImpl {
             self.metrics.max_responses_per_block_reached.inc();
         }
 
-        messages
+        budget.into_messages()
     }
 
     /// The set of replicas that may have produced a receipt for this request,

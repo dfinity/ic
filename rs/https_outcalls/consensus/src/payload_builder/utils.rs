@@ -783,18 +783,20 @@ fn wire_savings<'a>(contents: impl IntoIterator<Item = &'a CanisterHttpResponseC
     }
 }
 
-/// The limits of a payload, in memory and on the wire, and how much of them its
-/// parts take up so far.
+/// The messages of a payload, its limits in memory and on the wire, and how much of
+/// them its parts take up so far.
 pub(crate) struct PayloadBudget {
+    messages: Vec<PayloadMessage>,
     taken: PayloadSize,
     limits: PayloadSize,
-    /// How many of the messages added count towards the limit on responses per block.
+    /// How many of the messages count towards the limit on responses per block.
     responses: usize,
 }
 
 impl PayloadBudget {
     pub(crate) fn new(memory_limit: NumBytes, wire_limit: NumBytes) -> Self {
         Self {
+            messages: vec![],
             taken: PayloadSize::default(),
             limits: PayloadSize {
                 memory: memory_limit.get() as usize,
@@ -804,7 +806,7 @@ impl PayloadBudget {
         }
     }
 
-    /// How many of the messages added count towards the limit on responses per block.
+    /// How many of the messages count towards the limit on responses per block.
     pub(crate) fn responses(&self) -> usize {
         self.responses
     }
@@ -815,22 +817,22 @@ impl PayloadBudget {
             && self.taken.wire + size.wire < self.limits.wire
     }
 
-    /// Adds the message to `messages` if it still fits into the payload, and returns
-    /// whether it did.
-    pub(crate) fn try_push(
-        &mut self,
-        messages: &mut Vec<PayloadMessage>,
-        message: PayloadMessage,
-    ) -> bool {
+    /// Adds the message to the payload if it still fits, and returns whether it did.
+    pub(crate) fn try_push(&mut self, message: PayloadMessage) -> bool {
         let size = PayloadSize::of(&message);
         let fits = self.fits(size);
         if fits {
             self.taken.memory += size.memory;
             self.taken.wire += size.wire;
             self.responses += usize::from(message.counts_towards_response_limit());
-            messages.push(message);
+            self.messages.push(message);
         }
         fits
+    }
+
+    /// The messages added, in the order they were added.
+    pub(crate) fn into_messages(self) -> Vec<PayloadMessage> {
+        self.messages
     }
 }
 
