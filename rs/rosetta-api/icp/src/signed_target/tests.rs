@@ -1,13 +1,21 @@
 use super::*;
-use crate::models::EnvelopePair;
 use candid::Encode;
 use ic_nns_governance_api::{ManageNeuronCommandRequest, manage_neuron};
 use ic_types::messages::{Blob, HttpCallContent, HttpRequestEnvelope};
+use proptest::prelude::*;
 
 const NEURON_INDEX: u64 = 7;
 
-fn controller() -> PrincipalId {
+fn owner() -> PrincipalId {
     PrincipalId::new_user_test_id(1)
+}
+
+fn hotkey() -> PrincipalId {
+    PrincipalId::new_user_test_id(9)
+}
+
+fn stranger() -> PrincipalId {
+    PrincipalId::new_user_test_id(4)
 }
 
 fn ledger() -> CanisterId {
@@ -16,15 +24,6 @@ fn ledger() -> CanisterId {
 
 fn governance() -> CanisterId {
     CanisterId::from_u64(2)
-}
-
-#[track_caller]
-fn assert_rejected(result: Result<(), ApiError>, expected: &str) {
-    let err = result.expect_err("expected the request to be rejected");
-    assert!(
-        format!("{err:?}").contains(expected),
-        "expected an error containing {expected:?}, got {err:?}"
-    );
 }
 
 fn verify(request_type: &RequestType, update: &HttpCanisterUpdate) -> Result<(), ApiError> {
@@ -38,382 +37,115 @@ fn verify_envelopes(
     verify_signed_envelopes(request_type, envelopes, &ledger(), &governance()).map(|_| ())
 }
 
-fn manage_neuron_update(sender: PrincipalId, neuron_index: u64) -> HttpCanisterUpdate {
-    let manage = ManageNeuronRequest {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
-            convert::neuron_subaccount_bytes_from_principal(&sender, neuron_index).to_vec(),
-        )),
-        command: Some(ManageNeuronCommandRequest::Disburse(
-            manage_neuron::Disburse {
-                amount: None,
-                to_account: None,
-            },
-        )),
-    };
+#[track_caller]
+fn assert_rejected(name: &str, result: Result<(), ApiError>, expected: &str) {
+    let err = result.expect_err(name);
+    assert!(
+        format!("{err:?}").contains(expected),
+        "{name}: expected an error containing {expected:?}, got {err:?}"
+    );
+}
+
+fn update(
+    canister_id: CanisterId,
+    method: &str,
+    arg: Vec<u8>,
+    nonce: Option<u64>,
+    sender: PrincipalId,
+) -> HttpCanisterUpdate {
     HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: MANAGE_NEURON.to_string(),
-        arg: Blob(Encode!(&manage).unwrap()),
-        nonce: Some(Blob(Encode!(&neuron_index).unwrap())),
+        canister_id: Blob(canister_id.get().to_vec()),
+        method_name: method.to_string(),
+        arg: Blob(arg),
+        nonce: nonce.map(|nonce| Blob(Encode!(&nonce).unwrap())),
         sender: Blob(sender.into_vec()),
         ingress_expiry: 0,
         sender_info: None,
     }
 }
 
-fn disburse(neuron_index: u64) -> RequestType {
-    RequestType::Disburse { neuron_index }
-}
-
-#[test]
-fn faithful_update_is_accepted() {
-    let update = manage_neuron_update(controller(), NEURON_INDEX);
-    verify(&disburse(NEURON_INDEX), &update).unwrap();
-}
-
-#[test]
-fn rewritten_neuron_index_is_rejected() {
-    let update = manage_neuron_update(controller(), NEURON_INDEX);
-    assert_rejected(
-        verify(&disburse(0), &update),
-        "neuron_index 0, but the signed nonce says 7",
-    );
-}
-
-#[test]
-fn missing_nonce_is_rejected() {
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    update.nonce = None;
-    assert_rejected(verify(&disburse(NEURON_INDEX), &update), "carries no nonce");
-}
-
-#[test]
-fn nonce_agreeing_with_a_foreign_subaccount_is_rejected() {
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    let manage = ManageNeuronRequest {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
-            convert::neuron_subaccount_bytes_from_principal(
-                &PrincipalId::new_user_test_id(2),
-                NEURON_INDEX,
-            )
-            .to_vec(),
-        )),
-        command: Some(ManageNeuronCommandRequest::Disburse(
-            manage_neuron::Disburse {
-                amount: None,
-                to_account: None,
-            },
-        )),
-    };
-    update.arg = Blob(Encode!(&manage).unwrap());
-    assert_rejected(
-        verify(&disburse(NEURON_INDEX), &update),
-        "signed neuron subaccount does not belong",
-    );
-}
-
-#[test]
-fn legacy_neuron_id_field_is_rejected() {
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    let manage = ManageNeuronRequest {
-        id: Some(ic_nns_common::pb::v1::NeuronId { id: 99 }),
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
-            convert::neuron_subaccount_bytes_from_principal(&controller(), NEURON_INDEX).to_vec(),
-        )),
-        command: Some(ManageNeuronCommandRequest::Disburse(
-            manage_neuron::Disburse {
-                amount: None,
-                to_account: None,
-            },
-        )),
-    };
-    update.arg = Blob(Encode!(&manage).unwrap());
-    assert_rejected(
-        verify(&disburse(NEURON_INDEX), &update),
-        "legacy `id` field",
-    );
-}
-
-#[test]
-fn neuron_id_instead_of_subaccount_is_rejected() {
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    let manage = ManageNeuronRequest {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-            ic_nns_common::pb::v1::NeuronId { id: 99 },
-        )),
-        command: Some(ManageNeuronCommandRequest::Disburse(
-            manage_neuron::Disburse {
-                amount: None,
-                to_account: None,
-            },
-        )),
-    };
-    update.arg = Blob(Encode!(&manage).unwrap());
-    assert_rejected(
-        verify(&disburse(NEURON_INDEX), &update),
-        "identifies the neuron by id",
-    );
-}
-
-#[test]
-fn foreign_canister_is_rejected() {
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    update.canister_id = Blob(PrincipalId::new_user_test_id(3).to_vec());
-    assert_rejected(
-        verify(&disburse(NEURON_INDEX), &update),
-        "must be addressed to canister",
-    );
-
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    update.canister_id = Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec());
-    assert_rejected(
-        verify(&disburse(NEURON_INDEX), &update),
-        "must be addressed to canister",
-    );
-}
-
-#[test]
-fn unexpected_method_name_is_rejected() {
-    let mut update = manage_neuron_update(controller(), NEURON_INDEX);
-    update.method_name = "some_other_method".to_string();
-    assert_rejected(
-        verify(&disburse(NEURON_INDEX), &update),
-        "Expected the signed update to call 'manage_neuron'",
-    );
-}
-
-#[test]
-fn substituted_controller_is_rejected() {
-    let hotkey = PrincipalId::new_user_test_id(9);
-    let manage = ManageNeuronRequest {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
-            convert::neuron_subaccount_bytes_from_principal(&controller(), NEURON_INDEX).to_vec(),
-        )),
-        command: Some(ManageNeuronCommandRequest::Follow(manage_neuron::Follow {
-            topic: 0,
-            followees: vec![],
-        })),
-    };
-    let mut update = manage_neuron_update(hotkey, NEURON_INDEX);
-    update.arg = Blob(Encode!(&manage).unwrap());
-
-    let honest = RequestType::Follow {
-        neuron_index: NEURON_INDEX,
-        controller: Some(PublicKeyOrPrincipal::Principal(controller())),
-    };
-    verify(&honest, &update).unwrap();
-
-    let substituted = RequestType::Follow {
-        neuron_index: NEURON_INDEX,
-        controller: Some(PublicKeyOrPrincipal::Principal(
-            PrincipalId::new_user_test_id(4),
-        )),
-    };
-    assert_rejected(
-        verify(&substituted, &update),
-        "signed neuron subaccount does not belong",
-    );
-}
-
-#[test]
-fn stake_is_bound_to_the_signed_memo() {
-    let sender = controller();
-    let args = ClaimOrRefreshNeuronFromAccount {
-        controller: None,
-        memo: NEURON_INDEX,
-    };
-    let update = HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
-        arg: Blob(Encode!(&args).unwrap()),
-        nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),
-        sender: Blob(sender.into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
-
-    verify(
-        &RequestType::Stake {
-            neuron_index: NEURON_INDEX,
-        },
-        &update,
+fn subaccount(owner: PrincipalId, neuron_index: u64) -> NeuronIdOrSubaccount {
+    NeuronIdOrSubaccount::Subaccount(
+        convert::neuron_subaccount_bytes_from_principal(&owner, neuron_index).to_vec(),
     )
-    .unwrap();
-    assert_rejected(
-        verify(&RequestType::Stake { neuron_index: 0 }, &update),
-        "neuron_index 0, but the signed nonce says 7",
-    );
 }
 
-#[test]
-fn list_neurons_page_number_is_bound_to_the_signed_argument() {
-    let args = ic_nns_governance_api::ListNeurons {
-        neuron_ids: vec![],
-        include_neurons_readable_by_caller: true,
-        include_empty_neurons_readable_by_caller: None,
-        include_public_neurons_in_full_neurons: None,
-        page_number: Some(3),
-        page_size: None,
-        neuron_subaccounts: None,
-    };
-    let update = HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: LIST_NEURONS.to_string(),
-        arg: Blob(Encode!(&args).unwrap()),
-        nonce: None,
-        sender: Blob(controller().into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
-
-    verify(&RequestType::ListNeurons { page_number: 3 }, &update).unwrap();
-    assert_rejected(
-        verify(&RequestType::ListNeurons { page_number: 0 }, &update),
-        "page_number 0, but the signed list_neurons argument says 3",
-    );
-}
-
-#[test]
-fn neuron_info_is_bound_to_the_signed_subaccount() {
-    let sender = controller();
-    let args = NeuronIdOrSubaccount::Subaccount(
-        convert::neuron_subaccount_bytes_from_principal(&sender, NEURON_INDEX).to_vec(),
-    );
-    let update = HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT.to_string(),
-        arg: Blob(Encode!(&args).unwrap()),
-        nonce: None,
-        sender: Blob(sender.into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
-
-    verify(
-        &RequestType::NeuronInfo {
-            neuron_index: NEURON_INDEX,
-            controller: None,
-        },
-        &update,
+fn manage_neuron_update(
+    sender: PrincipalId,
+    neuron_index: u64,
+    manage: &ManageNeuronRequest,
+) -> HttpCanisterUpdate {
+    update(
+        governance(),
+        MANAGE_NEURON,
+        Encode!(manage).unwrap(),
+        Some(neuron_index),
+        sender,
     )
-    .unwrap();
-    assert_rejected(
-        verify(
-            &RequestType::NeuronInfo {
-                neuron_index: 0,
-                controller: None,
-            },
-            &update,
-        ),
-        "signed neuron subaccount does not belong",
-    );
 }
 
-#[test]
-fn substituted_command_is_rejected() {
-    let update = manage_neuron_update(controller(), NEURON_INDEX);
-    assert_rejected(
-        verify(
-            &RequestType::StartDissolve {
-                neuron_index: NEURON_INDEX,
-            },
-            &update,
-        ),
-        "The signed manage_neuron command is not the",
-    );
+fn command_update(
+    sender: PrincipalId,
+    owner: PrincipalId,
+    neuron_index: u64,
+    command: ManageNeuronCommandRequest,
+) -> HttpCanisterUpdate {
+    manage_neuron_update(
+        sender,
+        neuron_index,
+        &ManageNeuronRequest {
+            id: None,
+            neuron_id_or_subaccount: Some(subaccount(owner, neuron_index)),
+            command: Some(command),
+        },
+    )
 }
 
-#[test]
-fn a_transfer_to_another_ledger_is_rejected() {
-    let args = icp_ledger::SendArgs {
-        memo: icp_ledger::Memo(0),
-        amount: icp_ledger::Tokens::from_e8s(100_000_000),
-        fee: icp_ledger::Tokens::from_e8s(10_000),
-        from_subaccount: None,
-        to: icp_ledger::AccountIdentifier::from(controller()),
-        created_at_time: None,
-    };
-    let send = |canister_id: CanisterId| HttpCanisterUpdate {
-        canister_id: Blob(canister_id.get().to_vec()),
-        method_name: SEND_PB.to_string(),
-        arg: Blob(convert::to_arg(args.clone())),
-        nonce: None,
-        sender: Blob(controller().into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
-
-    verify(&RequestType::Send, &send(ledger())).unwrap();
-    assert_rejected(
-        verify(&RequestType::Send, &send(CanisterId::from_u64(99))),
-        "A transfer must be addressed to canister",
-    );
+fn disburse_command() -> ManageNeuronCommandRequest {
+    ManageNeuronCommandRequest::Disburse(manage_neuron::Disburse {
+        amount: None,
+        to_account: None,
+    })
 }
 
-#[test]
-fn a_transfer_out_of_a_subaccount_is_rejected() {
-    let send = |from_subaccount| HttpCanisterUpdate {
-        canister_id: Blob(ledger().get().to_vec()),
-        method_name: SEND_PB.to_string(),
-        arg: Blob(convert::to_arg(icp_ledger::SendArgs {
-            memo: icp_ledger::Memo(0),
-            amount: icp_ledger::Tokens::from_e8s(100_000_000),
-            fee: icp_ledger::Tokens::from_e8s(10_000),
-            from_subaccount,
-            to: icp_ledger::AccountIdentifier::from(PrincipalId::new_user_test_id(2)),
-            created_at_time: None,
-        })),
-        nonce: None,
-        sender: Blob(controller().into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
-
-    verify(&RequestType::Send, &send(None)).unwrap();
-    assert_rejected(
-        verify(
-            &RequestType::Send,
-            &send(Some(icp_ledger::Subaccount([1; 32]))),
-        ),
-        "draws on a subaccount of the sender",
-    );
-}
-
-#[test]
-fn stake_with_foreign_controller_is_rejected() {
-    let sender = controller();
-    let signed_stake = |controller: Option<PrincipalId>| {
-        let args = ClaimOrRefreshNeuronFromAccount {
-            controller,
-            memo: NEURON_INDEX,
-        };
-        HttpCanisterUpdate {
-            canister_id: Blob(governance().get().to_vec()),
-            method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
-            arg: Blob(Encode!(&args).unwrap()),
-            nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),
-            sender: Blob(sender.into_vec()),
-            ingress_expiry: 0,
-            sender_info: None,
-        }
-    };
-    let stake = RequestType::Stake {
+fn disburse() -> RequestType {
+    RequestType::Disburse {
         neuron_index: NEURON_INDEX,
-    };
+    }
+}
 
-    verify(&stake, &signed_stake(None)).unwrap();
-    verify(&stake, &signed_stake(Some(sender))).unwrap();
-    assert_rejected(
-        verify(
-            &stake,
-            &signed_stake(Some(PrincipalId::new_user_test_id(77))),
-        ),
-        "names controller",
-    );
+fn neuron_info_update(
+    sender: PrincipalId,
+    owner: PrincipalId,
+    neuron_index: u64,
+) -> HttpCanisterUpdate {
+    update(
+        governance(),
+        GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT,
+        Encode!(&subaccount(owner, neuron_index)).unwrap(),
+        None,
+        sender,
+    )
+}
+
+fn stake_update(controller: Option<PrincipalId>, memo: u64) -> HttpCanisterUpdate {
+    update(
+        governance(),
+        CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT,
+        Encode!(&ClaimOrRefreshNeuronFromAccount { controller, memo }).unwrap(),
+        Some(NEURON_INDEX),
+        owner(),
+    )
+}
+
+fn list_neurons_update(args: &ListNeurons) -> HttpCanisterUpdate {
+    update(
+        governance(),
+        LIST_NEURONS,
+        Encode!(args).unwrap(),
+        None,
+        owner(),
+    )
 }
 
 fn manage_neuron_requests(neuron_index: u64) -> Vec<(RequestType, ManageNeuronCommandRequest)> {
@@ -426,13 +158,7 @@ fn manage_neuron_requests(neuron_index: u64) -> Vec<(RequestType, ManageNeuronCo
     };
     let hot_key = Some(PrincipalId::new_user_test_id(5));
     vec![
-        (
-            RequestType::Disburse { neuron_index },
-            Cmd::Disburse(manage_neuron::Disburse {
-                amount: None,
-                to_account: None,
-            }),
-        ),
+        (RequestType::Disburse { neuron_index }, disburse_command()),
         (
             RequestType::DisburseMaturity { neuron_index },
             Cmd::DisburseMaturity(manage_neuron::DisburseMaturity {
@@ -518,66 +244,74 @@ fn manage_neuron_requests(neuron_index: u64) -> Vec<(RequestType, ManageNeuronCo
     ]
 }
 
-fn manage_neuron_update_with(
-    sender: PrincipalId,
-    neuron_index: u64,
-    command: ManageNeuronCommandRequest,
-) -> HttpCanisterUpdate {
-    let manage = ManageNeuronRequest {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
-            convert::neuron_subaccount_bytes_from_principal(&sender, neuron_index).to_vec(),
-        )),
-        command: Some(command),
-    };
-    HttpCanisterUpdate {
-        arg: Blob(Encode!(&manage).unwrap()),
-        ..manage_neuron_update(sender, neuron_index)
-    }
+fn neuron_targets(neuron_index: u64) -> Vec<(RequestType, Option<ManageNeuronCommandRequest>)> {
+    manage_neuron_requests(neuron_index)
+        .into_iter()
+        .map(|(request_type, command)| (request_type, Some(command)))
+        .chain([(
+            RequestType::NeuronInfo {
+                neuron_index,
+                controller: None,
+            },
+            None,
+        )])
+        .collect()
 }
 
-#[test]
-fn every_manage_neuron_request_is_bound_to_the_signed_neuron() {
-    for (request_type, command) in manage_neuron_requests(NEURON_INDEX) {
-        let update = manage_neuron_update_with(controller(), NEURON_INDEX, command);
-        let name = request_type.clone().into_str();
-
-        if let Err(err) = verify(&request_type, &update) {
-            panic!("{name}: the genuine update was rejected: {err:?}");
+fn displaying_controller(
+    request_type: RequestType,
+    controller: Option<PrincipalId>,
+) -> RequestType {
+    let controller = controller.map(PublicKeyOrPrincipal::Principal);
+    match request_type {
+        RequestType::Follow { neuron_index, .. } => RequestType::Follow {
+            neuron_index,
+            controller,
+        },
+        RequestType::RefreshVotingPower { neuron_index, .. } => RequestType::RefreshVotingPower {
+            neuron_index,
+            controller,
+        },
+        RequestType::NeuronInfo { neuron_index, .. } => RequestType::NeuronInfo {
+            neuron_index,
+            controller,
+        },
+        other => {
+            assert!(controller.is_none());
+            other
         }
-
-        let (rewritten, _) = manage_neuron_requests(0)
-            .into_iter()
-            .find(|(other, _)| other.clone().into_str() == name)
-            .unwrap();
-        let err = verify(&rewritten, &update).expect_err(name);
-        assert!(
-            format!("{err:?}").contains("neuron_index 0, but the signed nonce says 7"),
-            "{name}: unexpected error {err:?}"
-        );
     }
 }
 
-#[track_caller]
-fn assert_rejected_as(name: &str, result: Result<(), ApiError>, expected: &str) {
-    let err = result.expect_err(name);
-    assert!(
-        format!("{err:?}").contains(expected),
-        "{name}: expected an error containing {expected:?}, got {err:?}"
-    );
-}
-
-#[test]
-fn every_manage_neuron_request_is_bound_to_the_signed_subaccount() {
-    for (request_type, command) in manage_neuron_requests(NEURON_INDEX) {
-        let update = HttpCanisterUpdate {
-            sender: Blob(controller().into_vec()),
-            ..manage_neuron_update_with(PrincipalId::new_user_test_id(2), NEURON_INDEX, command)
+proptest! {
+    #[test]
+    fn a_neuron_request_is_accepted_iff_it_displays_the_signed_neuron(
+        target in 0..neuron_targets(0).len(),
+        signed_index in 0..3_u64,
+        displayed_index in 0..3_u64,
+        signer in prop::sample::select(vec![owner(), hotkey()]),
+        displayed_controller in prop::option::of(prop::sample::select(vec![owner(), stranger()])),
+    ) {
+        let (signed_type, command) = neuron_targets(signed_index).swap_remove(target);
+        let (displayed_type, _) = neuron_targets(displayed_index).swap_remove(target);
+        prop_assume!(
+            displayed_controller.is_none()
+                || matches!(
+                    signed_type,
+                    RequestType::Follow { .. }
+                        | RequestType::RefreshVotingPower { .. }
+                        | RequestType::NeuronInfo { .. }
+                )
+        );
+        let update = match command {
+            Some(command) => command_update(signer, owner(), signed_index, command),
+            None => neuron_info_update(signer, owner(), signed_index),
         };
-        assert_rejected_as(
-            request_type.clone().into_str(),
-            verify(&request_type, &update),
-            "signed neuron subaccount does not belong",
+        let displayed = displaying_controller(displayed_type, displayed_controller);
+
+        prop_assert_eq!(
+            verify(&displayed, &update).is_ok(),
+            displayed_index == signed_index && displayed_controller.unwrap_or(signer) == owner()
         );
     }
 }
@@ -587,217 +321,135 @@ fn every_manage_neuron_request_is_bound_to_the_signed_command() {
     let requests = manage_neuron_requests(NEURON_INDEX);
     for (request_type, _) in &requests {
         for (other, command) in &requests {
-            if other.clone().into_str() == request_type.clone().into_str() {
-                continue;
-            }
-            let update = manage_neuron_update_with(controller(), NEURON_INDEX, command.clone());
-            assert_rejected_as(
-                &format!(
-                    "{} signed as {}",
-                    request_type.clone().into_str(),
-                    other.clone().into_str()
-                ),
-                verify(request_type, &update),
-                "The signed manage_neuron command is not the",
+            let update = command_update(owner(), owner(), NEURON_INDEX, command.clone());
+            let name = format!(
+                "{} signed as {}",
+                request_type.clone().into_str(),
+                other.clone().into_str()
             );
-        }
-    }
-}
-
-fn neuron_info_update(sender: PrincipalId, owner: PrincipalId) -> HttpCanisterUpdate {
-    let args = NeuronIdOrSubaccount::Subaccount(
-        convert::neuron_subaccount_bytes_from_principal(&owner, NEURON_INDEX).to_vec(),
-    );
-    HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT.to_string(),
-        arg: Blob(Encode!(&args).unwrap()),
-        nonce: None,
-        sender: Blob(sender.into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    }
-}
-
-#[test]
-fn every_hotkey_request_is_bound_to_the_displayed_controller() {
-    let hotkey = PrincipalId::new_user_test_id(9);
-    let follow = manage_neuron_requests(NEURON_INDEX)
-        .into_iter()
-        .filter(|(request_type, _)| {
-            matches!(
-                request_type,
-                RequestType::Follow { .. } | RequestType::RefreshVotingPower { .. }
-            )
-        })
-        .map(|(request_type, command)| {
-            let update = HttpCanisterUpdate {
-                sender: Blob(hotkey.into_vec()),
-                ..manage_neuron_update_with(controller(), NEURON_INDEX, command)
-            };
-            (request_type, update)
-        });
-    let neuron_info = (
-        RequestType::NeuronInfo {
-            neuron_index: NEURON_INDEX,
-            controller: None,
-        },
-        neuron_info_update(hotkey, controller()),
-    );
-
-    for (request_type, update) in follow.chain([neuron_info]) {
-        let name = request_type.clone().into_str();
-        let displaying = |controller: Option<PrincipalId>| {
-            let controller = controller.map(PublicKeyOrPrincipal::Principal);
-            match request_type.clone() {
-                RequestType::Follow { neuron_index, .. } => RequestType::Follow {
-                    neuron_index,
-                    controller,
-                },
-                RequestType::RefreshVotingPower { neuron_index, .. } => {
-                    RequestType::RefreshVotingPower {
-                        neuron_index,
-                        controller,
-                    }
-                }
-                RequestType::NeuronInfo { neuron_index, .. } => RequestType::NeuronInfo {
-                    neuron_index,
-                    controller,
-                },
-                _ => unreachable!(),
+            if request_type == other {
+                verify(request_type, &update).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            } else {
+                assert_rejected(
+                    &name,
+                    verify(request_type, &update),
+                    "The signed manage_neuron command is not the",
+                );
             }
-        };
-
-        verify(&displaying(Some(controller())), &update)
-            .unwrap_or_else(|e| panic!("{name}: the genuine update was rejected: {e:?}"));
-        for displayed in [None, Some(PrincipalId::new_user_test_id(4))] {
-            assert_rejected_as(
-                name,
-                verify(&displaying(displayed), &update),
-                "signed neuron subaccount does not belong",
-            );
         }
     }
 }
 
 #[test]
-fn stake_memo_must_match_the_displayed_neuron_index() {
-    let args = ClaimOrRefreshNeuronFromAccount {
-        controller: None,
-        memo: 0,
+fn a_manage_neuron_request_must_name_its_neuron_by_signed_nonce_and_subaccount() {
+    let manage = |id, neuron_id_or_subaccount| ManageNeuronRequest {
+        id,
+        neuron_id_or_subaccount,
+        command: Some(disburse_command()),
     };
-    let update = HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
-        arg: Blob(Encode!(&args).unwrap()),
-        nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),
-        sender: Blob(controller().into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
-    assert_rejected(
-        verify(
-            &RequestType::Stake {
-                neuron_index: NEURON_INDEX,
+    let neuron_id = ic_nns_common::pb::v1::NeuronId { id: 99 };
+    let honest = manage(None, Some(subaccount(owner(), NEURON_INDEX)));
+
+    let cases = [
+        (
+            "missing nonce",
+            HttpCanisterUpdate {
+                nonce: None,
+                ..manage_neuron_update(owner(), NEURON_INDEX, &honest)
             },
-            &update,
+            "carries no nonce",
         ),
-        "neuron_index 7, but the signed claim_or_refresh_neuron_from_account memo says 0",
-    );
-}
-
-fn list_neurons_update(args: &ic_nns_governance_api::ListNeurons) -> HttpCanisterUpdate {
-    HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: LIST_NEURONS.to_string(),
-        arg: Blob(Encode!(args).unwrap()),
-        nonce: None,
-        sender: Blob(controller().into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    }
-}
-
-#[test]
-fn list_neurons_must_be_the_argument_construction_payloads_builds() {
-    let displayed = RequestType::ListNeurons { page_number: 3 };
-    verify(&displayed, &list_neurons_update(&list_neurons_arg(Some(3)))).unwrap();
-
-    let mutations: [fn(&mut ic_nns_governance_api::ListNeurons); 6] = [
-        |args| args.neuron_ids = vec![1],
-        |args| args.include_neurons_readable_by_caller = false,
-        |args| args.include_empty_neurons_readable_by_caller = Some(true),
-        |args| args.include_public_neurons_in_full_neurons = Some(true),
-        |args| args.page_size = Some(1),
-        |args| args.neuron_subaccounts = Some(vec![]),
+        (
+            "other nonce",
+            manage_neuron_update(owner(), 0, &honest),
+            "neuron_index 7, but the signed nonce says 0",
+        ),
+        (
+            "legacy id",
+            manage_neuron_update(
+                owner(),
+                NEURON_INDEX,
+                &manage(Some(neuron_id), Some(subaccount(owner(), NEURON_INDEX))),
+            ),
+            "legacy `id` field",
+        ),
+        (
+            "neuron id",
+            manage_neuron_update(
+                owner(),
+                NEURON_INDEX,
+                &manage(None, Some(NeuronIdOrSubaccount::NeuronId(neuron_id))),
+            ),
+            "identifies the neuron by id",
+        ),
+        (
+            "no neuron",
+            manage_neuron_update(owner(), NEURON_INDEX, &manage(None, None)),
+            "does not identify a neuron",
+        ),
+        (
+            "invalid sender",
+            HttpCanisterUpdate {
+                sender: Blob(vec![0xff; 30]),
+                ..manage_neuron_update(owner(), NEURON_INDEX, &honest)
+            },
+            "Could not parse the signed update's sender",
+        ),
     ];
-    for mutate in mutations {
-        let mut args = list_neurons_arg(Some(3));
-        mutate(&mut args);
-        assert_rejected(
-            verify(&displayed, &list_neurons_update(&args)),
-            "sets fields other than the page number",
-        );
+
+    verify(
+        &disburse(),
+        &manage_neuron_update(owner(), NEURON_INDEX, &honest),
+    )
+    .unwrap();
+    for (name, update, expected) in cases {
+        assert_rejected(name, verify(&disburse(), &update), expected);
     }
 }
 
 #[test]
 fn every_governance_request_is_bound_to_the_governance_canister_and_method() {
-    let stake = HttpCanisterUpdate {
-        canister_id: Blob(governance().get().to_vec()),
-        method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
-        arg: Blob(
-            Encode!(&ClaimOrRefreshNeuronFromAccount {
-                controller: None,
-                memo: NEURON_INDEX,
-            })
-            .unwrap(),
-        ),
-        nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),
-        sender: Blob(controller().into_vec()),
-        ingress_expiry: 0,
-        sender_info: None,
-    };
     let requests = [
         (
             RequestType::Stake {
                 neuron_index: NEURON_INDEX,
             },
-            stake,
+            stake_update(None, NEURON_INDEX),
         ),
         (
             RequestType::NeuronInfo {
                 neuron_index: NEURON_INDEX,
                 controller: None,
             },
-            neuron_info_update(controller(), controller()),
+            neuron_info_update(owner(), owner(), NEURON_INDEX),
         ),
         (
             RequestType::ListNeurons { page_number: 0 },
             list_neurons_update(&list_neurons_arg(None)),
         ),
         (
-            disburse(NEURON_INDEX),
-            manage_neuron_update(controller(), NEURON_INDEX),
+            disburse(),
+            command_update(owner(), owner(), NEURON_INDEX, disburse_command()),
         ),
     ];
 
     for (request_type, update) in requests {
         let name = request_type.clone().into_str();
-        verify(&request_type, &update)
-            .unwrap_or_else(|e| panic!("{name}: the genuine update was rejected: {e:?}"));
-        assert_rejected_as(
-            name,
-            verify(
-                &request_type,
-                &HttpCanisterUpdate {
-                    canister_id: Blob(ledger().get().to_vec()),
-                    ..update.clone()
-                },
-            ),
-            "A neuron request must be addressed to canister",
-        );
-        assert_rejected_as(
+        verify(&request_type, &update).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        for canister_id in [ledger(), ic_nns_constants::GOVERNANCE_CANISTER_ID] {
+            assert_rejected(
+                name,
+                verify(
+                    &request_type,
+                    &HttpCanisterUpdate {
+                        canister_id: Blob(canister_id.get().to_vec()),
+                        ..update.clone()
+                    },
+                ),
+                "A neuron request must be addressed to canister",
+            );
+        }
+        assert_rejected(
             name,
             verify(
                 &request_type,
@@ -809,6 +461,128 @@ fn every_governance_request_is_bound_to_the_governance_canister_and_method() {
             "Expected the signed update to call",
         );
     }
+}
+
+#[test]
+fn stake_is_bound_to_the_signed_nonce_memo_and_controller() {
+    let stake = |neuron_index| RequestType::Stake { neuron_index };
+
+    verify(&stake(NEURON_INDEX), &stake_update(None, NEURON_INDEX)).unwrap();
+    verify(
+        &stake(NEURON_INDEX),
+        &stake_update(Some(owner()), NEURON_INDEX),
+    )
+    .unwrap();
+    assert_rejected(
+        "rewritten index",
+        verify(&stake(0), &stake_update(None, NEURON_INDEX)),
+        "neuron_index 0, but the signed nonce says 7",
+    );
+    assert_rejected(
+        "other memo",
+        verify(&stake(NEURON_INDEX), &stake_update(None, 0)),
+        "neuron_index 7, but the signed claim_or_refresh_neuron_from_account memo says 0",
+    );
+    assert_rejected(
+        "other controller",
+        verify(
+            &stake(NEURON_INDEX),
+            &stake_update(Some(stranger()), NEURON_INDEX),
+        ),
+        "names controller",
+    );
+}
+
+#[test]
+fn list_neurons_must_be_the_argument_construction_payloads_builds() {
+    let displayed = RequestType::ListNeurons { page_number: 3 };
+    verify(&displayed, &list_neurons_update(&list_neurons_arg(Some(3)))).unwrap();
+    assert_rejected(
+        "other page",
+        verify(
+            &RequestType::ListNeurons { page_number: 0 },
+            &list_neurons_update(&list_neurons_arg(Some(3))),
+        ),
+        "page_number 0, but the signed list_neurons argument says 3",
+    );
+
+    let honest = || list_neurons_arg(Some(3));
+    let mutated = [
+        ListNeurons {
+            neuron_ids: vec![1],
+            ..honest()
+        },
+        ListNeurons {
+            include_neurons_readable_by_caller: false,
+            ..honest()
+        },
+        ListNeurons {
+            include_empty_neurons_readable_by_caller: Some(true),
+            ..honest()
+        },
+        ListNeurons {
+            include_public_neurons_in_full_neurons: Some(true),
+            ..honest()
+        },
+        ListNeurons {
+            page_size: Some(1),
+            ..honest()
+        },
+        ListNeurons {
+            neuron_subaccounts: Some(vec![]),
+            ..honest()
+        },
+    ];
+    for args in mutated {
+        assert_rejected(
+            &format!("{args:?}"),
+            verify(&displayed, &list_neurons_update(&args)),
+            "sets fields other than the page number",
+        );
+    }
+}
+
+#[test]
+fn a_transfer_must_be_a_send_from_the_default_account_on_the_configured_ledger() {
+    let send = |canister_id, method: &str, from_subaccount| {
+        update(
+            canister_id,
+            method,
+            convert::to_arg(icp_ledger::SendArgs {
+                memo: icp_ledger::Memo(0),
+                amount: icp_ledger::Tokens::from_e8s(100_000_000),
+                fee: icp_ledger::Tokens::from_e8s(10_000),
+                from_subaccount,
+                to: icp_ledger::AccountIdentifier::from(stranger()),
+                created_at_time: None,
+            }),
+            None,
+            owner(),
+        )
+    };
+
+    verify(&RequestType::Send, &send(ledger(), SEND_PB, None)).unwrap();
+    assert_rejected(
+        "other ledger",
+        verify(
+            &RequestType::Send,
+            &send(CanisterId::from_u64(99), SEND_PB, None),
+        ),
+        "A transfer must be addressed to canister",
+    );
+    assert_rejected(
+        "other method",
+        verify(&RequestType::Send, &send(ledger(), "notify_pb", None)),
+        "Expected the signed update to call 'send_pb'",
+    );
+    assert_rejected(
+        "subaccount",
+        verify(
+            &RequestType::Send,
+            &send(ledger(), SEND_PB, Some(icp_ledger::Subaccount([1; 32]))),
+        ),
+        "draws on a subaccount of the sender",
+    );
 }
 
 fn pair(update: HttpCanisterUpdate) -> EnvelopePair {
@@ -830,42 +604,40 @@ fn pair(update: HttpCanisterUpdate) -> EnvelopePair {
 }
 
 #[test]
-fn envelopes_must_differ_only_in_ingress_expiry() {
-    let base = manage_neuron_update(controller(), NEURON_INDEX);
-    let mut later = base.clone();
-    later.ingress_expiry = base.ingress_expiry + 1_000;
+fn envelopes_must_carry_the_same_update_and_read_its_own_result() {
+    let base = command_update(owner(), owner(), NEURON_INDEX, disburse_command());
+    let later = HttpCanisterUpdate {
+        ingress_expiry: base.ingress_expiry + 1_000,
+        ..base.clone()
+    };
+    let other = command_update(owner(), owner(), 9, disburse_command());
 
-    verify_envelopes(&disburse(NEURON_INDEX), &[pair(base.clone()), pair(later)]).unwrap();
+    verify_envelopes(&disburse(), &[pair(base.clone()), pair(later.clone())]).unwrap();
 
-    let other = manage_neuron_update(controller(), 9);
-    assert_rejected(
-        verify_envelopes(&disburse(NEURON_INDEX), &[pair(base), pair(other)]),
-        "must differ only in their ingress",
-    );
+    let mut read_state_of_later = pair(base.clone());
+    read_state_of_later.read_state = pair(later).read_state;
+    let mut read_state_of_other = pair(base.clone());
+    read_state_of_other.read_state = pair(other.clone()).read_state;
 
-    assert_rejected(
-        verify_envelopes(&disburse(NEURON_INDEX), &[]),
-        "No request payload provided",
-    );
-}
-
-#[test]
-fn a_read_state_for_another_message_is_rejected() {
-    let base = manage_neuron_update(controller(), NEURON_INDEX);
-    let mut later = base.clone();
-    later.ingress_expiry = base.ingress_expiry + 1_000;
-
-    let mut spliced = pair(base.clone());
-    spliced.read_state = pair(later).read_state;
-    assert_rejected(
-        verify_envelopes(&disburse(NEURON_INDEX), &[spliced]),
-        "must read the result of that",
-    );
-
-    let mut spliced = pair(base);
-    spliced.read_state = pair(manage_neuron_update(controller(), 9)).read_state;
-    assert_rejected(
-        verify_envelopes(&disburse(NEURON_INDEX), &[spliced]),
-        "must read the result of that",
-    );
+    let cases = [
+        (
+            "other update",
+            vec![pair(base), pair(other)],
+            "must differ only in their ingress",
+        ),
+        (
+            "read state of a later envelope",
+            vec![read_state_of_later],
+            "must read the result of that",
+        ),
+        (
+            "read state of another update",
+            vec![read_state_of_other],
+            "must read the result of that",
+        ),
+        ("no envelope", vec![], "No request payload provided"),
+    ];
+    for (name, envelopes, expected) in cases {
+        assert_rejected(name, verify_envelopes(&disburse(), &envelopes), expected);
+    }
 }
