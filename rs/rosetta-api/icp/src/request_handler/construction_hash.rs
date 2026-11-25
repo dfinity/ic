@@ -1,7 +1,7 @@
 use crate::errors::ApiError;
 use crate::models::{ConstructionHashRequest, ConstructionHashResponse, SignedTransaction};
 use crate::request_handler::{RosettaRequestHandler, verify_network_id};
-use crate::signed_target::representative_envelope;
+use crate::signed_target::verify_signed_envelopes;
 use crate::transaction_id::{self, TransactionIdentifier};
 use serde_json::map::Map;
 use std::str::FromStr;
@@ -16,8 +16,18 @@ impl RosettaRequestHandler {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let signed_transaction = SignedTransaction::from_str(&msg.signed_transaction)
             .map_err(|err| ApiError::invalid_transaction(format!("{err:?}")))?;
-        for (_, envelopes) in &signed_transaction.requests {
-            representative_envelope(envelopes)?;
+        // Which hash is reported is decided by the unsigned wrapper, and which
+        // message that hash describes is decided by the envelope picked out of
+        // the request. Both have to agree with the signed payload, or the
+        // identifier returned here is not the identifier of the transaction
+        // the caller is about to submit.
+        for (request_type, envelopes) in &signed_transaction.requests {
+            verify_signed_envelopes(
+                request_type,
+                envelopes,
+                self.ledger.ledger_canister_id(),
+                self.ledger.governance_canister_id(),
+            )?;
         }
 
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
