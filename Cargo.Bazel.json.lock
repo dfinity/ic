@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "91ac8cfb7780a2a2fcc52b7bb7eb765a1e13181203117ff1a04106135882ea97",
+  "checksum": "8e505db050b39a9f8456fc76f6df72d77d27ac72bc88b720acd7fa28ce3ce43f",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4974,35 +4974,6 @@
       ],
       "version": "0.7.8"
     },
-    "as-any 0.3.2": {
-      "common_attrs": {
-        "edition": "2018"
-      },
-      "library_target_name": "as_any",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "as-any",
-      "package_url": "https://codeberg.org/fogti/as-any",
-      "repository": {
-        "Http": {
-          "sha256": "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063",
-          "url": "https://static.crates.io/crates/as-any/0.3.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "as_any",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.2"
-    },
     "ascii-canvas 3.0.0": {
       "common_attrs": {
         "deps": [
@@ -7055,13 +7026,12 @@
       ],
       "version": "0.14.1"
     },
-    "axum-server 0.7.3": {
+    "axum-server 0.9.2": {
       "common_attrs": {
         "crate_features": [
           "arc-swap",
           "default",
           "rustls",
-          "rustls-pemfile",
           "rustls-pki-types",
           "tls-rustls-no-provider",
           "tokio-rustls"
@@ -7074,6 +7044,10 @@
           {
             "id": "bytes 1.12.2",
             "target": "bytes"
+          },
+          {
+            "id": "either 1.19.0",
+            "target": "either"
           },
           {
             "id": "fs-err 3.3.2",
@@ -7104,12 +7078,12 @@
             "target": "rustls"
           },
           {
-            "id": "rustls-pemfile 2.2.0",
-            "target": "rustls_pemfile"
-          },
-          {
             "id": "rustls-pki-types 1.16.0",
             "target": "rustls_pki_types"
+          },
+          {
+            "id": "socket2 0.6.5",
+            "target": "socket2"
           },
           {
             "id": "tokio 1.54.1",
@@ -7136,8 +7110,8 @@
       "package_url": "https://github.com/programatik29/axum-server",
       "repository": {
         "Http": {
-          "sha256": "c1ab4a3ec9ea8a657c72d99a03a824af695bd0fb5ec639ccbd9cd3543b41a5f9",
-          "url": "https://static.crates.io/crates/axum-server/0.7.3/download"
+          "sha256": "3766086d344b8f8d2a9cf6fb211b581de5b160e052d7bc75a92e58cc41909054",
+          "url": "https://static.crates.io/crates/axum-server/0.9.2/download"
         }
       },
       "targets": [
@@ -7148,7 +7122,7 @@
           }
         }
       ],
-      "version": "0.7.3"
+      "version": "0.9.2"
     },
     "backon 1.6.0": {
       "common_attrs": {
@@ -17736,7 +17710,7 @@
             "target": "axum_otel_metrics"
           },
           {
-            "id": "axum-server 0.7.3",
+            "id": "axum-server 0.9.2",
             "target": "axum_server"
           },
           {
@@ -18188,11 +18162,11 @@
             "target": "ipnet"
           },
           {
-            "id": "itertools 0.12.1",
+            "id": "itertools 0.15.0",
             "target": "itertools"
           },
           {
-            "id": "json5 0.4.1",
+            "id": "json5 1.3.8",
             "target": "json5"
           },
           {
@@ -18417,10 +18391,6 @@
           {
             "id": "quinn 0.11.12",
             "target": "quinn"
-          },
-          {
-            "id": "quinn-udp 0.5.16",
-            "target": "quinn_udp"
           },
           {
             "id": "quote 1.0.47",
@@ -18661,7 +18631,7 @@
             "target": "socket2"
           },
           {
-            "id": "socks5-impl 0.6.2",
+            "id": "socks5-impl 0.10.3",
             "target": "socks5_impl"
           },
           {
@@ -18837,7 +18807,7 @@
             "target": "tracing_subscriber"
           },
           {
-            "id": "turmoil 0.6.6",
+            "id": "turmoil 0.7.2",
             "target": "turmoil"
           },
           {
@@ -32128,11 +32098,6 @@
     },
     "itertools 0.12.1": {
       "common_attrs": {
-        "crate_features": [
-          "default",
-          "use_alloc",
-          "use_std"
-        ],
         "deps": [
           {
             "id": "either 1.19.0",
@@ -32968,37 +32933,32 @@
       ],
       "version": "0.3.107"
     },
-    "json5 0.4.1": {
+    "json5 1.3.8": {
       "common_attrs": {
         "deps": [
           {
-            "id": "pest 2.9.6",
-            "target": "pest"
-          },
-          {
             "id": "serde 1.0.229",
             "target": "serde"
+          },
+          {
+            "id": "ucd-trie 0.1.7",
+            "target": "ucd_trie"
           }
         ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "pest_derive 2.9.6",
-            "target": "pest_derive"
-          }
-        ]
+        "edition": "2024"
       },
       "library_target_name": "json5",
-      "license": "ISC",
+      "license": "MIT",
+      "license_file": "LICENSE",
       "license_ids": [
-        "ISC"
+        "MIT"
       ],
       "name": "json5",
       "package_url": "https://github.com/callum-oakley/json5-rs",
       "repository": {
         "Http": {
-          "sha256": "96b0db21af676c1ce64250b5f40f3ce2cf27e4e47cb91ed91eb6fe9350b430c1",
-          "url": "https://static.crates.io/crates/json5/0.4.1/download"
+          "sha256": "6c1d229cedc4e210dd2e2a6cdc59e36ce28e7338fb69367d0d2566e26de7d599",
+          "url": "https://static.crates.io/crates/json5/1.3.8/download"
         }
       },
       "targets": [
@@ -33009,7 +32969,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "1.3.8"
     },
     "jsonrpc 0.21.1": {
       "common_attrs": {
@@ -46250,7 +46210,6 @@
       },
       "common_attrs": {
         "crate_features": [
-          "default",
           "log",
           "tracing"
         ],
@@ -46916,6 +46875,50 @@
         }
       ],
       "version": "0.4.3"
+    },
+    "rand_distr 0.5.1": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "num-traits 0.2.19",
+            "target": "num_traits"
+          },
+          {
+            "id": "rand 0.9.5",
+            "target": "rand"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "rand_distr",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rand_distr",
+      "package_url": "https://github.com/rust-random/rand_distr",
+      "repository": {
+        "Http": {
+          "sha256": "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463",
+          "url": "https://static.crates.io/crates/rand_distr/0.5.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_distr",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.1"
     },
     "rand_pcg 0.10.3": {
       "common_attrs": {
@@ -55602,20 +55605,17 @@
       ],
       "version": "0.6.5"
     },
-    "socks5-impl 0.6.2": {
+    "socks5-impl 0.10.3": {
       "common_attrs": {
         "crate_features": [
-          "tokio"
+          "address",
+          "default",
+          "protocol",
+          "proxy-parameters",
+          "tokio",
+          "user-key"
         ],
         "deps": [
-          {
-            "id": "as-any 0.3.2",
-            "target": "as_any"
-          },
-          {
-            "id": "byteorder 1.5.0",
-            "target": "byteorder"
-          },
           {
             "id": "bytes 1.12.2",
             "target": "bytes"
@@ -55631,6 +55631,10 @@
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "url 2.5.9",
+            "target": "url"
           }
         ],
         "edition": "2024",
@@ -55651,8 +55655,8 @@
       "package_url": "https://github.com/ssrlive/socks5-impl",
       "repository": {
         "Http": {
-          "sha256": "4b7bef5922371adf8b6f1dd0b9fe3d86c77c22686e8f4236b778ed0215cdcd9b",
-          "url": "https://static.crates.io/crates/socks5-impl/0.6.2/download"
+          "sha256": "457c3c9183a19e67d12d8838e20b653d158ddcd86758dd992d8c60c08ef15d85",
+          "url": "https://static.crates.io/crates/socks5-impl/0.10.3/download"
         }
       },
       "targets": [
@@ -55663,7 +55667,7 @@
           }
         }
       ],
-      "version": "0.6.2"
+      "version": "0.10.3"
     },
     "spin 0.9.9": {
       "common_attrs": {
@@ -61825,7 +61829,7 @@
       ],
       "version": "0.30.0"
     },
-    "turmoil 0.6.6": {
+    "turmoil 0.7.2": {
       "common_attrs": {
         "crate_features": [
           "default"
@@ -61840,11 +61844,11 @@
             "target": "indexmap"
           },
           {
-            "id": "rand 0.8.8",
+            "id": "rand 0.9.5",
             "target": "rand"
           },
           {
-            "id": "rand_distr 0.4.3",
+            "id": "rand_distr 0.5.1",
             "target": "rand_distr"
           },
           {
@@ -61872,8 +61876,8 @@
       "package_url": "https://github.com/tokio-rs/turmoil",
       "repository": {
         "Http": {
-          "sha256": "1f0d6c134ef37268c94d50fb74252af1c34c5c88389e2c1af85654da944ceb52",
-          "url": "https://static.crates.io/crates/turmoil/0.6.6/download"
+          "sha256": "0061c28f1469e94771bb8aa626ce6b29265c2fb5034115046a170b0cba2e33d2",
+          "url": "https://static.crates.io/crates/turmoil/0.7.2/download"
         }
       },
       "targets": [
@@ -61884,7 +61888,7 @@
           }
         }
       ],
-      "version": "0.6.6"
+      "version": "0.7.2"
     },
     "twox-hash 2.1.5": {
       "common_attrs": {
@@ -62027,6 +62031,7 @@
     "ucd-trie 0.1.7": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "std"
         ],
         "edition": "2021"
@@ -69118,7 +69123,7 @@
     "axum 0.8.9",
     "axum-extra 0.12.6",
     "axum-otel-metrics 0.14.1",
-    "axum-server 0.7.3",
+    "axum-server 0.9.2",
     "backon 1.6.0",
     "base64 0.23.1",
     "bech32 0.12.0",
@@ -69232,8 +69237,8 @@
     "insta 1.49.0",
     "intmap 1.1.0",
     "ipnet 2.12.2",
-    "itertools 0.12.1",
-    "json5 0.4.1",
+    "itertools 0.15.0",
+    "json5 1.3.8",
     "jsonrpc 0.21.1",
     "k256 0.13.4",
     "keyring 3.6.3",
@@ -69291,7 +69296,6 @@
     "qrcode 0.14.1",
     "quickcheck 1.1.0",
     "quinn 0.11.12",
-    "quinn-udp 0.5.16",
     "quote 1.0.47",
     "rand 0.8.8",
     "rand 0.10.4",
@@ -69352,7 +69356,7 @@
     "slog-term 2.9.2",
     "slotmap 1.1.1",
     "socket2 0.6.5",
-    "socks5-impl 0.6.2",
+    "socks5-impl 0.10.3",
     "ssh2 0.9.7",
     "static_assertions 1.1.0",
     "strum 0.28.0",
@@ -69398,7 +69402,7 @@
     "tracing-opentelemetry 0.33.0",
     "tracing-serde 0.2.0",
     "tracing-subscriber 0.3.23",
-    "turmoil 0.6.6",
+    "turmoil 0.7.2",
     "url 2.5.9",
     "uuid 1.12.1",
     "virt 0.4.3",

@@ -1159,12 +1159,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "as-any"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
-
-[[package]]
 name = "ascii-canvas"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1677,12 +1671,13 @@ dependencies = [
 
 [[package]]
 name = "axum-server"
-version = "0.7.3"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1ab4a3ec9ea8a657c72d99a03a824af695bd0fb5ec639ccbd9cd3543b41a5f9"
+checksum = "3766086d344b8f8d2a9cf6fb211b581de5b160e052d7bc75a92e58cc41909054"
 dependencies = [
  "arc-swap",
  "bytes",
+ "either",
  "fs-err",
  "http 1.5.0",
  "http-body",
@@ -1690,8 +1685,8 @@ dependencies = [
  "hyper-util",
  "pin-project-lite",
  "rustls",
- "rustls-pemfile",
  "rustls-pki-types",
+ "socket2",
  "tokio",
  "tokio-rustls",
  "tower-service",
@@ -3239,7 +3234,7 @@ dependencies = [
  "ic-types-cycles",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
  "registry-canister",
@@ -5749,7 +5744,7 @@ dependencies = [
  "ic-sys",
  "ic_device",
  "ic_os_logging",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "libcryptsetup-rs",
  "nix 0.32.0",
  "parking_lot",
@@ -6634,7 +6629,7 @@ dependencies = [
  "ic-sns-wasm",
  "ic-types",
  "indexmap 2.14.2",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "maplit",
  "pocket-ic",
  "pretty_assertions",
@@ -7497,7 +7492,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-validator",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "prost",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
@@ -7693,7 +7688,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-tree-hash-test-utils",
  "ic-utils 0.9.0",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "leb128",
  "proptest",
  "rand 0.8.8",
@@ -8764,7 +8759,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-utils-mem-lru",
  "ic_bls12_381",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "pairing",
  "parking_lot",
  "paste",
@@ -9815,7 +9810,7 @@ dependencies = [
  "ic-utils-lru-cache",
  "ic-wasm-types",
  "insta",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "libc",
  "maplit",
@@ -9966,7 +9961,7 @@ dependencies = [
  "ic-utils-thread",
  "ic-vetkeys",
  "ic-wasm-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "maplit",
  "memory_tracker",
@@ -11139,7 +11134,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "rand 0.8.8",
- "rand_distr",
+ "rand_distr 0.4.3",
  "tempfile",
 ]
 
@@ -11616,7 +11611,7 @@ dependencies = [
  "ic-stable-structures 0.7.2",
  "ic-transport-types 0.50.0",
  "ic-universal-canister",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "pocket-ic",
  "prometheus-parse",
  "rand 0.8.8",
@@ -11658,7 +11653,7 @@ dependencies = [
  "ic-state-machine-tests",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "pocket-ic",
  "pretty_assertions",
  "registry-canister",
@@ -11885,7 +11880,7 @@ dependencies = [
  "ic-cdk",
  "ic-metrics-encoder",
  "ic-nervous-system-histogram",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
 ]
 
@@ -11955,7 +11950,7 @@ dependencies = [
  "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "lifeline",
  "maplit",
@@ -12427,7 +12422,7 @@ dependencies = [
  "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "local_key",
  "maplit",
@@ -12734,7 +12729,7 @@ dependencies = [
  "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "lifeline",
  "maplit",
@@ -12893,7 +12888,7 @@ dependencies = [
  "ic-registry-node-provider-rewards",
  "ic-stable-structures 0.6.9",
  "ic-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "maplit",
  "mockall",
  "pocket-ic",
@@ -12968,7 +12963,6 @@ dependencies = [
  "mockall",
  "pin-project-lite",
  "quinn",
- "quinn-udp",
  "rcgen 0.13.2",
  "rustls",
  "serde",
@@ -13139,7 +13133,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.50.0",
  "ic_consensus_system_test_utils",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "serde",
  "slog",
  "tokio",
@@ -13909,7 +13903,7 @@ dependencies = [
  "ic-validate-eq",
  "ic-validate-eq-derive",
  "ic-wasm-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "libc",
  "maplit",
@@ -14209,7 +14203,7 @@ dependencies = [
  "ic-sns-wasm",
  "ic-test-utilities-privileges",
  "ic-wasm",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "pretty_assertions",
  "serde",
@@ -14283,7 +14277,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-client",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "maplit",
  "num-bigint 0.4.8",
@@ -14477,7 +14471,7 @@ dependencies = [
  "ic-universal-canister",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "maplit",
  "num-traits",
@@ -14571,7 +14565,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "maplit",
  "pretty_assertions",
@@ -14806,7 +14800,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "ic-utils-thread",
  "ic-wasm-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "libc",
  "prometheus",
  "proptest",
@@ -15204,7 +15198,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "inotify",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "libc",
  "macaddr",
@@ -16297,7 +16291,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "k256 0.13.4",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
@@ -16941,7 +16935,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "reqwest",
  "serde_json",
  "slog",
@@ -17428,13 +17422,12 @@ dependencies = [
 
 [[package]]
 name = "json5"
-version = "0.4.1"
+version = "1.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b0db21af676c1ce64250b5f40f3ce2cf27e4e47cb91ed91eb6fe9350b430c1"
+checksum = "6c1d229cedc4e210dd2e2a6cdc59e36ce28e7338fb69367d0d2566e26de7d599"
 dependencies = [
- "pest",
- "pest_derive",
  "serde",
+ "ucd-trie",
 ]
 
 [[package]]
@@ -18392,7 +18385,7 @@ dependencies = [
  "ic-types",
  "ic-universal-canister",
  "ic-utils 0.50.0",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
  "rejoin-test-lib",
@@ -18472,7 +18465,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "opentelemetry",
  "opentelemetry-prometheus",
  "opentelemetry_sdk",
@@ -18806,7 +18799,7 @@ dependencies = [
  "ic-utils 0.50.0",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "leb128",
  "maplit",
  "proxy_canister",
@@ -19687,7 +19680,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.50.0",
  "ic_consensus_system_test_utils",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "reqwest",
  "serde",
  "slog",
@@ -19878,7 +19871,7 @@ dependencies = [
  "clap",
  "gpt",
  "indoc",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "regex",
  "tar",
  "tempfile",
@@ -19975,38 +19968,6 @@ dependencies = [
  "memchr",
  "pest_stack_guard",
  "ucd-trie",
-]
-
-[[package]]
-name = "pest_derive"
-version = "2.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adcf794fd301ddc20818a6b4de85ed507f4b45300245cec948982e69e12e3bd7"
-dependencies = [
- "pest",
- "pest_generator",
-]
-
-[[package]]
-name = "pest_generator"
-version = "2.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3073afae5db334c25dea9fc3e230a4f191e920c1df080cb9c0b37c9ce1dbb41"
-dependencies = [
- "pest",
- "pest_meta",
- "proc-macro2",
- "quote",
- "syn 3.0.10",
-]
-
-[[package]]
-name = "pest_meta"
-version = "2.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bc7f614b3742541642af1685faaa910bf6333e3cd3729c2cccd118146a57327"
-dependencies = [
- "pest",
 ]
 
 [[package]]
@@ -20422,7 +20383,7 @@ dependencies = [
  "ic-validator-ingress-message",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "libc",
  "nix 0.32.0",
  "pocket-ic",
@@ -21254,6 +21215,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_distr"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463"
+dependencies = [
+ "num-traits",
+ "rand 0.9.5",
+]
+
+[[package]]
 name = "rand_pcg"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21729,7 +21700,7 @@ dependencies = [
  "ic-types-test-utils",
  "idna",
  "ipnet",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "leb128",
  "maplit",
@@ -21739,7 +21710,7 @@ dependencies = [
  "prost",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
- "rand_distr",
+ "rand_distr 0.4.3",
  "registry-canister-protobuf-generator",
  "rstest",
  "serde",
@@ -21792,7 +21763,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored 3.1.1",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "url",
 ]
 
@@ -21899,7 +21870,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-protobuf",
- "itertools 0.12.1",
+ "itertools 0.15.0",
  "lazy_static",
  "maplit",
  "rust_decimal",
@@ -23727,17 +23698,16 @@ dependencies = [
 
 [[package]]
 name = "socks5-impl"
-version = "0.6.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b7bef5922371adf8b6f1dd0b9fe3d86c77c22686e8f4236b778ed0215cdcd9b"
+checksum = "457c3c9183a19e67d12d8838e20b653d158ddcd86758dd992d8c60c08ef15d85"
 dependencies = [
- "as-any",
  "async-trait",
- "byteorder",
  "bytes",
  "percent-encoding",
  "thiserror 2.0.21",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -25188,14 +25158,14 @@ dependencies = [
 
 [[package]]
 name = "turmoil"
-version = "0.6.6"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f0d6c134ef37268c94d50fb74252af1c34c5c88389e2c1af85654da944ceb52"
+checksum = "0061c28f1469e94771bb8aa626ce6b29265c2fb5034115046a170b0cba2e33d2"
 dependencies = [
  "bytes",
  "indexmap 2.14.2",
- "rand 0.8.8",
- "rand_distr",
+ "rand 0.9.5",
+ "rand_distr 0.5.1",
  "scoped-tls",
  "tokio",
  "tracing",
