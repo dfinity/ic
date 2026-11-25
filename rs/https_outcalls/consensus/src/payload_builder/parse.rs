@@ -88,8 +88,9 @@ pub(crate) enum PayloadMessage {
 }
 
 impl PayloadMessage {
-    /// Whether the message counts towards the limit on responses per block, as in
-    /// [`CanisterHttpPayload::num_limited_responses`].
+    /// Whether the message counts towards the limit on responses per block, for the
+    /// payload builder and validators alike. Timeouts are cheap to validate and an
+    /// asynchronous receipt's response already counted, so neither does.
     pub(crate) fn counts_towards_response_limit(&self) -> bool {
         match self {
             Self::Response(_)

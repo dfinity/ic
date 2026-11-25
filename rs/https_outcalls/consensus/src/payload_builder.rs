@@ -220,9 +220,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     continue;
                 }
                 if request.effective_deadline() < validation_context.time {
-                    // Because timeouts are very cheap to verify, they are
-                    // not counted as responses (so that they are irrelevant
-                    // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
                     let timeout = if matches!(request.replication, Replication::Flexible { .. }) {
                         PayloadMessage::FlexibleError(FlexibleCanisterHttpError::Timeout {
                             callback_id: *callback_id,
@@ -494,14 +491,6 @@ impl CanisterHttpPayloadBuilderImpl {
             )
         })? {
             return validation_failed(CanisterHttpPayloadValidationFailure::Disabled);
-        }
-
-        // Check number of responses
-        if payload.num_limited_responses() > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-            return invalid_artifact(InvalidCanisterHttpPayloadReason::TooManyResponses {
-                expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
-                received: payload.num_limited_responses(),
-            });
         }
 
         let state = &self
@@ -1249,6 +1238,17 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             .iter()
             .map(|message| PayloadSize::of(message).wire())
             .sum();
+        // Counts the responses as the payload builder does.
+        let responses = messages
+            .iter()
+            .filter(|message| message.counts_towards_response_limit())
+            .count();
+        if responses > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+            invalid_artifact(InvalidCanisterHttpPayloadReason::TooManyResponses {
+                expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+                received: responses,
+            })?;
+        }
         self.validate_canister_http_payload_impl(
             &parse::messages_to_payload(messages),
             proposal_context.validation_context,
