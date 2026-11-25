@@ -11,6 +11,7 @@ use crate::{
             create_transcript_error::DkgCreateTranscriptError,
             verify_dealing_error::DkgVerifyDealingError,
         },
+        id::{NiDkgIdFromProtoError, ni_dkg_target_id},
     },
     messages::CallbackId,
     registry::RegistryClientError,
@@ -504,17 +505,9 @@ fn build_remote_dkg_attempts_map(
     vec: &[pb::RemoteDkgAttemptCount],
 ) -> Result<BTreeMap<NiDkgTargetId, RemoteDkgAttempts>, ProxyDecodeError> {
     crate::decode_map(vec, |item| {
-        let mut id = [0_u8; NiDkgTargetId::SIZE];
-        // Safely convert the received slice to a fixed-size slice.
-        let mut v = Vec::<u8>::new();
-        v.extend_from_slice(&item.target_id);
-        v.resize(NiDkgTargetId::SIZE, 0_u8);
-        id.copy_from_slice(&v);
-        // Return the key-value pair.
-        Ok((
-            NiDkgTargetId::new(id),
-            RemoteDkgAttempts::from(item.attempt_no),
-        ))
+        let target_id = ni_dkg_target_id(&item.target_id)
+            .map_err(NiDkgIdFromProtoError::InvalidRemoteTargetIdSize)?;
+        Ok((target_id, RemoteDkgAttempts::from(item.attempt_no)))
     })
 }
 
@@ -875,6 +868,29 @@ mod tests {
                 },
             ],
         );
+    }
+
+    #[test]
+    fn dkg_summary_target_ids_have_the_right_size() {
+        use crate::exhaustive::ExhaustiveSet;
+        use assert_matches::assert_matches;
+        use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+        let rng = &mut ReproducibleRng::new();
+        let proto = DkgSummary::exhaustive_set(rng)
+            .iter()
+            .map(pb::Summary::from)
+            .find(|proto| !proto.remote_dkg_attempts.is_empty())
+            .unwrap();
+        DkgSummary::try_from(proto.clone()).expect("Failed to decode the original proto");
+        for size in [0, NiDkgTargetId::SIZE - 1, NiDkgTargetId::SIZE + 1] {
+            let mut resized = proto.clone();
+            resized.remote_dkg_attempts[0].target_id.resize(size, 0);
+            assert_matches!(
+                DkgSummary::try_from(resized),
+                Err(ProxyDecodeError::Other(message)) if message.contains("target Id size")
+            );
+        }
     }
 
     #[test]
