@@ -22,6 +22,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::NeuronInfo;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
+    cell::OnceCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::Bound,
@@ -683,7 +684,7 @@ impl NeuronStore {
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the
     /// given neuron, or it can (directly or indirectly) make ManageNeuron proposals for it (see
-    /// `get_neurons_and_neurons_they_directly_manage`).
+    /// `is_managed_by_any_of`).
     pub fn get_full_neuron(
         &self,
         neuron_id: NeuronId,
@@ -704,13 +705,11 @@ impl NeuronStore {
             return Ok(neuron_clone);
         }
 
-        let neurons_managed_by_principal = self.get_neurons_and_neurons_they_directly_manage(
+        let is_managed_by_principal = self.is_managed_by_any_of(
+            &neuron_clone.neuron_managers(),
             &self.get_neuron_ids_readable_by_caller(principal_id),
+            &OnceCell::new(),
         );
-        let is_managed_by_principal = neuron_clone
-            .neuron_managers()
-            .iter()
-            .any(|manager_id| neurons_managed_by_principal.contains(manager_id));
         if is_managed_by_principal {
             Ok(neuron_clone)
         } else {
@@ -864,28 +863,41 @@ impl NeuronStore {
         })
     }
 
-    /// Returns `neuron_ids`, together with the neurons that they directly manage. A neuron N is
-    /// directly managed by neuron M if N follows M on the NeuronManagement topic (i.e. M is a
-    /// manager of N), because then M can make, and vote on, ManageNeuron proposals for N. N is
-    /// indirectly managed by neuron L if a manager M of N is in turn directly managed by L,
-    /// because then L can make a ManageNeuron proposal for M whose command is MakeProposal, which
-    /// makes M propose to manage N. Since proposals can be nested only once, there are no further
-    /// levels.
+    /// Returns whether a neuron with the given `managers` (see `Neuron::neuron_managers`) is
+    /// managed, directly or indirectly, by any of `neuron_ids`.
     ///
-    /// Thus, a neuron is managed, directly or indirectly, by any of `neuron_ids` if and only if
-    /// one of its managers is in the result. This does one lookup in the following index per
-    /// element of `neuron_ids`; no neuron is loaded.
-    pub fn get_neurons_and_neurons_they_directly_manage(
+    /// A neuron N is directly managed by neuron M if N follows M on the NeuronManagement topic
+    /// (i.e. M is a manager of N), because then M can make, and vote on, ManageNeuron proposals
+    /// for N. N is indirectly managed by neuron L if a manager M of N is in turn directly managed
+    /// by L, because then L can make a ManageNeuron proposal for M whose command is MakeProposal,
+    /// which makes M propose to manage N. Since proposals can be nested only once, there are no
+    /// further levels.
+    ///
+    /// The direct case is checked first. Only if it fails are the neurons that `neuron_ids`
+    /// directly manage looked up in the following index (one lookup per element of `neuron_ids`;
+    /// no neuron is loaded). They are kept in `neurons_they_directly_manage`, so that checking
+    /// several neurons against the same `neuron_ids` looks them up only once.
+    pub fn is_managed_by_any_of(
         &self,
+        managers: &[NeuronId],
         neuron_ids: &BTreeSet<NeuronId>,
-    ) -> BTreeSet<NeuronId> {
-        let mut result = neuron_ids.clone();
-        for neuron_id in neuron_ids {
-            result.extend(
-                self.get_followers_by_followee_and_topic(*neuron_id, Topic::NeuronManagement),
-            );
+        neurons_they_directly_manage: &OnceCell<BTreeSet<NeuronId>>,
+    ) -> bool {
+        if managers.iter().any(|manager| neuron_ids.contains(manager)) {
+            return true;
         }
-        result
+
+        let neurons_they_directly_manage = neurons_they_directly_manage.get_or_init(|| {
+            neuron_ids
+                .iter()
+                .flat_map(|neuron_id| {
+                    self.get_followers_by_followee_and_topic(*neuron_id, Topic::NeuronManagement)
+                })
+                .collect::<BTreeSet<NeuronId>>()
+        });
+        managers
+            .iter()
+            .any(|manager| neurons_they_directly_manage.contains(manager))
     }
 
     // Gets all neuron ids associated with the given principal id (hot-key or controller).

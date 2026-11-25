@@ -1661,7 +1661,7 @@ impl Governance {
         //        NeuronManagement topic). In other words, caller can vote with
         //        (another) neuron M, and the neuron follows M on the
         //        NeuronManagement topic (or follows a neuron that follows M, see
-        //        NeuronStore::get_neurons_and_neurons_they_directly_manage).
+        //        NeuronStore::is_managed_by_any_of).
         let mut implicitly_requested_neuron_ids = if *include_neurons_readable_by_caller {
             if include_empty_neurons_readable_by_caller {
                 self.get_neuron_ids_by_principal(&caller)
@@ -1713,16 +1713,16 @@ impl Governance {
         let empty = Vec::new();
         let current_page = chunks.get(page_number as usize).unwrap_or(&empty);
 
-        // A neuron is managed, directly or indirectly, by the caller's neurons if one of its
-        // managers is in this set. Computed only when first needed.
-        let caller_neurons_and_neurons_they_manage = OnceCell::new();
-        let get_caller_neurons_and_neurons_they_manage = || {
-            caller_neurons_and_neurons_they_manage.get_or_init(|| {
-                self.neuron_store
-                    .get_neurons_and_neurons_they_directly_manage(
-                        &self.get_neuron_ids_by_principal(&caller),
-                    )
-            })
+        // The caller's neurons, and the neurons they directly manage. Computed only when first
+        // needed (see NeuronStore::is_managed_by_any_of).
+        let caller_neurons = OnceCell::new();
+        let neurons_caller_neurons_directly_manage = OnceCell::new();
+        let is_managed_by_caller = |neuron: &Neuron| {
+            self.neuron_store.is_managed_by_any_of(
+                &neuron.neuron_managers(),
+                caller_neurons.get_or_init(|| self.get_neuron_ids_by_principal(&caller)),
+                &neurons_caller_neurons_directly_manage,
+            )
         };
 
         // Populate the above two neuron collections.
@@ -1747,10 +1747,7 @@ impl Governance {
                         )
                         // Caller can (directly or indirectly) make ManageNeuron proposals for
                         // the neuron. Checked last, because it might need index lookups.
-                        || neuron
-                            .neuron_managers()
-                            .iter()
-                            .any(|id| get_caller_neurons_and_neurons_they_manage().contains(id));
+                        || is_managed_by_caller(neuron);
                 if let_caller_read_full_neuron {
                     full_neurons.push(neuron.clone().into_api(
                         now,
@@ -3554,14 +3551,13 @@ impl Governance {
     ///
     /// A ManageNeuron proposal is visible if the targeted neuron is managed by
     /// one of 'caller_neurons', directly or indirectly (see
-    /// NeuronStore::get_neurons_and_neurons_they_directly_manage). For the
-    /// indirect case, 'caller_neurons_and_neurons_they_manage' is initialized
-    /// (from the following index) when first needed, and reused across calls.
+    /// NeuronStore::is_managed_by_any_of, which also explains
+    /// 'neurons_caller_neurons_directly_manage').
     fn proposal_is_visible_to_neurons(
         &self,
         info: &ProposalData,
         caller_neurons: &BTreeSet<NeuronId>,
-        caller_neurons_and_neurons_they_manage: &OnceCell<BTreeSet<NeuronId>>,
+        neurons_caller_neurons_directly_manage: &OnceCell<BTreeSet<NeuronId>>,
     ) -> bool {
         // Is 'info' a manage neuron proposal?
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
@@ -3569,24 +3565,11 @@ impl Governance {
             if let Ok(mgr_ids) = self.with_neuron_by_neuron_id_or_subaccount(managed_id, |neuron| {
                 neuron.neuron_managers()
             }) {
-                // Find one ID in the list of manager IDs that is also
-                // in 'caller_neurons'.
-                if mgr_ids.iter().any(|x| caller_neurons.contains(x)) {
-                    // If such an ID is found, the caller is
-                    // permitted to list this proposal.
-                    return true;
-                }
-                // Otherwise, the caller is permitted to list this proposal if
-                // one of the managers is in turn managed by one of the
-                // caller's neurons.
-                let caller_neurons_and_neurons_they_manage = caller_neurons_and_neurons_they_manage
-                    .get_or_init(|| {
-                        self.neuron_store
-                            .get_neurons_and_neurons_they_directly_manage(caller_neurons)
-                    });
-                mgr_ids
-                    .iter()
-                    .any(|x| caller_neurons_and_neurons_they_manage.contains(x))
+                self.neuron_store.is_managed_by_any_of(
+                    &mgr_ids,
+                    caller_neurons,
+                    neurons_caller_neurons_directly_manage,
+                )
             } else {
                 // This proposal is 'managed', but we cannot find out
                 // by whom - don't show.
@@ -3645,7 +3628,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let caller_neurons_and_neurons_they_manage = OnceCell::new();
+        let neurons_caller_neurons_directly_manage = OnceCell::new();
         let return_self_describing_action = req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
@@ -3674,7 +3657,7 @@ impl Governance {
                 || self.proposal_is_visible_to_neurons(
                     data,
                     &caller_neurons,
-                    &caller_neurons_and_neurons_they_manage,
+                    &neurons_caller_neurons_directly_manage,
                 )
         };
         let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
