@@ -1660,8 +1660,8 @@ impl Governance {
         //        allowed to make or vote on (by virtue of following on then
         //        NeuronManagement topic). In other words, caller can vote with
         //        (another) neuron M, and the neuron follows M on the
-        //        NeuronManagement topic (or follows a neuron that follows M,
-        //        see NeuronStore::is_managed_by_any_of).
+        //        NeuronManagement topic (or follows a neuron that follows M, see
+        //        NeuronStore::get_neurons_and_neurons_they_directly_manage).
         let mut implicitly_requested_neuron_ids = if *include_neurons_readable_by_caller {
             if include_empty_neurons_readable_by_caller {
                 self.get_neuron_ids_by_principal(&caller)
@@ -3554,9 +3554,9 @@ impl Governance {
     ///
     /// A ManageNeuron proposal is visible if the targeted neuron is managed by
     /// one of 'caller_neurons', directly or indirectly (see
-    /// NeuronStore::is_managed_by_any_of). For the indirect case,
-    /// 'caller_neurons_and_neurons_they_manage' is initialized (from the
-    /// following index) when first needed, and reused across calls.
+    /// NeuronStore::get_neurons_and_neurons_they_directly_manage). For the
+    /// indirect case, 'caller_neurons_and_neurons_they_manage' is initialized
+    /// (from the following index) when first needed, and reused across calls.
     fn proposal_is_visible_to_neurons(
         &self,
         info: &ProposalData,

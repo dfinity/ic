@@ -683,7 +683,7 @@ impl NeuronStore {
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the
     /// given neuron, or it can (directly or indirectly) make ManageNeuron proposals for it (see
-    /// `can_principal_manage_neuron_via_proposals`).
+    /// `get_neurons_and_neurons_they_directly_manage`).
     pub fn get_full_neuron(
         &self,
         neuron_id: NeuronId,
@@ -704,7 +704,14 @@ impl NeuronStore {
             return Ok(neuron_clone);
         }
 
-        if self.can_principal_manage_neuron_via_proposals(principal_id, &neuron_clone) {
+        let neurons_managed_by_principal = self.get_neurons_and_neurons_they_directly_manage(
+            &self.get_neuron_ids_readable_by_caller(principal_id),
+        );
+        let is_managed_by_principal = neuron_clone
+            .neuron_managers()
+            .iter()
+            .any(|manager_id| neurons_managed_by_principal.contains(manager_id));
+        if is_managed_by_principal {
             Ok(neuron_clone)
         } else {
             Err(NeuronStoreError::not_authorized_to_get_full_neuron(
@@ -712,79 +719,6 @@ impl NeuronStore {
                 neuron_id,
             ))
         }
-    }
-
-    /// Returns whether `principal_id` can, directly or indirectly, make ManageNeuron proposals
-    /// for `neuron`. See `is_managed_by_any_of` for what "indirectly" means.
-    ///
-    /// The cost is bounded by `neuron`'s managers (and their managers), not by how many neurons
-    /// `principal_id` is associated with: this loads (the followees of) at most
-    /// MAX_FOLLOWEES_PER_TOPIC neurons, and does at most MAX_FOLLOWEES_PER_TOPIC *
-    /// (MAX_FOLLOWEES_PER_TOPIC + 1) lookups in the principal index.
-    fn can_principal_manage_neuron_via_proposals(
-        &self,
-        principal_id: PrincipalId,
-        neuron: &Neuron,
-    ) -> bool {
-        self.is_managed_by_any_of(&neuron.neuron_managers(), |manager_id| {
-            Self::is_principal_controller_or_hotkey_of(principal_id, manager_id)
-        })
-    }
-
-    /// Returns whether `principal_id` is the controller or a hotkey of neuron `neuron_id`. This is
-    /// a single lookup in the principal index; the neuron itself is not loaded.
-    fn is_principal_controller_or_hotkey_of(
-        principal_id: PrincipalId,
-        neuron_id: &NeuronId,
-    ) -> bool {
-        with_stable_neuron_indexes(|indexes| {
-            indexes.principal().contains_entry(neuron_id, principal_id)
-        })
-    }
-
-    /// Returns whether a neuron whose managers are `manager_ids` is managed, directly or
-    /// indirectly, by any neuron for which `is_candidate_manager` returns true.
-    ///
-    /// A neuron N is directly managed by neuron M if N follows M on the NeuronManagement topic
-    /// (i.e. M is in `manager_ids`), because then M can make, and vote on, ManageNeuron proposals
-    /// for N. N is indirectly managed by neuron L if some M in `manager_ids` is in turn directly
-    /// managed by L, because then L can make a ManageNeuron proposal for M whose command is
-    /// MakeProposal, which makes M propose to manage N. Since proposals can be nested only once,
-    /// there are no further levels.
-    ///
-    /// `is_candidate_manager` typically tells whether a principal is the controller or a hotkey of
-    /// a neuron. This loads (the followees of) at most one neuron per element of `manager_ids`.
-    pub fn is_managed_by_any_of(
-        &self,
-        manager_ids: &[NeuronId],
-        is_candidate_manager: impl Fn(&NeuronId) -> bool,
-    ) -> bool {
-        if manager_ids.iter().any(&is_candidate_manager) {
-            return true;
-        }
-
-        manager_ids
-            .iter()
-            .any(|manager_id| self.is_directly_managed_by_any_of(manager_id, &is_candidate_manager))
-    }
-
-    /// Returns whether neuron `neuron_id` follows, on the NeuronManagement topic, any neuron for
-    /// which `is_candidate_manager` returns true, i.e. whether it is directly managed by any such
-    /// neuron. Returns false if the neuron is not found. This loads (the followees of) the neuron.
-    fn is_directly_managed_by_any_of(
-        &self,
-        neuron_id: &NeuronId,
-        is_candidate_manager: impl Fn(&NeuronId) -> bool,
-    ) -> bool {
-        self.with_neuron_sections(
-            neuron_id,
-            NeuronSections {
-                followees: true,
-                ..NeuronSections::NONE
-            },
-            |neuron| neuron.neuron_managers().iter().any(&is_candidate_manager),
-        )
-        .unwrap_or(false)
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,
@@ -930,11 +864,17 @@ impl NeuronStore {
         })
     }
 
-    /// Returns `neuron_ids`, together with the neurons that they directly manage (i.e. that follow
-    /// any of them on the NeuronManagement topic). Thus, a neuron is managed, directly or
-    /// indirectly, by any of `neuron_ids` (see `is_managed_by_any_of`) if and only if one of its
-    /// managers is in the result. This does one lookup in the following index per element of
-    /// `neuron_ids`; no neuron is loaded.
+    /// Returns `neuron_ids`, together with the neurons that they directly manage. A neuron N is
+    /// directly managed by neuron M if N follows M on the NeuronManagement topic (i.e. M is a
+    /// manager of N), because then M can make, and vote on, ManageNeuron proposals for N. N is
+    /// indirectly managed by neuron L if a manager M of N is in turn directly managed by L,
+    /// because then L can make a ManageNeuron proposal for M whose command is MakeProposal, which
+    /// makes M propose to manage N. Since proposals can be nested only once, there are no further
+    /// levels.
+    ///
+    /// Thus, a neuron is managed, directly or indirectly, by any of `neuron_ids` if and only if
+    /// one of its managers is in the result. This does one lookup in the following index per
+    /// element of `neuron_ids`; no neuron is loaded.
     pub fn get_neurons_and_neurons_they_directly_manage(
         &self,
         neuron_ids: &BTreeSet<NeuronId>,
