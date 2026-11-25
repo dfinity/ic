@@ -13,6 +13,7 @@
 
 set -e
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/key-dir.sh
 
 KEY_FILES=(
@@ -41,16 +42,16 @@ if [ "${TEE_ENABLED}" = 0 ]; then
         cp --remove-destination "${KEY_DIR}/${FILE}" /run/ic-node/etc/node_exporter/
     done
 else
-    if mountpoint -q /var/lib/ic/data; then
+    if is_upgrade_vm; then
+        # The Upgrade VM does not open the store.
+        KEY_DIR=/run/ic-node/node_exporter_tls
+    else
         KEY_DIR=/var/lib/ic/data/node_exporter_tls
         # Earlier versions stored the key pair in the "config" partition, where
         # the host could read it, so it must be considered compromised. Remove
         # it only here, in the default VM: the Upgrade VM shares the "config"
         # partition with the running GuestOS.
         rm -rf /boot/config/node_exporter
-    else
-        # The Upgrade VM does not open the store.
-        KEY_DIR=/run/ic-node/node_exporter_tls
     fi
     if ! copy_from_trusted_key_dir "${KEY_DIR}" /run/ic-node/etc/node_exporter "${KEY_FILES[@]}"; then
         create_key_dir "${KEY_DIR}" generate_keys

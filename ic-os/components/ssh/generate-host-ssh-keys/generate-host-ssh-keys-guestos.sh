@@ -15,6 +15,7 @@
 
 set -e
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/key-dir.sh
 
 KEY_FILES=(
@@ -53,16 +54,16 @@ if [ "${TEE_ENABLED}" = 0 ]; then
         fi
     done
 else
-    if mountpoint -q /var/lib/ic/data; then
+    if is_upgrade_vm; then
+        # The Upgrade VM does not open the store.
+        KEY_DIR=/run/ic-node/ssh_host_keys
+    else
         KEY_DIR=/var/lib/ic/data/ssh_host_keys
         # Earlier versions stored the keys in the "config" partition, where the
         # host could read them, so they must be considered compromised. Remove
         # them only here, in the default VM: the Upgrade VM shares the "config"
         # partition with the running GuestOS.
         rm -rf /boot/config/ssh
-    else
-        # The Upgrade VM does not open the store.
-        KEY_DIR=/run/ic-node/ssh_host_keys
     fi
     if ! copy_from_trusted_key_dir "${KEY_DIR}" /run/ic-node/etc/ssh "${KEY_FILES[@]}"; then
         create_key_dir "${KEY_DIR}" generate_keys
