@@ -909,34 +909,25 @@ fn rehash_window(chunks: &mut [ChunkToHash], seed: u64) {
         .iter()
         .map(|chunk| chunk.info.size_bytes as u64)
         .sum();
-    let budget = (total / REHASH_FRACTION).min(MAX_REHASH_BYTES);
-    if budget == 0 {
+    if total == 0 {
         return;
     }
-    let offset = ChaChaRng::seed_from_u64(seed).gen_range(0..total);
-    let (start, start_end) = chunks
-        .iter()
-        .scan(0, |end, chunk| {
-            *end += chunk.info.size_bytes as u64;
-            Some(*end)
-        })
-        .enumerate()
-        .find(|&(_, end)| end > offset)
-        .expect("the offset is within the chunks");
+    let budget = total.div_ceil(REHASH_FRACTION).min(MAX_REHASH_BYTES);
+    let range_begin = ChaChaRng::seed_from_u64(seed).gen_range(0..total);
+    let range_end = range_begin + budget;
+    // Any part of the range past the last chunk wraps around to the first chunk,
+    // up to `wrapped_end`.
+    let wrapped_end = range_end.saturating_sub(total);
 
-    // Counted from the start of chunk `start`, which holds `offset`, the range
-    // ends at `range_end`: the window holds the chunks starting before that.
-    let range_end = offset - (start_end - chunks[start].info.size_bytes as u64) + budget;
-    let mut chunk_start = 0;
-    for index in (start..chunks.len()).chain(0..start) {
-        if chunk_start >= range_end {
-            break;
-        }
-        let chunk = &mut chunks[index];
-        if let ChunkAction::UseHash(hash) = chunk.action {
+    let mut chunk_begin = 0;
+    for chunk in chunks {
+        let chunk_end = chunk_begin + chunk.info.size_bytes as u64;
+        let in_window =
+            (chunk_begin < range_end && chunk_end > range_begin) || chunk_begin < wrapped_end;
+        if in_window && let ChunkAction::UseHash(hash) = chunk.action {
             chunk.action = ChunkAction::RecomputeAndCompare(hash);
         }
-        chunk_start += chunk.info.size_bytes as u64;
+        chunk_begin = chunk_end;
     }
 }
 

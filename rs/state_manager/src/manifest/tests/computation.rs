@@ -1209,7 +1209,7 @@ fn mixed_sizes() -> Vec<u32> {
 /// The bytes `rehash_window` covers, for chunks of the given sizes.
 fn rehash_budget(sizes: &[u32]) -> u64 {
     let total: u64 = sizes.iter().map(|&size| size as u64).sum();
-    (total / REHASH_FRACTION).min(MAX_REHASH_BYTES)
+    total.div_ceil(REHASH_FRACTION).min(MAX_REHASH_BYTES)
 }
 
 #[test]
