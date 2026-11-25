@@ -6,10 +6,11 @@ use crate::{
     layout::Layout,
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
-        CheckRoutingTableStep, CheckSourceSubnetDeletedStep, ComputeExpectedMergedManifestStep,
-        DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
-        StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
-        WaitForHaltingCupStep, WaitForRecoveryCupStep, registry_holds_subnet,
+        CheckRoutingTableStep, CheckSourceSubnetDeletedStep, CleanupStep,
+        ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
+        ProposeRecoveryCupStep, RestartDestinationReplicaStep, StopReplicaAtHaltingCheckpointStep,
+        UploadMergedStateStep, ValidateCupStep, WaitForHaltingCupStep, WaitForRecoveryCupStep,
+        registry_holds_subnet,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -964,7 +965,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 logger: self.recovery.logger.clone(),
             }
             .into(),
-            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
+            StepType::Cleanup => CleanupStep {
+                recovery_dir: self.recovery.recovery_dir.clone(),
+            }
+            .into(),
         };
 
         Ok(step)
