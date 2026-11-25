@@ -36,11 +36,10 @@ use ic_consensus_system_test_utils::{
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{NnsFunction, ProposalStatus};
-use ic_nns_test_utils::{governance::submit_external_update_proposal, registry::get_value};
-use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::make_canister_migrations_record_key;
+use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
     canister_id_into_u64, difference,
@@ -266,7 +265,11 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
                 .collect::<BTreeMap<CanisterIdRange, Vec<SubnetId>>>(),
         )
         .expect("The migrated canister ranges should be well formed");
-        check_canister_migrations(&env, &canister_migrations_during_split).await;
+        check_canister_migrations(
+            &env,
+            split_registry_version,
+            &canister_migrations_during_split,
+        );
 
         wait_until_canister_migration_is_completable(&env, split_registry_version).await;
 
@@ -293,7 +296,11 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
             env.logger(),
             "Running checks to make sure the canister migration was completed correctly."
         );
-        check_canister_migrations(&env, &CanisterMigrations::default()).await;
+        check_canister_migrations(
+            &env,
+            completion_registry_version,
+            &CanisterMigrations::default(),
+        );
         // Make sure the remaining checks (and the calls probe) run against replicas that no
         // longer know about the canister migration.
         wait_until_all_replicas_use_registry_version(&env, completion_registry_version).await;
@@ -1268,29 +1275,24 @@ async fn submit_and_execute_proposal(
         .get_registry_version()
 }
 
-/// Reads the `canister_migrations` record from the registry canister and checks that it equals
+/// Checks that the canister migrations in the registry at `registry_version` equal
 /// `expected_canister_migrations`. A missing record counts as one without any entries.
-async fn check_canister_migrations(
+fn check_canister_migrations(
     env: &TestEnv,
+    registry_version: RegistryVersion,
     expected_canister_migrations: &CanisterMigrations,
 ) {
     info!(
         env.logger(),
-        "Checking that the canister migrations are {expected_canister_migrations:?}"
+        "Checking that the canister migrations at registry version {registry_version} are \
+        {expected_canister_migrations:?}"
     );
-    let nns_runtime = runtime_from_subnet(&get_nns_subnet(env));
-    let registry = Canister::new(&nns_runtime, REGISTRY_CANISTER_ID);
-
-    let canister_migrations = get_value::<pb::CanisterMigrations>(
-        &registry,
-        make_canister_migrations_record_key().as_bytes(),
-    )
-    .await
-    .map(|canister_migrations| {
-        CanisterMigrations::try_from(canister_migrations)
-            .expect("The canister migrations record should be well formed")
-    })
-    .unwrap_or_default();
+    let canister_migrations = env
+        .get_registry()
+        .expect("Failed to open the local registry")
+        .get_canister_migrations(registry_version)
+        .expect("Failed to read the canister migrations from the local registry")
+        .unwrap_or_default();
 
     assert_eq!(
         &canister_migrations, expected_canister_migrations,

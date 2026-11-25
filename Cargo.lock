@@ -16123,7 +16123,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-recovery",
- "ic-registry-keys",
+ "ic-registry-client-helpers",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
