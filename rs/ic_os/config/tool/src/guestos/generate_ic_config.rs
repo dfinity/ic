@@ -165,8 +165,9 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
     let domain_name = guestos_config
         .network_settings
         .domain_name
-        .clone()
-        .unwrap_or_default();
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if !domain_name.is_empty() {
         validate_domain_name(&domain_name)?;
     }
