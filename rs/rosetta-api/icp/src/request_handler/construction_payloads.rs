@@ -1293,7 +1293,10 @@ fn neuron_subaccount(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{CurveType, PublicKey};
     use ic_types::time::Time;
+    use rand_chacha::rand_core::OsRng;
+    use rosetta_core::convert::principal_id_from_public_key;
 
     const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
     // A realistic "now" (~2023) that is well away from the u64 boundary.
@@ -1301,6 +1304,108 @@ mod tests {
 
     fn t(nanos: u64) -> Time {
         Time::from_nanos_since_unix_epoch(nanos)
+    }
+
+    /// Every neuron request must be addressed to the governance canister this
+    /// instance was configured with. Mainnet's id is the one that used to be
+    /// hard-coded here, so a destination that reverted to it would still look
+    /// right against a mainnet-configured instance; this uses a different id so
+    /// that it cannot.
+    #[test]
+    fn neuron_requests_are_addressed_to_the_configured_governance_canister() {
+        let governance_canister_id = CanisterId::from_u64(0x1234);
+        assert_ne!(
+            governance_canister_id,
+            ic_nns_constants::GOVERNANCE_CANISTER_ID
+        );
+
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let pub_key = PublicKey {
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
+            curve_type: CurveType::Edwards25519,
+        };
+        let account =
+            icp_ledger::AccountIdentifier::from(principal_id_from_public_key(&pub_key).unwrap());
+        let pks_map = HashMap::from([(account, &pub_key)]);
+        let ingress_expiries = [1_u64];
+
+        // One assertion per destination in this module: the shared
+        // `manage_neuron` path, and the three that build their own update.
+        let check = |what: &str, updates: Vec<(RequestType, HttpCanisterUpdate)>| {
+            let (_, update) = updates
+                .first()
+                .unwrap_or_else(|| panic!("{what}: no update"));
+            assert_eq!(
+                update.canister_id.0.as_slice(),
+                governance_canister_id.get().as_slice(),
+                "{what} was not addressed to the configured governance canister",
+            );
+        };
+
+        let mut payloads = vec![];
+        let mut updates = vec![];
+        handle_start_dissolve(
+            StartDissolve {
+                account,
+                neuron_index: 0,
+            },
+            &governance_canister_id,
+            &mut payloads,
+            &mut updates,
+            &pks_map,
+            &ingress_expiries,
+        )
+        .unwrap();
+        check("manage_neuron", updates);
+
+        let mut payloads = vec![];
+        let mut updates = vec![];
+        handle_stake(
+            Stake {
+                account,
+                neuron_index: 0,
+            },
+            &governance_canister_id,
+            &mut payloads,
+            &mut updates,
+            &pks_map,
+            &ingress_expiries,
+        )
+        .unwrap();
+        check("stake", updates);
+
+        let mut payloads = vec![];
+        let mut updates = vec![];
+        handle_neuron_info(
+            NeuronInfo {
+                account,
+                controller: None,
+                neuron_index: 0,
+            },
+            &governance_canister_id,
+            &mut payloads,
+            &mut updates,
+            &pks_map,
+            &ingress_expiries,
+        )
+        .unwrap();
+        check("neuron_info", updates);
+
+        let mut payloads = vec![];
+        let mut updates = vec![];
+        handle_list_neurons(
+            ListNeurons {
+                account,
+                page_number: None,
+            },
+            &governance_canister_id,
+            &mut payloads,
+            &mut updates,
+            &pks_map,
+            &ingress_expiries,
+        )
+        .unwrap();
+        check("list_neurons", updates);
     }
 
     // A window whose span exceeds the documented 24h bound would make the loop
