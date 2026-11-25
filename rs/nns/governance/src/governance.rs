@@ -3645,7 +3645,8 @@ impl Governance {
             // include_all_manage_neuron_proposals is true the proposal is
             // always included.
             req.include_all_manage_neuron_proposals.unwrap_or(false)
-                || self.proposal_is_visible_to_neurons(data, &caller_neurons_and_neurons_they_manage)
+                || self
+                    .proposal_is_visible_to_neurons(data, &caller_neurons_and_neurons_they_manage)
         };
         let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS
