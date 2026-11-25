@@ -191,8 +191,6 @@ pub(super) mod construction {
     };
     use url::Url;
 
-    /// Builds an offline-capable `RosettaRequestHandler` together with a signer
-    /// keypair.
     pub(crate) fn setup_handler() -> (
         RosettaRequestHandler,
         NetworkIdentifier,
@@ -231,8 +229,6 @@ pub(super) mod construction {
         (handler, network_identifier, pub_key, key)
     }
 
-    /// Builds a handler together with a single ICP transfer (debit + credit +
-    /// fee) and the signer's public and private keys.
     pub(crate) fn setup_transfer_test() -> (
         RosettaRequestHandler,
         NetworkIdentifier,
