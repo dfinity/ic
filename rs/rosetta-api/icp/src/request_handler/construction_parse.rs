@@ -40,11 +40,6 @@ impl RosettaRequestHandler {
                 .requests
                 .iter()
                 .map(|(request_type, envelopes)| {
-                    // Each envelope carries its own signature and the submit
-                    // path broadcasts whichever one is currently valid, not the
-                    // first, so one of them stands for the rest only once they
-                    // all agree. The loop below then checks that one against
-                    // the metadata about to be displayed.
                     Ok((
                         request_type.clone(),
                         representative_envelope(envelopes)?.clone(),
@@ -59,9 +54,6 @@ impl RosettaRequestHandler {
         let mut metadata = serde_json::Map::new();
 
         for (request_type, update) in updates {
-            // Every field of `request_type` reaching the caller below must be
-            // bound to the signed payload; otherwise the operations we return
-            // would not describe the bytes the caller signs and broadcasts.
             verify_signed_target(
                 &request_type,
                 &update,
