@@ -145,7 +145,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
-    cell::{Cell, RefCell},
+    cell::{Cell, OnceCell, RefCell},
     cmp::{Ordering, max},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -1713,6 +1713,18 @@ impl Governance {
         let empty = Vec::new();
         let current_page = chunks.get(page_number as usize).unwrap_or(&empty);
 
+        // A neuron is managed, directly or indirectly, by the caller's neurons if one of its
+        // managers is in this set. Computed only when first needed.
+        let caller_neurons_and_neurons_they_manage = OnceCell::new();
+        let get_caller_neurons_and_neurons_they_manage = || {
+            caller_neurons_and_neurons_they_manage.get_or_init(|| {
+                self.neuron_store
+                    .get_neurons_and_neurons_they_directly_manage(
+                        &self.get_neuron_ids_by_principal(&caller),
+                    )
+            })
+        };
+
         // Populate the above two neuron collections.
         for neuron_id in current_page {
             // Ignore when a neuron is not found. It is not guaranteed that a
@@ -1720,7 +1732,8 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(neuron_id, |neuron| {
                 // Populate neuron_infos.
-                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller, true);
+                let neuron_info =
+                    neuron.get_neuron_info(self.voting_power_economics(), now, caller, true);
                 neuron_infos.insert(neuron_id.id, neuron_info);
 
                 // Populate full_neurons.
@@ -1733,10 +1746,17 @@ impl Governance {
                             && neuron.visibility() == Visibility::Public
                         )
                         // Caller can (directly or indirectly) make ManageNeuron proposals for
-                        // the neuron. Checked last, because it might load other neurons.
-                        || self.neuron_store.can_principal_manage_neuron_via_proposals(caller, neuron);
+                        // the neuron. Checked last, because it might need index lookups.
+                        || neuron
+                            .neuron_managers()
+                            .iter()
+                            .any(|id| get_caller_neurons_and_neurons_they_manage().contains(id));
                 if let_caller_read_full_neuron {
-                    full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics(), true));
+                    full_neurons.push(neuron.clone().into_api(
+                        now,
+                        self.voting_power_economics(),
+                        true,
+                    ));
                 }
             });
         }
@@ -3531,10 +3551,17 @@ impl Governance {
 
     /// Return true if the 'info' proposal is visible to some of the neurons in
     /// 'caller_neurons'.
+    ///
+    /// A ManageNeuron proposal is visible if the targeted neuron is managed by
+    /// one of 'caller_neurons', directly or indirectly (see
+    /// NeuronStore::is_managed_by_any_of). For the indirect case,
+    /// 'caller_neurons_and_neurons_they_manage' is initialized (from the
+    /// following index) when first needed, and reused across calls.
     fn proposal_is_visible_to_neurons(
         &self,
         info: &ProposalData,
         caller_neurons: &BTreeSet<NeuronId>,
+        caller_neurons_and_neurons_they_manage: &OnceCell<BTreeSet<NeuronId>>,
     ) -> bool {
         // Is 'info' a manage neuron proposal?
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
@@ -3549,8 +3576,17 @@ impl Governance {
                     // permitted to list this proposal.
                     return true;
                 }
-                // 'caller' not authorized
-                false
+                // Otherwise, the caller is permitted to list this proposal if
+                // one of the managers is in turn managed by one of the
+                // caller's neurons.
+                let caller_neurons_and_neurons_they_manage = caller_neurons_and_neurons_they_manage
+                    .get_or_init(|| {
+                        self.neuron_store
+                            .get_neurons_and_neurons_they_directly_manage(caller_neurons)
+                    });
+                mgr_ids
+                    .iter()
+                    .any(|x| caller_neurons_and_neurons_they_manage.contains(x))
             } else {
                 // This proposal is 'managed', but we cannot find out
                 // by whom - don't show.
@@ -3609,17 +3645,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        // ManageNeuron proposals for a neuron are visible to the caller if the caller's neurons
-        // manage it, directly or indirectly (see NeuronStore::is_managed_by_any_of). That is the
-        // case if one of its managers is in this set. This is computed up front using the
-        // following index, so that checking each proposal does not load any further neurons.
-        let caller_neurons_and_neurons_they_manage = {
-            let mut neuron_ids = self
-                .neuron_store
-                .get_neurons_directly_managed_by_any_of(&caller_neurons);
-            neuron_ids.extend(caller_neurons.iter().copied());
-            neuron_ids
-        };
+        let caller_neurons_and_neurons_they_manage = OnceCell::new();
         let return_self_describing_action = req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
@@ -3645,8 +3671,11 @@ impl Governance {
             // include_all_manage_neuron_proposals is true the proposal is
             // always included.
             req.include_all_manage_neuron_proposals.unwrap_or(false)
-                || self
-                    .proposal_is_visible_to_neurons(data, &caller_neurons_and_neurons_they_manage)
+                || self.proposal_is_visible_to_neurons(
+                    data,
+                    &caller_neurons,
+                    &caller_neurons_and_neurons_they_manage,
+                )
         };
         let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS

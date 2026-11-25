@@ -721,7 +721,7 @@ impl NeuronStore {
     /// `principal_id` is associated with: this loads (the followees of) at most
     /// MAX_FOLLOWEES_PER_TOPIC neurons, and does at most MAX_FOLLOWEES_PER_TOPIC *
     /// (MAX_FOLLOWEES_PER_TOPIC + 1) lookups in the principal index.
-    pub fn can_principal_manage_neuron_via_proposals(
+    fn can_principal_manage_neuron_via_proposals(
         &self,
         principal_id: PrincipalId,
         neuron: &Neuron,
@@ -930,19 +930,22 @@ impl NeuronStore {
         })
     }
 
-    /// Returns the neurons that follow any of `manager_ids` on the NeuronManagement topic, i.e. the
-    /// neurons that are directly managed by any of them (see `is_managed_by_any_of`). This does
-    /// one lookup in the following index per element of `manager_ids`; no neuron is loaded.
-    pub fn get_neurons_directly_managed_by_any_of(
+    /// Returns `neuron_ids`, together with the neurons that they directly manage (i.e. that follow
+    /// any of them on the NeuronManagement topic). Thus, a neuron is managed, directly or
+    /// indirectly, by any of `neuron_ids` (see `is_managed_by_any_of`) if and only if one of its
+    /// managers is in the result. This does one lookup in the following index per element of
+    /// `neuron_ids`; no neuron is loaded.
+    pub fn get_neurons_and_neurons_they_directly_manage(
         &self,
-        manager_ids: &BTreeSet<NeuronId>,
+        neuron_ids: &BTreeSet<NeuronId>,
     ) -> BTreeSet<NeuronId> {
-        manager_ids
-            .iter()
-            .flat_map(|manager_id| {
-                self.get_followers_by_followee_and_topic(*manager_id, Topic::NeuronManagement)
-            })
-            .collect::<BTreeSet<NeuronId>>()
+        let mut result = neuron_ids.clone();
+        for neuron_id in neuron_ids {
+            result.extend(
+                self.get_followers_by_followee_and_topic(*neuron_id, Topic::NeuronManagement),
+            );
+        }
+        result
     }
 
     // Gets all neuron ids associated with the given principal id (hot-key or controller).
