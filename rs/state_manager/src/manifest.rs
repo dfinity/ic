@@ -424,34 +424,13 @@ fn build_chunk_table_parallel(
     root: &Path,
     files: Vec<FileWithSize>,
     max_chunk_size: u32,
-    chunk_actions: Vec<ChunkAction>,
+    mut chunks: Vec<ChunkToHash>,
     version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     assert!(
         (max_chunk_size as usize).is_multiple_of(DIRECT_IO_ALIGN),
         "chunk size {max_chunk_size} isn't a multiple of {DIRECT_IO_ALIGN}"
     );
-    // Build a chunk table and file table filled with blank hashes.
-    let mut chunk_table: Vec<ChunkInfo> = {
-        let mut chunks = Vec::with_capacity(chunk_actions.len());
-        for (file_index, FileWithSize(_, size_bytes)) in files.iter().enumerate() {
-            let n = count_chunks(*size_bytes, max_chunk_size);
-            for i in 0..n {
-                let offset = i as u64 * max_chunk_size as u64;
-                let size_bytes = (size_bytes - offset).min(max_chunk_size as u64) as u32;
-                chunks.push(ChunkInfo {
-                    file_index: file_index as u32,
-                    offset,
-                    size_bytes,
-                    hash: [0; 32],
-                });
-            }
-        }
-        chunks
-    };
-
-    assert_eq!(chunk_table.len(), chunk_actions.len());
-
     let mut file_table: Vec<FileInfo> = files
         .into_iter()
         .map(|FileWithSize(relative_path, size_bytes)| FileInfo {
@@ -461,16 +440,6 @@ fn build_chunk_table_parallel(
         })
         .collect();
 
-    let mut chunks: Vec<ChunkToHash> = chunk_table
-        .iter_mut()
-        .zip(&chunk_actions)
-        .enumerate()
-        .map(|(index, (info, action))| ChunkToHash {
-            index,
-            info,
-            action,
-        })
-        .collect();
     // Spans are queued round-robin across files (every file's first span, then
     // every file's second span, and so on), so that concurrent tasks rarely read
     // the same file. Sorting them by offset does that, as every file's n-th span
@@ -504,6 +473,9 @@ fn build_chunk_table_parallel(
             });
         }
     });
+    drop(spans);
+
+    let chunk_table: Vec<ChunkInfo> = chunks.into_iter().map(|chunk| chunk.info).collect();
 
     // After we computed all the chunk hashes, we can finally compute file hashes.
     for (file_index, file_info) in file_table.iter_mut().enumerate() {
@@ -519,12 +491,14 @@ fn build_chunk_table_parallel(
     (file_table, chunk_table)
 }
 
-/// A chunk to hash: its index in the chunk table, its entry there, and what to
+/// A chunk of the manifest being computed: its index in the chunk table, its
+/// entry there (with a blank hash until it is computed or reused), and what to
 /// do with it.
-struct ChunkToHash<'a> {
+#[derive(Clone, Eq, PartialEq, Debug)]
+struct ChunkToHash {
     index: usize,
-    info: &'a mut ChunkInfo,
-    action: &'a ChunkAction,
+    info: ChunkInfo,
+    action: ChunkAction,
 }
 
 /// Sets the hashes of `span`, consecutive chunks of the file at `file_path`, as
@@ -554,7 +528,7 @@ fn hash_span(
             hasher.finish()
         };
 
-        chunk.info.hash = match chunk.action {
+        chunk.info.hash = match &chunk.action {
             ChunkAction::Recompute => {
                 metrics
                     .chunk_bytes
@@ -654,107 +628,89 @@ fn build_chunk_table_sequential(
     log: &ReplicaLogger,
     root: &Path,
     files: Vec<FileWithSize>,
-    max_chunk_size: u32,
-    chunk_actions: Vec<ChunkAction>,
+    chunks: Vec<ChunkToHash>,
     version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
-    let mut chunk_table = Vec::new();
-    let mut file_table = Vec::new();
-    let mut chunk_index: usize = 0;
+    let mut chunk_table = Vec::with_capacity(chunks.len());
+    let mut file_table = Vec::with_capacity(files.len());
+    let mut chunks = chunks.into_iter().peekable();
 
     for (file_index, FileWithSize(relative_path, size_bytes)) in files.into_iter().enumerate() {
-        let mut file_hash = file_hasher();
-
-        let mut bytes_left = size_bytes;
-
-        let num_chunks = count_chunks(size_bytes, max_chunk_size);
-
-        (num_chunks as u32).update_hash(&mut file_hash);
-
-        let compute_file_chunk_hashes = |data: &[u8]| {
-            // It's OK to not have any chunks for 0-sized files (though it's unlikely that
-            // we have any).
-            while bytes_left > 0 {
-                let chunk_size = bytes_left.min(max_chunk_size as u64);
-                let offset = size_bytes - bytes_left;
-
-                let recompute_chunk_hash = || {
-                    let mut hasher = chunk_hasher();
-                    hasher.write(&data[offset as usize..(offset + chunk_size) as usize]);
-                    hasher.finish()
-                };
-
-                assert!(chunk_index < chunk_actions.len());
-
-                let chunk_hash = match chunk_actions[chunk_index] {
-                    ChunkAction::RecomputeAndCompare(reused_chunk_hash) => {
-                        metrics
-                            .chunk_bytes
-                            .with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED])
-                            .inc_by(chunk_size);
-
-                        // We have both a reused and a recomputed hash, so we can compare them to
-                        // monitor for issues
-                        let recomputed_chunk_hash = recompute_chunk_hash();
-                        if recomputed_chunk_hash != reused_chunk_hash {
-                            metrics.reused_chunk_hash_error_count.inc();
-                            error!(
-                                log,
-                                "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
-                                CRITICAL_ERROR_REUSED_CHUNK_HASH,
-                                chunk_index,
-                                relative_path.display(),
-                                recomputed_chunk_hash,
-                                reused_chunk_hash
-                            );
-                        }
-                        recomputed_chunk_hash
-                    }
-                    ChunkAction::UseHash(reused_chunk_hash) => {
-                        metrics
-                            .chunk_bytes
-                            .with_label_values(&[LABEL_VALUE_REUSED])
-                            .inc_by(chunk_size);
-                        reused_chunk_hash
-                    }
-                    ChunkAction::Recompute => {
-                        metrics
-                            .chunk_bytes
-                            .with_label_values(&[LABEL_VALUE_REUSED])
-                            .inc_by(chunk_size);
-                        recompute_chunk_hash()
-                    }
-                };
-
-                let chunk_info = ChunkInfo {
-                    file_index: file_index as u32,
-                    size_bytes: chunk_size as u32,
-                    offset,
-                    hash: chunk_hash,
-                };
-
-                write_chunk_hash(&mut file_hash, &chunk_info, version);
-
-                chunk_table.push(chunk_info);
-
-                bytes_left -= chunk_size;
-                chunk_index += 1;
-            }
-
-            file_table.push(FileInfo {
-                relative_path: relative_path.clone(),
-                size_bytes,
-                hash: file_hash.finish(),
-            });
-        };
-
         let mmap = ic_sys::mmap::ScopedMmap::from_path(root.join(&relative_path))
             .expect("failed to open file");
         let data = mmap.as_slice();
-        compute_file_chunk_hashes(data);
+
+        // It's OK to not have any chunks for 0-sized files (though it's unlikely that
+        // we have any).
+        let first_chunk = chunk_table.len();
+        while let Some(chunk) = chunks.next_if(|chunk| chunk.info.file_index as usize == file_index)
+        {
+            let (offset, chunk_size) = (chunk.info.offset, chunk.info.size_bytes as u64);
+            let recompute_chunk_hash = || {
+                let mut hasher = chunk_hasher();
+                hasher.write(&data[offset as usize..(offset + chunk_size) as usize]);
+                hasher.finish()
+            };
+
+            let chunk_hash = match chunk.action {
+                ChunkAction::RecomputeAndCompare(reused_chunk_hash) => {
+                    metrics
+                        .chunk_bytes
+                        .with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED])
+                        .inc_by(chunk_size);
+
+                    // We have both a reused and a recomputed hash, so we can compare them to
+                    // monitor for issues
+                    let recomputed_chunk_hash = recompute_chunk_hash();
+                    if recomputed_chunk_hash != reused_chunk_hash {
+                        metrics.reused_chunk_hash_error_count.inc();
+                        error!(
+                            log,
+                            "{}: Hash mismatch in chunk with index {} in file {}, recomputed hash {:?}, reused hash {:?}",
+                            CRITICAL_ERROR_REUSED_CHUNK_HASH,
+                            chunk.index,
+                            relative_path.display(),
+                            recomputed_chunk_hash,
+                            reused_chunk_hash
+                        );
+                    }
+                    recomputed_chunk_hash
+                }
+                ChunkAction::UseHash(reused_chunk_hash) => {
+                    metrics
+                        .chunk_bytes
+                        .with_label_values(&[LABEL_VALUE_REUSED])
+                        .inc_by(chunk_size);
+                    reused_chunk_hash
+                }
+                ChunkAction::Recompute => {
+                    metrics
+                        .chunk_bytes
+                        .with_label_values(&[LABEL_VALUE_REUSED])
+                        .inc_by(chunk_size);
+                    recompute_chunk_hash()
+                }
+            };
+
+            chunk_table.push(ChunkInfo {
+                hash: chunk_hash,
+                ..chunk.info
+            });
+        }
+
+        let mut file_hash = file_hasher();
+        ((chunk_table.len() - first_chunk) as u32).update_hash(&mut file_hash);
+        for chunk_info in &chunk_table[first_chunk..] {
+            write_chunk_hash(&mut file_hash, chunk_info, version);
+        }
+        file_table.push(FileInfo {
+            relative_path,
+            size_bytes,
+            hash: file_hash.finish(),
+        });
     }
 
-    assert_eq!(chunk_table.len(), chunk_actions.len());
+    assert!(chunks.next().is_none());
 
     (file_table, chunk_table)
 }
@@ -874,86 +830,86 @@ fn get_base_index(relative_path: &Path, base_manifest: &Manifest) -> Option<usiz
         .ok()
 }
 
-/// Makes a "hash plan": an instruction how to compute the hash of each chunk of
-/// the new manifest.
+/// Makes a "hash plan": the chunks of the new manifest, those of `files`, each
+/// with an instruction how to compute its hash. With `base`, the chunks of the
+/// files in `files_with_same_inodes` (hard links to files of `base_manifest`)
+/// reuse their hashes there; all other chunks are hashed.
 fn hash_plan(
-    base_manifest: &Manifest,
     files: &[FileWithSize],
-    files_with_same_inodes: BTreeSet<PathBuf>,
     max_chunk_size: u32,
-    seed: u64,
-    rehash_every_nth: u64,
-) -> Vec<ChunkAction> {
-    // Even if we could reuse all chunks, we want to ensure that we sometimes still
-    // recompute them anyway to not propagate errors indefinitely. We choose a
-    // uniformly random offset in [0, rehash_every_nth - 1] and recompute any chunks
-    // with ((chunk_index + offset) % rehash_every_nth) == 0. The sampling is done
-    // using an rng so that it's not always the same chunks but seeded
-    // deterministically. We want to ensure that all replicas have the same hash
-    // plan, as otherwise a replica that detects an error might not be able to
-    // sway consensus. At the same time, we do not require unpredictability
-    // here, as long as we can guarantee that we find faulty chunks within
-    // rehash_every_nth checkpoints in expectation.
+    base: Option<(&Manifest, &BTreeSet<PathBuf>)>,
+) -> Vec<ChunkToHash> {
+    if let Some((base_manifest, _)) = base {
+        debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
+    }
+
+    let chunk_size = max_chunk_size as u64;
+    let mut chunks = Vec::new();
+    for (file_index, FileWithSize(relative_path, size_bytes)) in files.iter().enumerate() {
+        // The file's chunks in `base_manifest`, if their hashes can be reused.
+        let base_chunks = base.and_then(|(base_manifest, files_with_same_inodes)| {
+            if !files_with_same_inodes.contains(relative_path) {
+                return None;
+            }
+            let base_index = get_base_index(relative_path, base_manifest)?;
+            Some((base_manifest, &base_manifest.chunk_table[base_index..]))
+        });
+        for i in 0..count_chunks(*size_bytes, max_chunk_size) {
+            let offset = i as u64 * chunk_size;
+            let info = ChunkInfo {
+                file_index: file_index as u32,
+                offset,
+                size_bytes: (size_bytes - offset).min(chunk_size) as u32,
+                hash: [0; 32],
+            };
+            let action = match base_chunks {
+                Some((base_manifest, base_chunks)) => {
+                    let base_chunk = &base_chunks[i];
+                    debug_assert_eq!(
+                        &base_manifest.file_table[base_chunk.file_index as usize].relative_path,
+                        relative_path
+                    );
+                    debug_assert_eq!(
+                        (base_chunk.offset, base_chunk.size_bytes),
+                        (info.offset, info.size_bytes)
+                    );
+                    ChunkAction::UseHash(base_chunk.hash)
+                }
+                None => ChunkAction::Recompute,
+            };
+            chunks.push(ChunkToHash {
+                index: chunks.len(),
+                info,
+                action,
+            });
+        }
+    }
+    chunks
+}
+
+/// Turns the `UseHash` actions of every `rehash_every_nth` chunk into
+/// `RecomputeAndCompare`, so that errors in reused hashes don't propagate
+/// indefinitely.
+///
+/// We choose a uniformly random offset in [0, rehash_every_nth - 1] and
+/// recompute any chunks with ((chunk_index + offset) % rehash_every_nth) == 0.
+/// The sampling is done using an rng so that it's not always the same chunks but
+/// seeded deterministically. We want to ensure that all replicas have the same
+/// hash plan, as otherwise a replica that detects an error might not be able to
+/// sway consensus. At the same time, we do not require unpredictability here, as
+/// long as we can guarantee that we find faulty chunks within rehash_every_nth
+/// checkpoints in expectation.
+fn sample_rehash(chunks: &mut [ChunkToHash], seed: u64, rehash_every_nth: u64) {
     let mut rng = ChaChaRng::seed_from_u64(seed);
     let rehash_every_nth = rehash_every_nth.max(1); // 0 will behave like 1
     let offset = rng.gen_range(0..rehash_every_nth);
-
-    debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
-
-    let mut chunk_actions: Vec<ChunkAction> =
-        Vec::with_capacity(chunks_total(files, max_chunk_size));
-
-    for FileWithSize(relative_path, size_bytes) in files.iter() {
-        let num_chunks = count_chunks(*size_bytes, max_chunk_size);
-        if files_with_same_inodes.contains(relative_path)
-            && let Some(base_index) = get_base_index(relative_path, base_manifest)
+    for chunk in chunks {
+        if (chunk.index as u64).wrapping_add(offset) % rehash_every_nth == 0
+            && let ChunkAction::UseHash(hash) = chunk.action
         {
-            for i in 0..num_chunks {
-                let action = {
-                    let chunk = &base_manifest.chunk_table[base_index + i];
-
-                    debug_assert_eq!(
-                        &base_manifest.file_table[chunk.file_index as usize].relative_path,
-                        relative_path
-                    );
-                    debug_assert_eq!(chunk.offset, i as u64 * max_chunk_size as u64);
-                    debug_assert_eq!(
-                        chunk.size_bytes as u64,
-                        (size_bytes - chunk.offset).min(max_chunk_size as u64)
-                    );
-
-                    // We are using chunk_actions.len() as shorthand for the chunk_index.
-                    let offset_index = (chunk_actions.len() as u64).wrapping_add(offset);
-
-                    if (offset_index % rehash_every_nth) == 0 {
-                        ChunkAction::RecomputeAndCompare(chunk.hash)
-                    } else {
-                        ChunkAction::UseHash(chunk.hash)
-                    }
-                };
-                chunk_actions.push(action);
-            }
-        } else {
-            for _ in 0..num_chunks {
-                chunk_actions.push(ChunkAction::Recompute);
-            }
+            chunk.action = ChunkAction::RecomputeAndCompare(hash);
         }
     }
-    chunk_actions
-}
-
-/// Returns total amount of chunks necessary to hash given files.
-fn chunks_total(files: &[FileWithSize], max_chunk_size: u32) -> usize {
-    files
-        .iter()
-        .map(|FileWithSize(_, size_bytes)| count_chunks(*size_bytes, max_chunk_size))
-        .sum()
-}
-
-/// Returns the trivial hash plan that instructs the caller to recompute hashes
-/// of all the chunks.
-fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAction> {
-    vec![ChunkAction::Recompute; chunks_total(files, max_chunk_size)]
 }
 
 /// Returns relative paths of files with the same inodes in the `checkpoint` and `base_manifest_info`.
@@ -1054,7 +1010,7 @@ pub fn compute_manifest(
         p.ends_with(UNVERIFIED_CHECKPOINT_MARKER) || p.ends_with(STATE_SYNC_CHECKPOINT_MARKER)
     }));
 
-    let chunk_actions = match opt_base_manifest_info {
+    let chunks = match opt_base_manifest_info {
         Some(base_manifest_info) => {
             // We have to check that the old manifest uses exactly the same chunk size.
             // Otherwise, if someone decides to change the chunk size in future,
@@ -1070,23 +1026,24 @@ pub fn compute_manifest(
                     max_chunk_size,
                     thread_pool,
                 );
-                hash_plan(
-                    &base_manifest_info.base_manifest,
+                let mut chunks = hash_plan(
                     &files,
-                    files_with_same_inodes,
                     max_chunk_size,
-                    base_manifest_info.target_height.get(),
-                    if rehash == RehashManifest::Yes {
-                        REHASH_EVERY_NTH_CHUNK
-                    } else {
-                        u64::MAX
-                    },
-                )
+                    Some((&base_manifest_info.base_manifest, &files_with_same_inodes)),
+                );
+                if rehash == RehashManifest::Yes {
+                    sample_rehash(
+                        &mut chunks,
+                        base_manifest_info.target_height.get(),
+                        REHASH_EVERY_NTH_CHUNK,
+                    );
+                }
+                chunks
             } else {
-                default_hash_plan(&files, max_chunk_size)
+                hash_plan(&files, max_chunk_size, None)
             }
         }
-        None => default_hash_plan(&files, max_chunk_size),
+        None => hash_plan(&files, max_chunk_size, None),
     };
 
     #[cfg(debug_assertions)]
@@ -1098,8 +1055,7 @@ pub fn compute_manifest(
             log,
             checkpoint.raw_path(),
             files.clone(),
-            max_chunk_size,
-            chunk_actions.clone(),
+            chunks.clone(),
             version,
         )
     };
@@ -1111,7 +1067,7 @@ pub fn compute_manifest(
         checkpoint.raw_path(),
         files,
         max_chunk_size,
-        chunk_actions,
+        chunks,
         version,
     );
     #[cfg(debug_assertions)]
