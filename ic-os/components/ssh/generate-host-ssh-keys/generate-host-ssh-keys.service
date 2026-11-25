@@ -3,6 +3,15 @@ Description=Generate ssh keys on first boot
 # We must wait for var to be mounted over before interacting with it
 After=var.mount
 Wants=var.mount
+# In GuestOS with TEE, the keys are kept in the encrypted store, if mounted.
+After=var-lib-ic-data.mount
+# bootstrap-ic-node.service may chown the store recursively to ic-replica.
+After=bootstrap-ic-node.service
+# The GuestOS scripts read the VM type that init-config.service records.
+After=init-config.service
+# setup-permissions.service relabels /var/lib/ic/data, which fails if a key
+# directory is created or removed meanwhile.
+Before=setup-permissions.service
 Before=ssh.service
 
 [Service]
