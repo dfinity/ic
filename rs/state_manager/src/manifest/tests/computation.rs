@@ -1206,11 +1206,17 @@ fn mixed_sizes() -> Vec<u32> {
     (0..50).map(|i| (1 + i % 7) << 20).collect()
 }
 
+/// The bytes `rehash_window` covers, for chunks of the given sizes.
+fn rehash_budget(sizes: &[u32]) -> u64 {
+    let total: u64 = sizes.iter().map(|&size| size as u64).sum();
+    (total / REHASH_FRACTION).min(MAX_REHASH_BYTES)
+}
+
 #[test]
-fn rehash_window_is_a_minimal_run_of_consecutive_chunks() {
+fn rehash_window_is_a_run_of_consecutive_chunks() {
     let sizes = mixed_sizes();
     let n = sizes.len();
-    let budget = sizes.iter().map(|&size| size as u64).sum::<u64>() / REHASH_FRACTION;
+    let budget = rehash_budget(&sizes);
     for seed in 0..200 {
         let selected = rehash_window_of(reusable_chunks(&sizes), seed);
         assert_eq!(selected, rehash_window_of(reusable_chunks(&sizes), seed));
@@ -1220,37 +1226,51 @@ fn rehash_window_is_a_minimal_run_of_consecutive_chunks() {
             .filter(|&i| selected[i] && !selected[(i + n - 1) % n])
             .collect();
         assert_eq!(starts.len(), 1, "seed {seed}: {selected:?}");
-        let mut bytes = 0;
+        let mut run = vec![];
         let mut i = starts[0];
         while selected[i] {
-            bytes += sizes[i] as u64;
+            run.push(sizes[i] as u64);
             i = (i + 1) % n;
         }
-        // Holding the budget, but not without its last chunk.
-        let last = (i + n - 1) % n;
+        // Covering `budget` bytes, which only its first and last chunks may extend
+        // beyond.
+        let bytes: u64 = run.iter().sum();
+        let inner_bytes: u64 = run[1..].iter().rev().skip(1).sum();
         assert!(bytes >= budget, "seed {seed}: {bytes} bytes");
         assert!(
-            bytes - (sizes[last] as u64) < budget,
-            "seed {seed}: {bytes} bytes"
+            inner_bytes < budget,
+            "seed {seed}: {inner_bytes} inner bytes"
         );
     }
 }
 
 #[test]
-fn rehash_windows_cover_every_chunk() {
-    let sizes = mixed_sizes();
-    let mut times_selected = vec![0; sizes.len()];
-    for seed in 0..1000 {
-        let selected = rehash_window_of(reusable_chunks(&sizes), seed);
-        for (count, selected) in times_selected.iter_mut().zip(selected) {
-            *count += selected as u32;
+fn rehash_window_checks_every_byte_as_often() {
+    const SEEDS: u64 = 1000;
+    // Also nine 1 MiB chunks and a 4 KiB one: the window, smaller than a chunk,
+    // must still reach the short chunk 10% of the time.
+    let short_tail = [vec![1 << 20; 9], vec![4 << 10]].concat();
+    for sizes in [mixed_sizes(), short_tail] {
+        let total: u64 = sizes.iter().map(|&size| size as u64).sum();
+        let budget = rehash_budget(&sizes);
+        let mut times_selected = vec![0; sizes.len()];
+        for seed in 0..SEEDS {
+            let selected = rehash_window_of(reusable_chunks(&sizes), seed);
+            for (count, selected) in times_selected.iter_mut().zip(selected) {
+                *count += selected as u64;
+            }
         }
-    }
-    // A chunk is selected if the window starts in it or in the chunks right before
-    // it holding less than the budget (19.7 MiB, so at least 12.7 MiB of them): 7%
-    // to 13.6% of the time. Allowing for chance, 3% to 18%.
-    for (index, count) in times_selected.into_iter().enumerate() {
-        assert!((30..=180).contains(&count), "chunk {index}: {count} times");
+        // A chunk is selected if the offset is in it or less than `budget` bytes
+        // before it. Allowing 4 standard deviations for chance.
+        for (index, (count, &size)) in times_selected.into_iter().zip(&sizes).enumerate() {
+            let p = (size as u64 + budget - 1) as f64 / total as f64;
+            let expected = p * SEEDS as f64;
+            let tolerance = 4.0 * (expected * (1.0 - p)).sqrt();
+            assert!(
+                (count as f64 - expected).abs() <= tolerance,
+                "chunk {index} of {size} bytes: {count} times, expected {expected:.0}"
+            );
+        }
     }
 }
 
@@ -1262,8 +1282,12 @@ fn rehash_window_reads_at_most_max_rehash_bytes() {
     for seed in 0..10 {
         let selected = rehash_window_of(reusable_chunks(&sizes), seed);
         let bytes = selected.iter().filter(|&&selected| selected).count() as u64 * GIB;
+        // The range, rounded out to whole chunks at both ends.
         assert!(bytes >= MAX_REHASH_BYTES, "seed {seed}: {bytes} bytes");
-        assert!(bytes < MAX_REHASH_BYTES + GIB, "seed {seed}: {bytes} bytes");
+        assert!(
+            bytes < MAX_REHASH_BYTES + 2 * GIB,
+            "seed {seed}: {bytes} bytes"
+        );
     }
 }
 

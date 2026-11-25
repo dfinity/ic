@@ -44,8 +44,8 @@ use std::sync::{Arc, Mutex};
 
 /// The rehash after each manifest computed from the previous one (see
 /// `rehash_window`) recomputes the hashes of 1 / `REHASH_FRACTION` of the
-/// state's bytes, but at most `MAX_REHASH_BYTES`: each byte's hash is checked
-/// every `REHASH_FRACTION` checkpoints on average.
+/// state's bytes, but at most `MAX_REHASH_BYTES`: below that cap, each byte's
+/// hash is checked at least every `REHASH_FRACTION` checkpoints on average.
 const REHASH_FRACTION: u64 = 10;
 
 /// The most bytes the rehash reads, bounding its time for large states: about
@@ -894,44 +894,49 @@ fn hash_plan(
 
 /// Turns the `UseHash` actions of a window of consecutive chunks into
 /// `RecomputeAndCompare`, so that errors in reused hashes don't propagate
-/// indefinitely: chunks holding 1 / `REHASH_FRACTION` of the chunks' bytes, but
-/// at most `MAX_REHASH_BYTES`, from the chunk holding a byte offset drawn with
-/// `seed`, wrapping around after the last chunk.
+/// indefinitely. The window holds the chunks overlapping a range of 1 /
+/// `REHASH_FRACTION` of the chunks' bytes, but at most `MAX_REHASH_BYTES`, from
+/// a byte offset drawn with `seed`, wrapping around after the last chunk.
 ///
-/// The offset is random, so that every byte is equally likely to be checked,
-/// however the files' sizes change. And it is seeded deterministically (with
-/// the checkpoint height), so that all replicas check the same chunks: a
-/// replica that finds a deterministic error computes its next manifest from
-/// scratch, and if the others didn't find the same error they would outvote it.
+/// The offset is random, so that every byte is equally likely to be in the
+/// range, however the files' sizes change (rounding the range out to whole
+/// chunks only adds checks). And it is seeded deterministically (with the
+/// checkpoint height), so that all replicas check the same chunks: a replica
+/// that finds a deterministic error computes its next manifest from scratch, and
+/// if the others didn't find the same error they would outvote it.
 fn rehash_window(chunks: &mut [ChunkToHash], seed: u64) {
     let total: u64 = chunks
         .iter()
         .map(|chunk| chunk.info.size_bytes as u64)
         .sum();
-    if total == 0 {
+    let budget = (total / REHASH_FRACTION).min(MAX_REHASH_BYTES);
+    if budget == 0 {
         return;
     }
-    let budget = (total / REHASH_FRACTION).min(MAX_REHASH_BYTES);
     let offset = ChaChaRng::seed_from_u64(seed).gen_range(0..total);
-    let start = chunks
+    let (start, start_end) = chunks
         .iter()
         .scan(0, |end, chunk| {
             *end += chunk.info.size_bytes as u64;
             Some(*end)
         })
-        .position(|end| end > offset)
+        .enumerate()
+        .find(|&(_, end)| end > offset)
         .expect("the offset is within the chunks");
 
-    let mut taken = 0;
+    // Counted from the start of chunk `start`, which holds `offset`, the range
+    // ends at `range_end`: the window holds the chunks starting before that.
+    let range_end = offset - (start_end - chunks[start].info.size_bytes as u64) + budget;
+    let mut chunk_start = 0;
     for index in (start..chunks.len()).chain(0..start) {
-        if taken >= budget {
+        if chunk_start >= range_end {
             break;
         }
         let chunk = &mut chunks[index];
         if let ChunkAction::UseHash(hash) = chunk.action {
             chunk.action = ChunkAction::RecomputeAndCompare(hash);
         }
-        taken += chunk.info.size_bytes as u64;
+        chunk_start += chunk.info.size_bytes as u64;
     }
 }
 
