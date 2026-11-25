@@ -1306,11 +1306,6 @@ mod tests {
         Time::from_nanos_since_unix_epoch(nanos)
     }
 
-    /// Every neuron request must be addressed to the governance canister this
-    /// instance was configured with. Mainnet's id is the one that used to be
-    /// hard-coded here, so a destination that reverted to it would still look
-    /// right against a mainnet-configured instance; this uses a different id so
-    /// that it cannot.
     #[test]
     fn neuron_requests_are_addressed_to_the_configured_governance_canister() {
         let governance_canister_id = CanisterId::from_u64(0x1234);
@@ -1329,8 +1324,6 @@ mod tests {
         let pks_map = HashMap::from([(account, &pub_key)]);
         let ingress_expiries = [1_u64];
 
-        // One assertion per destination in this module: the shared
-        // `manage_neuron` path, and the three that build their own update.
         let check = |what: &str, updates: Vec<(RequestType, HttpCanisterUpdate)>| {
             let (_, update) = updates
                 .first()
