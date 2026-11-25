@@ -145,8 +145,8 @@ pub struct SubnetMergingArgs {
     /// the merged state to: its IPv6 address, or "local" if the tool runs on
     /// that node. The halting CUP is waited for on that node, its replica is
     /// stopped before the download and restarted on the merged state, and the
-    /// recovery CUP is waited for on that node. Asked for if missing, unless prompts are skipped. Remote access uses SSH with the
-    /// admin key.
+    /// recovery CUP is waited for on that node. Asked for if missing, unless
+    /// prompts are skipped. Remote access uses SSH with the admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub destination_node: Option<DataLocation>,
 
