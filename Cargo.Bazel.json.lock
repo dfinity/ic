@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "826b87f7766136b70c5525d1283a51f142419fe5e2511b07b0ba349876ab21b3",
+  "checksum": "be4d50ecd5d85c98512b7852766c0dffa2c23ccee8f885d5125d48b611798c87",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17752,7 +17752,7 @@
             "target": "dashmap"
           },
           {
-            "id": "der 0.7.10",
+            "id": "der 0.8.3",
             "target": "der"
           },
           {
@@ -68782,7 +68782,7 @@
     "curve25519-dalek 4.1.3",
     "darling 0.24.1",
     "dashmap 6.2.1",
-    "der 0.7.10",
+    "der 0.8.3",
     "derive-new 0.7.0",
     "devicemapper 0.34.8",
     "dialoguer 0.12.0",

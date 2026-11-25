@@ -404,7 +404,7 @@ crate.spec(
     default_features = False,
     features = ["derive"],
     package = "der",
-    version = "0.7",
+    version = "^0.8.3",
 )
 crate.spec(
     package = "derive-new",

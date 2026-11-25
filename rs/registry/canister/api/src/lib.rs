@@ -15,7 +15,7 @@ pub mod mutate_test_high_capacity_records;
 /// It is used both to construct and verify [`AddNodePayload::node_registration_attestation`].
 #[derive(der::Sequence, Debug, Eq, PartialEq, Clone)]
 pub struct NodeRegistrationAttestationCustomData<'a> {
-    pub node_signing_pk: OctetStringRef<'a>,
+    pub node_signing_pk: &'a OctetStringRef,
 }
 
 impl DerEncodedCustomData for NodeRegistrationAttestationCustomData<'_> {
