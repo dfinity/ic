@@ -47,6 +47,7 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:ic-gateway": "/opt/ic/bin/ic-gateway:0755",  # IC-gateway binary, required by cloud engine nodes, who run it as a sidecar to the replica.
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",  # May be used during recoveries to export/import consensus pool artifacts.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",  # Required for performing subnet recoveries on the node directly.
+            "//publish/binaries:subnet-merging-tool": "/opt/ic/bin/subnet-merging-tool:0755",  # Required for merging subnets on a node of the destination subnet directly.
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS

@@ -10,7 +10,6 @@ documentation.workspace = true
 base64 = { workspace = true }
 bincode = { workspace = true }
 bytes = { workspace = true }
-educe = "0.5"
 futures = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-client = { path = "../../../monitoring/adapter_metrics/client" }
@@ -87,6 +86,7 @@ ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
+rand_0_10 = { workspace = true }
 rsa = { workspace = true }
 slog-async = { workspace = true }
 tracing = { workspace = true }

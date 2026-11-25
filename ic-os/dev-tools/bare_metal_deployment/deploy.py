@@ -106,6 +106,14 @@ class Args:
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into deployment.json as the dev GuestOS VM's
+    # memory in GiB, 4 of which the HostOS keeps for the upgrade VM (dev default: 16; production: 480)
+    inject_image_memory_gb: Optional[int] = None
+
+    # If present - decompress `upload_img` and inject this into deployment.json as the dev GuestOS VM's
+    # number of vCPUs (dev default: 16; production: 64)
+    inject_image_nr_of_vcpus: Optional[int] = None
+
     # Path to the setupos-inject-config tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
@@ -164,6 +172,9 @@ class Args:
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
             assert self.mcopy_tool, "mcopy tool required to modify image"
+        assert self.inject_image_ipv6_prefix or not (
+            self.inject_image_memory_gb or self.inject_image_nr_of_vcpus
+        ), "VM resources are injected along with the network config, so ipv6_prefix must be present too"
         ipv4_args = [
             self.inject_image_ipv4_address,
             self.inject_image_ipv4_gateway,
@@ -757,6 +768,8 @@ def inject_config_into_image(
     ipv4_args: Optional[Ipv4Args],
     verbose: Optional[str],
     pub_key: Optional[str],
+    memory_gb: Optional[int],
+    nr_of_vcpus: Optional[int],
 ) -> Path:
     """
     Transform the compressed image.
@@ -806,8 +819,14 @@ def inject_config_into_image(
     if pub_key:
         admin_key_part = f'--public-keys "{pub_key}"'
 
+    vm_part = ""
+    if memory_gb:
+        vm_part += f"--memory-gb {memory_gb} "
+    if nr_of_vcpus:
+        vm_part += f"--nr-of-vcpus {nr_of_vcpus} "
+
     invoke.run(
-        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part} {vm_part}",
         echo=True,
         env={"MCOPY": mcopy},
     )
@@ -892,6 +911,8 @@ def main():
                 ipv4_args,
                 args.inject_image_verbose,
                 args.inject_image_pub_key,
+                args.inject_image_memory_gb,
+                args.inject_image_nr_of_vcpus,
             )
 
             upload_to_file_share(

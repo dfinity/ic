@@ -1,5 +1,5 @@
 use ic_hpke::*;
-use rand::{Rng, RngCore, SeedableRng, TryRngCore};
+use rand::{Rng, RngExt, SeedableRng, rand_core::UnwrapErr};
 
 #[test]
 fn key_generation_and_noauth_encrypt_is_stable() {
@@ -76,7 +76,7 @@ fn key_generation_and_authticated_encrypt_is_stable() {
 
 #[test]
 fn smoke_test_noauth() {
-    let mut rng = rand::rngs::OsRng.unwrap_err();
+    let mut rng = UnwrapErr(rand::rngs::SysRng);
     let sk = PrivateKey::generate(&mut rng);
     let pk = sk.public_key();
 
@@ -92,7 +92,7 @@ fn smoke_test_noauth() {
 
 #[test]
 fn smoke_test_auth() {
-    let mut rng = rand::rngs::OsRng.unwrap_err();
+    let mut rng = UnwrapErr(rand::rngs::SysRng);
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -115,7 +115,7 @@ fn smoke_test_auth() {
 
 #[test]
 fn any_bit_flip_causes_rejection_noauth() {
-    let mut rng = rand::rngs::OsRng.unwrap_err();
+    let mut rng = UnwrapErr(rand::rngs::SysRng);
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -140,7 +140,7 @@ fn any_bit_flip_causes_rejection_noauth() {
 
 #[test]
 fn any_bit_flip_causes_rejection_auth() {
-    let mut rng = rand::rngs::OsRng.unwrap_err();
+    let mut rng = UnwrapErr(rand::rngs::SysRng);
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -168,7 +168,7 @@ fn any_bit_flip_causes_rejection_auth() {
 
 #[test]
 fn any_truncation_causes_rejection_noauth() {
-    let mut rng = rand::rngs::OsRng.unwrap_err();
+    let mut rng = UnwrapErr(rand::rngs::SysRng);
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
@@ -193,7 +193,7 @@ fn any_truncation_causes_rejection_noauth() {
 
 #[test]
 fn any_truncation_causes_rejection_auth() {
-    let mut rng = rand::rngs::OsRng.unwrap_err();
+    let mut rng = UnwrapErr(rand::rngs::SysRng);
 
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();

@@ -2,13 +2,13 @@
 use grub::BootAlternative;
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, HorizontalAlignment, Layout, Rect},
     style::{Color, Style, Stylize},
     symbols,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use crate::{
     AppState, ConfirmationOption, ConfirmationState, FailureState, Field, InputState, RecoveryMode,
@@ -121,7 +121,7 @@ fn render_if_too_small(f: &mut Frame, size: Rect) -> bool {
     ];
     let para = Paragraph::new(error_text)
         .block(create_block("Error", false, true))
-        .alignment(Alignment::Center)
+        .alignment(HorizontalAlignment::Center)
         .wrap(Wrap { trim: true });
     f.render_widget(para, size);
     true
@@ -264,7 +264,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
     } else {
         "Please confirm: do these input values match the recovery coordinator's information?"
     })
-    .alignment(Alignment::Center)
+    .alignment(HorizontalAlignment::Center)
     .style(Style::default().fg(Color::White).bold());
     f.render_widget(question, layout[5]);
 
@@ -288,7 +288,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
         Span::styled(" < No > ", no_style),
     ]);
 
-    let buttons_para = Paragraph::new(buttons).alignment(Alignment::Center);
+    let buttons_para = Paragraph::new(buttons).alignment(HorizontalAlignment::Center);
     f.render_widget(buttons_para, layout[6]);
 }
 
@@ -316,7 +316,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
                 .borders(Borders::NONE)
                 .style(Style::default().bold()),
         )
-        .alignment(Alignment::Center)
+        .alignment(HorizontalAlignment::Center)
         .style(Style::default().bold());
     f.render_widget(title, main_layout[0]);
 
@@ -373,7 +373,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         let message_area = main_layout[5];
         let para = Paragraph::new(msg.as_str())
             .style(Style::default().fg(Color::White))
-            .alignment(Alignment::Center);
+            .alignment(HorizontalAlignment::Center);
         f.render_widget(para, message_area);
     }
 
@@ -528,7 +528,7 @@ fn render_logs_screen(f: &mut Frame, state: &RunningState, size: Rect) {
 
     let para = Paragraph::new(text)
         .block(block)
-        .alignment(Alignment::Left)
+        .alignment(HorizontalAlignment::Left)
         .wrap(Wrap { trim: true });
     f.render_widget(para, size);
 }
@@ -590,7 +590,7 @@ fn draw_failure_screen(
 
     let para = Paragraph::new(text)
         .block(block)
-        .alignment(Alignment::Left)
+        .alignment(HorizontalAlignment::Left)
         .wrap(Wrap { trim: true });
     f.render_widget(para, size);
 }

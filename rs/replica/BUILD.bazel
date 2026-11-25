@@ -124,6 +124,9 @@ rust_test_suite(
     name = "replica_integration",
     srcs = glob(["tests/**/*.rs"]),
     data = [":replica"],
+    env = {
+        "CARGO_BIN_EXE_replica": "$(rootpath :replica)",
+    },
     tags = [],
     deps = [":replica_lib"] + DEPENDENCIES + [
         # Keep sorted.

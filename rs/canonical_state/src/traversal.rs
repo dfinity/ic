@@ -44,16 +44,11 @@ pub fn traverse<V: Visitor>(state: &ReplicatedState, height: Height, mut v: V) -
 mod tests {
     use super::*;
     use crate::{
-        encoding::{
-            CborProxyEncoder, encode_stream_header, types::SystemMetadata as SystemMetadataV23,
-        },
+        encoding::encode_stream_header,
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_certification_version::{
-        CertificationVersion::{self, *},
-        all_supported_versions,
-    };
+    use ic_certification_version::all_supported_versions;
     use ic_management_canister_types_private::Global;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
@@ -99,15 +94,9 @@ mod tests {
         E::VisitBlob(buf)
     }
 
-    fn encode_metadata(metadata: SystemMetadataV23) -> Vec<u8> {
-        SystemMetadataV23::proxy_encode(metadata).unwrap()
-    }
-
-    /// Helper function for most tests where the /cansiter_ranges subtree should be missing before V21, and empty afterwards.
-    fn expected_empty_canister_ranges(
-        certification_version: CertificationVersion,
-    ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
-        (certification_version >= V21).then_some(vec![
+    /// Helper function for most tests where the /canister_ranges subtree is empty.
+    fn expected_empty_canister_ranges() -> Option<Vec<crate::test_visitors::TraceEntry>> {
+        Some(vec![
             edge("canister_ranges"),
             E::StartSubtree,
             E::EndSubtree, // canister_ranges
@@ -117,33 +106,22 @@ mod tests {
     fn expected_metadata(
         height: u64,
         prev_state_hash: Option<CryptoHashOfPartialState>,
-        certification_version: CertificationVersion,
     ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
-        if certification_version >= V24 {
-            let height = vec![edge("height"), leb_num(height)];
-            let prev_state_hash = if let Some(hash) = prev_state_hash {
-                vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
-            } else {
-                vec![]
-            };
-            Some(
-                [
-                    vec![edge("metadata"), E::StartSubtree],
-                    height,
-                    prev_state_hash,
-                    vec![E::EndSubtree],
-                ]
-                .concat(),
-            )
+        let height = vec![edge("height"), leb_num(height)];
+        let prev_state_hash = if let Some(hash) = prev_state_hash {
+            vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
         } else {
-            Some(vec![
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadataV23 {
-                    deprecated_id_counter: None,
-                    prev_state_hash: prev_state_hash.as_ref().map(|hash| hash.clone().get().0),
-                })),
-            ])
-        }
+            vec![]
+        };
+        Some(
+            [
+                vec![edge("metadata"), E::StartSubtree],
+                height,
+                prev_state_hash,
+                vec![E::EndSubtree],
+            ]
+            .concat(),
+        )
     }
 
     #[test]
@@ -169,8 +147,8 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, prev_state_hash.clone(), certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, prev_state_hash.clone()),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -219,8 +197,8 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, None, certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, None),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -293,8 +271,8 @@ mod tests {
                     E::EndSubtree, // canister
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, None, certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, None),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -387,10 +365,9 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
-                // The `last_install_timestamp` leaf is only present from `V27`
-                // onwards, and sorts between `controllers` and `metadata`.
-                (certification_version >= CertificationVersion::V27)
-                    .then(|| vec![edge("last_install_timestamp"), leb_num(1234)]),
+                // The `last_install_timestamp` leaf sorts between `controllers`
+                // and `metadata`.
+                Some(vec![edge("last_install_timestamp"), leb_num(1234)]),
                 Some(vec![
                     edge("metadata"),
                     E::StartSubtree,
@@ -410,8 +387,8 @@ mod tests {
                     E::EndSubtree, // canister
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, None, certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, None),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -480,7 +457,6 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(codeless);
         state.put_canister_state(with_code);
-        state.metadata.certification_version = CertificationVersion::V27;
 
         let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
 
@@ -494,10 +470,9 @@ mod tests {
         }
     }
 
-    /// The `canister_creation_timestamp` leaf is exposed from certification
-    /// version `V28` onwards for every canister (with or without installed code)
-    /// that has a recorded creation timestamp, and omitted below `V28` or for
-    /// canisters created before the field existed.
+    /// The `canister_creation_timestamp` leaf is exposed for every canister (with
+    /// or without installed code) that has a recorded creation timestamp, and
+    /// omitted for canisters created before the field existed.
     #[test]
     fn canister_creation_timestamp_leaf() {
         use ic_canonical_state_tree_hash::lazy_tree::{LazyTree, follow_path};
@@ -554,27 +529,8 @@ mod tests {
             buf
         };
 
-        // Below `V28` the leaf is never present.
-        state.metadata.certification_version = CertificationVersion::V27;
-        {
-            let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
-            for id in [codeless_id, with_code_id, no_timestamp_id] {
-                let principal = id.get();
-                let path: [&[u8]; 3] = [
-                    b"canister",
-                    principal.as_slice(),
-                    b"canister_creation_timestamp",
-                ];
-                assert!(
-                    follow_path(&tree, &path).is_none(),
-                    "creation leaf should be absent below V28 for {id}"
-                );
-            }
-        }
-
-        // From `V28`, canisters with a recorded creation timestamp expose it (as
-        // the LEB128-encoded nanoseconds), regardless of whether they have code.
-        state.metadata.certification_version = CertificationVersion::V28;
+        // Canisters with a recorded creation timestamp expose it (as the
+        // LEB128-encoded nanoseconds), regardless of whether they have code.
         {
             let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
             for id in [codeless_id, with_code_id] {
@@ -627,8 +583,7 @@ mod tests {
         let other_subnet_id = subnet_test_id(5);
         let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
 
-        // Loopback stream and remote stream. Loopback stream is not output for versions
-        // V20 and greater.
+        // Loopback stream and remote stream. Loopback stream is not output.
         state.modify_streams(move |streams| {
             streams.insert(own_subnet_id, stream.clone());
             streams.insert(other_subnet_id, stream);
@@ -653,25 +608,14 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, None, certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, None),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
                     edge("streams"),
                     E::StartSubtree,
-                ]),
-                // For versions before V20, the loopback stream is also encoded.
-                (certification_version < V20).then_some(vec![
-                    edge(own_subnet_id.get_ref().to_vec()),
-                    E::StartSubtree,
-                    edge("header"),
-                    E::VisitBlob(encode_stream_header(&header, certification_version)),
-                    edge("messages"),
-                    E::StartSubtree,
-                    E::EndSubtree, // messages
-                    E::EndSubtree, // stream
                 ]),
                 Some(vec![
                     edge(other_subnet_id.get_ref().to_vec()),
@@ -888,8 +832,8 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, None, certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, None),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -1005,7 +949,7 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                     ]),
-                    (certification_version >= V21).then_some(
+                    Some(
                         vec![
                             edge("canister_ranges"),
                             E::StartSubtree,
@@ -1032,7 +976,7 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    expected_metadata(height, None, certification_version),
+                    expected_metadata(height, None),
                     Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -1065,7 +1009,7 @@ mod tests {
                     edge("public_key"),
                     E::VisitBlob(vec![1, 2, 3, 4])
                 ]),
-                (certification_version >= V25).then_some(
+                Some(
                     vec![
                         edge("type"),
                         E::VisitBlob(b"application".to_vec())
@@ -1118,7 +1062,7 @@ mod tests {
                     edge("public_key"),
                     E::VisitBlob(vec![5, 6, 7, 8])
                 ]),
-                (certification_version >= V25).then_some(
+                Some(
                     vec![
                         edge("type"),
                         E::VisitBlob(b"system".to_vec())
@@ -1144,7 +1088,7 @@ mod tests {
                     edge("public_key"),
                     E::VisitBlob(vec![9, 10, 11, 12])
                 ]),
-                (certification_version >= V25).then_some(
+                Some(
                     vec![
                         edge("type"),
                         E::VisitBlob(b"verified_application".to_vec())
@@ -1170,7 +1114,7 @@ mod tests {
                     edge("public_key"),
                     E::VisitBlob(vec![13, 14, 15, 16])
                 ]),
-                (certification_version >= V25).then_some(
+                Some(
                     vec![
                         edge("type"),
                         E::VisitBlob(b"cloud_engine".to_vec())
@@ -1331,8 +1275,7 @@ mod tests {
                 "unexpected metrics leaf for certification_version: {certification_version:?}"
             );
 
-            // The canister's consumed cycles are included only starting with V29:
-            // in V29 as the gauge, starting with V30 as the monotonic amount.
+            // The canister's consumed cycles are included as the monotonic amount.
             let without_canisters = encode_with_canisters_part(
                 NominalCycles::zero(),
                 NominalCycles::zero(),
@@ -1348,19 +1291,9 @@ mod tests {
                 consumed_by_canisters_monotonic,
                 certification_version,
             );
-            if certification_version >= CertificationVersion::V30 {
-                assert_eq!(metrics_blob, monotonic_only);
-                assert_ne!(metrics_blob, gauge_only);
-                assert_ne!(metrics_blob, without_canisters);
-            } else if certification_version >= CertificationVersion::V29 {
-                assert_eq!(metrics_blob, gauge_only);
-                assert_ne!(metrics_blob, monotonic_only);
-                assert_ne!(metrics_blob, without_canisters);
-            } else {
-                assert_eq!(metrics_blob, without_canisters);
-                assert_eq!(metrics_blob, gauge_only);
-                assert_eq!(metrics_blob, monotonic_only);
-            }
+            assert_eq!(metrics_blob, monotonic_only);
+            assert_ne!(metrics_blob, gauge_only);
+            assert_ne!(metrics_blob, without_canisters);
         }
     }
 
@@ -1423,7 +1356,7 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                     ]),
-                    (certification_version >= V21).then_some(
+                    Some(
                         vec![
                             edge("canister_ranges"),
                             E::StartSubtree,
@@ -1484,7 +1417,7 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    expected_metadata(height, None, certification_version),
+                    expected_metadata(height, None),
                     Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -1543,7 +1476,7 @@ mod tests {
                     edge("public_key"),
                     E::VisitBlob(vec![1, 2, 3, 4])
                 ]),
-                (certification_version >= V25).then_some(
+                Some(
                     vec![
                         edge("type"),
                         E::VisitBlob(b"application".to_vec())
@@ -1586,7 +1519,7 @@ mod tests {
                     edge("public_key"),
                     E::VisitBlob(vec![5, 6, 7, 8])
                 ]),
-                (certification_version >= V25).then_some(
+                Some(
                     vec![
                         edge("type"),
                         E::VisitBlob(b"verified_application".to_vec())
@@ -1673,8 +1606,8 @@ mod tests {
                     E::StartSubtree,
                     E::EndSubtree, // canisters
                 ]),
-                expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, None, certification_version),
+                expected_empty_canister_ranges(),
+                expected_metadata(height, None),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,

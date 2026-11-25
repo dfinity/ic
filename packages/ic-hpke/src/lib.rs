@@ -36,8 +36,8 @@
 //! # Example (Authenticated Encryption)
 //!
 //! ```
-//! use rand::TryRngCore;
-//! let mut rng = rand::rngs::OsRng.unwrap_err();
+//! use rand::rand_core::UnwrapErr;
+//! let mut rng = UnwrapErr(rand::rngs::SysRng);
 //!
 //! let a_sk = ic_hpke::PrivateKey::generate(&mut rng);
 //! let a_pk = a_sk.public_key();
@@ -66,8 +66,8 @@
 //! # Example (Non-Authenticated Encryption)
 //!
 //! ```
-//! use rand::TryRngCore;
-//! let mut rng = rand::rngs::OsRng.unwrap_err();
+//! use rand::rand_core::UnwrapErr;
+//! let mut rng = UnwrapErr(rand::rngs::SysRng);
 //!
 //! // perform key generation:
 //! let sk = ic_hpke::PrivateKey::generate(&mut rng);
@@ -90,7 +90,7 @@
 //! assert!(sk.decrypt_noauth(&ctext, b"wrong-associated-data").is_err());
 //! ```
 
-use hpke::rand_core::{CryptoRng, RngCore};
+use hpke::rand_core::CryptoRng;
 use hpke::{
     Deserializable, Kem, Serializable, aead::AesGcm256, kdf::HkdfSha384, kem::DhP384HkdfSha384,
 };
@@ -238,7 +238,7 @@ impl PublicKey {
     /// empty slice
     ///
     /// The recipient must use [`PrivateKey::decrypt`] to decrypt
-    pub fn encrypt<R: RngCore + CryptoRng>(
+    pub fn encrypt<R: CryptoRng>(
         &self,
         msg: &[u8],
         associated_data: &[u8],
@@ -249,7 +249,7 @@ impl PublicKey {
         self._v1_encrypt(&opmode, msg, associated_data, rng)
     }
 
-    fn _v1_encrypt<R: RngCore + CryptoRng>(
+    fn _v1_encrypt<R: CryptoRng>(
         &self,
         opmode: &hpke::OpModeS<V1Kem>,
         msg: &[u8],
@@ -269,7 +269,7 @@ impl PublicKey {
         // together. However this separation is neater and avoids having to
         // allocate and copy the associated data.
 
-        let (hpke_key, hpke_ctext) = hpke::single_shot_seal::<V1Aead, V1Kdf, V1Kem, R>(
+        let (hpke_key, hpke_ctext) = hpke::single_shot_seal_with_rng::<V1Aead, V1Kdf, V1Kem>(
             opmode,
             &self.pk,
             &buf,
@@ -304,7 +304,7 @@ impl PublicKey {
     /// anyone can encrypt a message with this function.
     ///
     /// The recipient must use [`PrivateKey::decrypt_noauth`] to decrypt
-    pub fn encrypt_noauth<R: RngCore + CryptoRng>(
+    pub fn encrypt_noauth<R: CryptoRng>(
         &self,
         msg: &[u8],
         associated_data: &[u8],
@@ -339,7 +339,7 @@ pub struct PrivateKey {
 
 impl PrivateKey {
     /// Generate a new random private key
-    pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+    pub fn generate<R: CryptoRng>(rng: &mut R) -> Self {
         let mut ikm = [0; V1_IKM_LENGTH];
         rng.fill_bytes(&mut ikm);
         let (sk, pk) = <V1Kem as Kem>::derive_keypair(&ikm);
