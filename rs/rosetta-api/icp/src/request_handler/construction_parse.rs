@@ -9,7 +9,7 @@ use crate::{
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
-    signed_target::representative_envelope,
+    signed_target::{representative_envelope, verify_signed_target},
 };
 use rosetta_core::objects::ObjectMap;
 
@@ -40,6 +40,11 @@ impl RosettaRequestHandler {
                 .requests
                 .iter()
                 .map(|(request_type, envelopes)| {
+                    // Each envelope carries its own signature and the submit
+                    // path broadcasts whichever one is currently valid, not the
+                    // first, so one of them stands for the rest only once they
+                    // all agree. The loop below then checks that one against
+                    // the metadata about to be displayed.
                     Ok((
                         request_type.clone(),
                         representative_envelope(envelopes)?.clone(),
@@ -53,7 +58,18 @@ impl RosettaRequestHandler {
         let mut from_ai = vec![];
         let mut metadata = serde_json::Map::new();
 
-        for (request_type, HttpCanisterUpdate { arg, sender, .. }) in updates {
+        for (request_type, update) in updates {
+            // Every field of `request_type` reaching the caller below must be
+            // bound to the signed payload; otherwise the operations we return
+            // would not describe the bytes the caller signs and broadcasts.
+            verify_signed_target(
+                &request_type,
+                &update,
+                self.ledger.ledger_canister_id(),
+                self.ledger.governance_canister_id(),
+            )?;
+
+            let HttpCanisterUpdate { arg, sender, .. } = update;
             let from = PrincipalId::try_from(sender.0)
                 .map_err(|e| ApiError::internal_error(e.to_string()))?
                 .into();
@@ -872,7 +888,10 @@ mod tests {
         })
     }
 
-    fn submitted_set_dissolve_timestamp(arg: Vec<u8>) -> Result<Request, ApiError> {
+    fn submitted_set_dissolve_timestamp(
+        handler: &RosettaRequestHandler,
+        arg: Vec<u8>,
+    ) -> Result<Request, ApiError> {
         let update = set_dissolve_timestamp_update(arg);
         let read_state = crate::convert::make_read_state_from_update(&update);
         let envelope_pair = EnvelopePair {
@@ -889,10 +908,14 @@ mod tests {
                 sender_delegation: None,
             },
         };
-        Request::try_from(&(
-            RequestType::SetDissolveTimestamp { neuron_index: 0 },
-            vec![envelope_pair],
-        ))
+        Request::from_signed_request(
+            &(
+                RequestType::SetDissolveTimestamp { neuron_index: 0 },
+                vec![envelope_pair],
+            ),
+            handler.ledger.ledger_canister_id(),
+            handler.ledger.governance_canister_id(),
+        )
     }
 
     #[test]
@@ -909,7 +932,7 @@ mod tests {
                 "{name}: unexpected parse error: {err:?}"
             );
 
-            let err = submitted_set_dissolve_timestamp(args).unwrap_err();
+            let err = submitted_set_dissolve_timestamp(&handler, args).unwrap_err();
             assert!(
                 format!("{err:?}").contains("Could not parse manage_neuron")
                     && format!("{err:?}").contains("Decoding cost exceeds the limit"),
@@ -938,7 +961,7 @@ mod tests {
         assert_eq!(parsed.operations.len(), 1);
 
         assert!(matches!(
-            submitted_set_dissolve_timestamp(args).unwrap(),
+            submitted_set_dissolve_timestamp(&handler, args).unwrap(),
             Request::SetDissolveTimestamp(_)
         ));
     }
