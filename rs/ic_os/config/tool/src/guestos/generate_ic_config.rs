@@ -424,7 +424,7 @@ mod tests {
         guestos_config.network_settings.domain_name = Some(r#"x", /*"#.to_string());
         assert!(get_config_vars(&guestos_config).is_err());
 
-        guestos_config.network_settings.domain_name = Some("node.example.com".to_string());
+        guestos_config.network_settings.domain_name = Some("Node.Example.COM".to_string());
         assert_eq!(
             get_config_vars(&guestos_config).unwrap().domain_name,
             "node.example.com"
