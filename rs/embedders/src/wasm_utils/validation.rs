@@ -1132,18 +1132,14 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
 fn validate_export_section(
     module: &Module,
     max_number_exported_functions: usize,
-    max_number_exports: usize,
     max_sum_exported_function_name_lengths: usize,
 ) -> Result<(), WasmValidationError> {
     if !module.exports.is_empty() {
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
         let mut number_exported_functions = 0;
-        let mut number_exports = 0;
         let mut sum_exported_function_name_lengths = 0;
         for export in module.exports.iter() {
-            // Count every export, regardless of kind.
-            number_exports += 1;
             // Verify that the exported symbol's name isn't reserved.
             if RESERVED_SYMBOLS.contains(&export.name.as_str()) {
                 return Err(WasmValidationError::InvalidExportSection(format!(
@@ -1207,13 +1203,6 @@ fn validate_export_section(
             return Err(WasmValidationError::TooManyExports {
                 defined: number_exported_functions,
                 allowed: max_number_exported_functions,
-            });
-        }
-
-        if number_exports > max_number_exports {
-            return Err(WasmValidationError::TooManyTotalExports {
-                defined: number_exports,
-                allowed: max_number_exports,
             });
         }
 
@@ -1891,7 +1880,7 @@ fn check_custom_sections_and_code_size(
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
-/// defined in https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/.
+/// defined in https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-module.
 ///
 /// It constructs a module by parsing the input Wasm binary and then calls into
 /// more specific methods that validate different sections of the Wasm binary.
@@ -1917,7 +1906,6 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_export_section(
         &module,
         config.max_number_exported_functions,
-        config.max_number_exports,
         config.max_sum_exported_function_name_lengths,
     )?;
     validate_table_section(&module)?;
