@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade the `p256` dependency from `0.13` to `0.14`. The public API is unchanged.
 - Upgrade the `sha2` dependency from `0.10` to `0.11` and the `hmac` dependency from `0.12` to `0.13`. The public API is unchanged.
+- `KeyDecodingError::InvalidKeyEncoding` messages that come from `der`/`spki` (now 0.8) or `pkcs8` (now 0.11) are worded differently. For a key on another curve, the message names the curve OID found in the key instead of the expected one.
 - `PrivateKey::generate_using_rng` draws 32 bytes from the RNG until they encode a valid secret key, as `p256::ecdsa::SigningKey::random` did, so the same RNG state still yields the same key, and `PrivateKey::generate_insecure_key_for_testing` the same key for the same seed.
 
 ### Fixed

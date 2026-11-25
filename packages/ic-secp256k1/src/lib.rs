@@ -1163,7 +1163,8 @@ pub enum RecoveryError {
     /// The signature is syntactically invalid and cannot be parsed.
     SignatureParseError(String),
     /// Recovery failed which can only happen if parameters are wrong:
-    /// signature was not done on given digest or was done by another key pair.
+    /// signature was not done on given digest or was done by another key pair,
+    /// or the digest is shorter than 16 bytes.
     WrongParameters(String),
 }
 
