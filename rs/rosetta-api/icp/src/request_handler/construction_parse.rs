@@ -9,6 +9,7 @@ use crate::{
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
+    signed_target::representative_envelope,
 };
 use rosetta_core::objects::ObjectMap;
 
@@ -20,7 +21,7 @@ use ic_nns_governance_api::{
 use crate::{models::seconds::Seconds, request::Request};
 use ic_types::{
     PrincipalId,
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
+    messages::{Blob, HttpCanisterUpdate},
 };
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
@@ -38,12 +39,17 @@ impl RosettaRequestHandler {
             ParsedTransaction::Signed(signed_transaction) => signed_transaction
                 .requests
                 .iter()
-                .map(
-                    |(request_type, updates)| match updates[0].update.content.clone() {
-                        HttpCallContent::Call { update } => (request_type.clone(), update),
-                    },
-                )
-                .collect(),
+                .map(|(request_type, envelopes)| {
+                    // Each envelope carries its own signature and the submit
+                    // path broadcasts whichever one is currently valid, not the
+                    // first, so one of them stands for the rest only once they
+                    // all agree.
+                    Ok((
+                        request_type.clone(),
+                        representative_envelope(envelopes)?.clone(),
+                    ))
+                })
+                .collect::<Result<Vec<_>, ApiError>>()?,
             ParsedTransaction::Unsigned(unsigned_transaction) => unsigned_transaction.updates,
         };
 
@@ -697,8 +703,7 @@ mod tests {
     use ic_types::{
         PrincipalId,
         messages::{
-            Blob, HttpCallContent, HttpCanisterUpdate, HttpReadState, HttpReadStateContent,
-            HttpRequestEnvelope,
+            Blob, HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
         },
     };
     use rosetta_core::objects::ObjectMap;
@@ -873,12 +878,9 @@ mod tests {
 
     fn submitted_set_dissolve_timestamp(arg: Vec<u8>) -> Result<Request, ApiError> {
         let update = set_dissolve_timestamp_update(arg);
-        let read_state = HttpReadState {
-            sender: update.sender.clone(),
-            paths: vec![],
-            nonce: None,
-            ingress_expiry: update.ingress_expiry,
-        };
+        // Pair the update with the read-state call that reads its own result,
+        // as `construction/combine` does.
+        let read_state = crate::convert::make_read_state_from_update(&update);
         let envelope_pair = EnvelopePair {
             update: HttpRequestEnvelope {
                 content: HttpCallContent::Call { update },
