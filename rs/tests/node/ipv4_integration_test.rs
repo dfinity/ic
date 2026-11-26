@@ -50,7 +50,6 @@ use anyhow::{Error, anyhow, format_err};
 use candid::Encode;
 
 use ic_agent::identity::Secp256k1Identity;
-use k256::elliptic_curve::SecretKey;
 use std::str::FromStr;
 
 const TEST_PRINCIPAL: &str = "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
@@ -116,8 +115,7 @@ pub fn test(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     info!(log, "Creating an agent with node provider's identity");
     let mut agent_with_identity = nns_node.build_default_agent();
-    let np_identity =
-        Secp256k1Identity::from_private_key(SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap());
+    let np_identity = Secp256k1Identity::from_pem(TEST_PRIVATE_KEY).unwrap();
     agent_with_identity.set_identity(np_identity);
     info!(log, "Asserting there is exactly 1 unassigned node");
     assert_eq!(topology.unassigned_nodes().count(), 1);

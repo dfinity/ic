@@ -18,12 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A flexible HTTP outcall delivers responses up to 2,031,616 bytes (2 MiB − 64 KiB) in total rather than 2 MiB:
   it delivers fewer than `max_responses` responses where more would exceed that, and fails with `responses_too_large`
   once the smallest responses that would have to be delivered exceed it.
+- If the TLS certificate or private key file of an HTTPS gateway (`https_config`) cannot be parsed,
+  the error message is worded differently, e.g., `The private key file contained no keys` instead of `private key format not supported`.
+- `sign_with_ecdsa` derives the RFC 6979 nonce from the message hash reduced modulo the group order of the key's curve,
+  as RFC 6979 specifies. For a `message_hash` whose value is at least that order, the signature therefore differs
+  from the one returned before (and still verifies); this concerns both secp256k1 and secp256r1 keys.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,
   so that sending a transaction through the bitcoin or dogecoin canister is much less likely to fail spuriously on a loaded machine.
 - A PocketIC instance no longer becomes permanently busy after the machine running the PocketIC server
   was suspended or hibernated.
+- Stopping an HTTPS gateway (`https_config`) also closes its connections that are still in the TLS handshake,
+  instead of keeping them open until the handshake completes or times out after 10 s.
 
 
 

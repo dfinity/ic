@@ -277,7 +277,10 @@ impl ProofOfProduct {
         let r1_com = instance.g.scalar_mul(&r1)?;
 
         let r2 = EccScalar::random(instance.curve_type, rng);
-        let r2_com = EccPoint::mul_2_points_vartime(&instance.rhs_com, &r1, &instance.h, &r2)?;
+        let r2_com = instance
+            .rhs_com
+            .scalar_mul(&r1)?
+            .add_points(&instance.h.scalar_mul(&r2)?)?;
 
         // Compute the challenge:
         let challenge = instance.hash_to_challenge(alg, &r1_com, &r2_com, associated_data)?;

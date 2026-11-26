@@ -2,34 +2,6 @@ use strum_macros::{EnumCount, EnumIter};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumCount, EnumIter)]
 pub enum CertificationVersion {
-    /// Defined `reject_signals`, a struct containing 7 flavors of reject signals.
-    /// Deprecated `reject_signals_deltas`.
-    V19 = 19,
-    /// Excluded loopback stream from the certified state.
-    V20 = 20,
-    /// Add `canister_ranges` subtree to the certified state.
-    V21 = 21,
-    /// Switch from `RequestOrResponse` to `StreamMessage`, adding `refund` variant.
-    V22 = 22,
-    /// In `Request` / `Response`, switch from encoding `payment` / `refund` (type
-    /// `Funds`) to encoding `cycles_payment` / `cycles_refund` (type `Cycles`).
-    /// Make `Request::metadata` and the `RequestMetadata` fields non-optional.
-    V23 = 23,
-    /// Refactored CBOR-encoded `/metadata` leaf into `/metadata/prev_state_hash` (type `Blob`)
-    /// and added `height` to the certified state at `/metadata/height`.
-    V24 = 24,
-    /// Add /subnet/<subnet_id>/type.
-    V25 = 25,
-    /// Introdue `EngineNotAllowed` signals
-    V26 = 26,
-    /// Add `/canister/<canister_id>/last_install_timestamp` leaf.
-    V27 = 27,
-    /// Add `/canister/<canister_id>/canister_creation_timestamp` leaf.
-    V28 = 28,
-    /// Fix double counting of cycles consumed by deleted canisters in
-    /// `/subnet/<subnet_id>/metrics` and additionally include the cycles
-    /// consumed by all non-deleted canisters in the reported total.
-    V29 = 29,
     /// Report the cycles consumed by non-deleted canisters in
     /// `/subnet/<subnet_id>/metrics` as the sum of the monotonic
     /// `CanisterMetrics::consumed_cycles_monotonic` instead of the
@@ -73,7 +45,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version lower than
 /// this.
-pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
+pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V30;
 
 /// Maximum supported certification version.
 ///
