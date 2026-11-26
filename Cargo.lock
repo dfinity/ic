@@ -25316,12 +25316,14 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.12.1"
+version = "1.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
+checksum = "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64"
 dependencies = [
- "getrandom 0.2.17",
- "serde",
+ "getrandom 0.4.3",
+ "js-sys",
+ "serde_core",
+ "wasm-bindgen",
 ]
 
 [[package]]
