@@ -42,7 +42,7 @@ rstest = { workspace = true }
 socks5-impl = { version = "0.10.3", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
+uuid = { workspace = true }
 
 [features]
 http = []

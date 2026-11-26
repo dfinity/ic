@@ -24451,7 +24451,6 @@ dependencies = [
  "sha2 0.11.1",
  "tla_instrumentation_proc_macros",
  "tokio-test",
- "uuid",
 ]
 
 [[package]]
@@ -25323,7 +25322,17 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "serde_core",
+ "uuid-rng-internal",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "uuid-rng-internal"
+version = "1.29.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "891a3375e8b02e4d8c6f211681910001fdca919f8ab73a3484d2342741cd9c45"
+dependencies = [
+ "getrandom 0.4.3",
 ]
 
 [[package]]

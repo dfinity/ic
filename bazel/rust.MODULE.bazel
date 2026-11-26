@@ -1829,10 +1829,9 @@ crate.spec(
     version = "^2.5.3",
 )
 
-# Unlike Cargo, Bazel builds uuid with the same features for every crate, so canisters get `v4` too.
-# On wasm32-unknown-unknown, `v4` needs a source of randomness: `rng-getrandom` makes it getrandom 0.4,
-# which canisters build with the `unsupported` backend (see the getrandom 0.4 annotation), so
-# `Uuid::new_v4()` panics in a canister.
+# Bazel builds uuid with these features for every crate, canisters included. On wasm32-unknown-unknown,
+# `v4` needs a source of randomness: `rng-getrandom` makes it getrandom 0.4, which canisters build with
+# the `unsupported` backend (see the getrandom 0.4 annotation), so `Uuid::new_v4()` panics in a canister.
 crate.spec(
     features = [
         "rng-getrandom",

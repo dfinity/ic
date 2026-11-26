@@ -5,8 +5,8 @@ use std::fmt::Formatter;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex};
-use uuid::Uuid;
 
 use crate::ResolvedStatePair;
 use crate::TlaConstantAssignment;
@@ -130,9 +130,14 @@ fn mk_constant_definitions(constants: HashMap<String, String>) -> Vec<String> {
 }
 
 fn unique_tmp_dir() -> String {
+    static NEXT_SUBDIR_NUMBER: AtomicU64 = AtomicU64::new(0);
     let test_tmpdir = std::env::var("TEST_TMPDIR").expect("TEST_TMPDIR not set");
-    // Generate a unique subdirectory using a random UUID
-    let subdir_name = Uuid::new_v4().to_string();
+    // The counter makes the name unique within this process, the process ID across processes.
+    let subdir_name = format!(
+        "{}-{}",
+        std::process::id(),
+        NEXT_SUBDIR_NUMBER.fetch_add(1, Ordering::Relaxed)
+    );
     let mut tmp_subdir = PathBuf::from(test_tmpdir);
     tmp_subdir.push(subdir_name);
 
