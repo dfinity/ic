@@ -99,8 +99,8 @@ fn ingress_window(envelope: &EnvelopePair) -> (Time, Time) {
 /// sent, so every unexpired envelope is checked, as of the start of its ingress
 /// window or `now` if later. Of a read-state call that carries a delegation or
 /// is signed with a canister signature, only that its sender is derived from
-/// its public key is checked, since the rest depends on the IC's clock or root
-/// key.
+/// its public key is checked. Its signature and delegation chain are left to
+/// the IC, so that no call the IC accepts is refused.
 pub fn verify_read_state_signatures(
     transaction: &SignedTransaction,
     now: Time,
