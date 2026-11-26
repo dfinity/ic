@@ -93,3 +93,53 @@ jobs:
           slack-message: "${{ steps.setup.outputs.message }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
+      # Release Testing results also go to the release-management-alerts channel on
+      # Open Messaging, whose incoming webhooks accept Slack's webhook payload. Links,
+      # mrkdwn and the colour bar render only inside an attachment, so the message is
+      # sent as one. This post runs even if the Slack post failed, and its own failure
+      # does not fail the job.
+      - name: Post Open Messaging Notification
+        if: ${{ !cancelled() && steps.setup.outputs.post_to_slack == 'true' && github.event.workflow_run.name == 'Release Testing' }}
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          if [[ -z "$OPEN_MESSAGING_WEBHOOK_URL" ]]; then
+            echo "The OPEN_MESSAGING_WEBHOOK_RELEASE_MANAGEMENT secret is not set; skipping."
+            exit 0
+          fi
+
+          if [[ "$CONCLUSION" == "success" ]]; then
+            COLOR="good"
+          else
+            COLOR="danger"
+          fi
+
+          PAYLOAD="$(jq --null-input \
+            --arg color "$COLOR" \
+            --arg title "$WORKFLOW_NAME $CONCLUSION on $BRANCH" \
+            --arg title_link "$RUN_URL" \
+            --arg text "commit: \`$SHA\`" \
+            '{attachments: [{color: $color, title: $title, title_link: $title_link, text: $text}]}')"
+
+          RESPONSE_FILE="$(mktemp)"
+          HTTP_CODE="$(curl --silent --show-error --max-time 30 --retry 2 \
+            --header "Content-Type: application/json" \
+            --data "$PAYLOAD" \
+            --output "$RESPONSE_FILE" \
+            --write-out "%{http_code}" \
+            --url "$OPEN_MESSAGING_WEBHOOK_URL")"
+          RESPONSE="$(head -c 500 "$RESPONSE_FILE")"
+          if [[ "$HTTP_CODE" != "200" || "$RESPONSE" != "ok" ]]; then
+            echo "::error::Open Messaging webhook answered HTTP ${HTTP_CODE}: ${RESPONSE}"
+            exit 1
+          fi
+          echo "Posted to Open Messaging."
+        env:
+          OPEN_MESSAGING_WEBHOOK_URL: ${{ secrets.OPEN_MESSAGING_WEBHOOK_RELEASE_MANAGEMENT }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
