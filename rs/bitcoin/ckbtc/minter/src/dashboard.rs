@@ -2,7 +2,7 @@ use crate::address::{BitcoinAddress, account_to_bitcoin_address};
 use crate::state;
 use crate::tx::DisplayAmount;
 use crate::{ECDSAPublicKey, Network};
-use ic_btc_interface::Txid;
+use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
 use std::io::Write;
@@ -223,6 +223,20 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                         {}
                     </tbody>
                 </table>
+                <h3>Unchecked utxos</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Txid</th>
+                            <th>Vout</th>
+                            <th>Height</th>
+                            <th>Value ({native_token})</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {}
+                    </tbody>
+                </table>
                 <h3>Ignored utxos</h3>
                 <table>
                     <thead>
@@ -265,6 +279,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
         self.build_unconfirmed_change(s),
         self.build_mint_unknown_utxos(s),
         self.build_quarantined_utxos(s),
+        self.build_unchecked_utxos(s),
         self.build_ignored_utxos(s),
         self.build_account_to_utxos_table(s, account_to_utxos_start, DEFAULT_PAGE_SIZE),
         self.build_update_balance_principals(s),
@@ -539,29 +554,20 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
     }
 
     pub fn build_quarantined_utxos(&self, s: &CkBtcMinterState) -> String {
-        with_utf8_buffer(|buf| {
-            for utxo in s.quarantined_utxos() {
-                writeln!(
-                    buf,
-                    "<tr>
-                    <td>{}</td>
-                    <td>{}</td>
-                    <td>{}</td>
-                    <td>{}</td>
-                </tr>",
-                    self.txid_link(&utxo.outpoint.txid),
-                    utxo.outpoint.vout,
-                    utxo.height,
-                    DisplayAmount(utxo.value)
-                )
-                .unwrap()
-            }
-        })
+        self.build_utxos(s.quarantined_utxos())
+    }
+
+    pub fn build_unchecked_utxos(&self, s: &CkBtcMinterState) -> String {
+        self.build_utxos(s.unchecked_utxos())
     }
 
     pub fn build_ignored_utxos(&self, s: &CkBtcMinterState) -> String {
+        self.build_utxos(s.ignored_utxos())
+    }
+
+    fn build_utxos<'a>(&self, utxos: impl Iterator<Item = &'a Utxo>) -> String {
         with_utf8_buffer(|buf| {
-            for utxo in s.ignored_utxos() {
+            for utxo in utxos {
                 writeln!(
                     buf,
                     "<tr>

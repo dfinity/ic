@@ -10,7 +10,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::Public
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::NumberOfNodes;
 use proptest::prelude::*;
-use rand::Rng;
+use rand::{Rng, RngCore};
 
 mod util {
     use super::super::super::api as tsig;

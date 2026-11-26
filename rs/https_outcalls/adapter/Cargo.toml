@@ -38,9 +38,8 @@ axum-server = { workspace = true }
 bytes = { workspace = true }
 ic-test-utilities-net = { path = "../../test_utilities/net" }
 rustls = { workspace = true }
-rustls-pemfile = { workspace = true }
 rstest = { workspace = true }
-socks5-impl = { version = "0.6", features = ["tokio"] }
+socks5-impl = { version = "0.10.3", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
 uuid = { workspace = true }

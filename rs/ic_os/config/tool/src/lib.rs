@@ -1,6 +1,7 @@
 pub mod guestos;
 pub mod hostos;
 pub mod setupos;
+pub mod validation;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};

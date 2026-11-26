@@ -1393,19 +1393,19 @@ mod tests {
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
         let template = generate_ic_config::IcConfigTemplate {
-            ipv6_prefix: "::/64".to_string(),
+            ipv6_prefix: "::/64".parse().unwrap(),
             ipv4_address: "".to_string(),
             ipv4_gateway: "".to_string(),
             nns_urls: "http://www.fakeurl.com/".to_string(),
-            engine_management_canister_id: "null".to_string(),
-            backup_retention_time_secs: "0".to_string(),
-            backup_purging_interval_secs: "0".to_string(),
-            query_stats_epoch_length: "600".to_string(),
+            engine_management_canister_id: None,
+            backup_retention_time_secs: 0,
+            backup_purging_interval_secs: 0,
+            query_stats_epoch_length: 600,
             jaeger_addr: "".to_string(),
             domain_name: "".to_string(),
             node_reward_type: "".to_string(),
-            malicious_behavior: "null".to_string(),
-            extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+            malicious_behavior: None,
+            extra_api_boundary_node_trust_anchors_pem: None,
             peer_guest_vm_address: Some("2001:db8::6802:94ff:feef:2978".parse().unwrap()),
         };
 
