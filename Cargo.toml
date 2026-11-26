@@ -545,6 +545,7 @@ members = [
     "rs/utils/validate_eq",
     "rs/utils/validate_eq_derive",
     "rs/validator",
+    "rs/validator/fuzz",
     "rs/validator/http_request_arbitrary",
     "rs/validator/http_request_test_utils",
     "rs/validator/ingress_message",
