@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "de0a8e850cd3fde6d3f6fcd859db5327a964ff0e93b57edff7876443b7bd7a61",
+  "checksum": "5f52bcd7d6c73384b02f424eed63d380aa6fadbd64c5c48b0fc9420a5360ef4d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -19458,7 +19458,6 @@
         "crate_features": [
           "alloc",
           "arithmetic",
-          "default",
           "der",
           "digest",
           "hazmat",
@@ -20064,7 +20063,6 @@
         "crate_features": [
           "alloc",
           "arithmetic",
-          "default",
           "digest",
           "ecdh",
           "ff",
@@ -26405,217 +26403,6 @@
       ],
       "version": "0.1.2"
     },
-    "ic-agent 0.49.3": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "pem"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "arc-swap 1.9.5",
-              "target": "arc_swap"
-            },
-            {
-              "id": "async-channel 2.5.0",
-              "target": "async_channel"
-            },
-            {
-              "id": "async-lock 3.5.0",
-              "target": "async_lock"
-            },
-            {
-              "id": "backon 1.6.0",
-              "target": "backon"
-            },
-            {
-              "id": "bytes 1.12.2",
-              "target": "bytes"
-            },
-            {
-              "id": "cached 0.56.0",
-              "target": "cached"
-            },
-            {
-              "id": "candid 0.10.41",
-              "target": "candid"
-            },
-            {
-              "id": "ecdsa 0.16.9",
-              "target": "ecdsa"
-            },
-            {
-              "id": "ed25519-consensus 2.1.0",
-              "target": "ed25519_consensus"
-            },
-            {
-              "id": "elliptic-curve 0.13.8",
-              "target": "elliptic_curve"
-            },
-            {
-              "id": "futures-util 0.3.34",
-              "target": "futures_util"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "http 1.5.0",
-              "target": "http"
-            },
-            {
-              "id": "http-body 1.1.0",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.5",
-              "target": "http_body_util"
-            },
-            {
-              "id": "ic-certification 3.2.0",
-              "target": "ic_certification"
-            },
-            {
-              "id": "ic-ed25519 0.6.0",
-              "target": "ic_ed25519"
-            },
-            {
-              "id": "ic-transport-types 0.49.3",
-              "target": "ic_transport_types"
-            },
-            {
-              "id": "ic-verify-bls-signature 0.6.0",
-              "target": "ic_verify_bls_signature"
-            },
-            {
-              "id": "ic_principal 0.1.5",
-              "target": "ic_principal"
-            },
-            {
-              "id": "k256 0.13.4",
-              "target": "k256"
-            },
-            {
-              "id": "leb128 0.2.7",
-              "target": "leb128"
-            },
-            {
-              "id": "p256 0.13.2",
-              "target": "p256"
-            },
-            {
-              "id": "pem 3.0.6",
-              "target": "pem"
-            },
-            {
-              "id": "pkcs8 0.10.2",
-              "target": "pkcs8"
-            },
-            {
-              "id": "rand 0.10.4",
-              "target": "rand"
-            },
-            {
-              "id": "rangemap 1.8.0",
-              "target": "rangemap"
-            },
-            {
-              "id": "reqwest 0.13.5",
-              "target": "reqwest"
-            },
-            {
-              "id": "sec1 0.7.3",
-              "target": "sec1"
-            },
-            {
-              "id": "serde 1.0.229",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.19",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            },
-            {
-              "id": "stop-token 0.7.0",
-              "target": "stop_token"
-            },
-            {
-              "id": "thiserror 2.0.21",
-              "target": "thiserror"
-            },
-            {
-              "id": "time 0.3.55",
-              "target": "time"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            },
-            {
-              "id": "url 2.5.9",
-              "target": "url"
-            }
-          ],
-          "selects": {
-            "cfg(not(target_family = \"wasm\"))": [
-              {
-                "id": "tokio 1.54.1",
-                "target": "tokio"
-              }
-            ],
-            "cfg(target_family = \"wasm\")": [
-              {
-                "id": "async-watch 0.3.1",
-                "target": "async_watch"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "proc_macro_deps": [
-          {
-            "id": "async-trait 0.1.92",
-            "target": "async_trait"
-          },
-          {
-            "id": "serde_repr 0.1.21",
-            "target": "serde_repr"
-          }
-        ]
-      },
-      "library_target_name": "ic_agent",
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "ic-agent",
-      "package_url": "https://github.com/dfinity/agent-rs",
-      "repository": {
-        "Http": {
-          "sha256": "4ac2c4f1ac865dce73eb8b14b3e08029af24347f1d4307f69ac52c2172b78e3a",
-          "url": "https://static.crates.io/crates/ic-agent/0.49.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_agent",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.49.3"
-    },
     "ic-agent 0.50.0": {
       "common_attrs": {
         "crate_features": [
@@ -26833,9 +26620,13 @@
           "acme",
           "acme-alpn",
           "acme-dns",
+          "cert-providers",
           "clients-hyper",
+          "custom-domains",
           "default",
-          "pubsub"
+          "lb",
+          "pubsub",
+          "vector"
         ],
         "deps": [
           {
@@ -27003,376 +26794,6 @@
             "target": "prometheus"
           },
           {
-            "id": "rand 0.8.8",
-            "target": "rand"
-          },
-          {
-            "id": "rcgen 0.14.10",
-            "target": "rcgen"
-          },
-          {
-            "id": "regex 1.13.2",
-            "target": "regex"
-          },
-          {
-            "id": "reqwest 0.13.5",
-            "target": "reqwest"
-          },
-          {
-            "id": "rustls 0.23.46",
-            "target": "rustls"
-          },
-          {
-            "id": "rustls-acme 0.15.4",
-            "target": "rustls_acme"
-          },
-          {
-            "id": "rustls-pemfile 2.2.0",
-            "target": "rustls_pemfile"
-          },
-          {
-            "id": "rustls-platform-verifier 0.7.1",
-            "target": "rustls_platform_verifier"
-          },
-          {
-            "id": "scopeguard 1.2.0",
-            "target": "scopeguard"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          },
-          {
-            "id": "serde_json 1.0.154",
-            "target": "serde_json"
-          },
-          {
-            "id": "serde_with 3.24.0",
-            "target": "serde_with"
-          },
-          {
-            "id": "serde_yaml_ng 0.10.0",
-            "target": "serde_yaml_ng"
-          },
-          {
-            "id": "sha1 0.11.0",
-            "target": "sha1"
-          },
-          {
-            "id": "sha2 0.11.1",
-            "target": "sha2"
-          },
-          {
-            "id": "show-option 0.2.0",
-            "target": "show_option"
-          },
-          {
-            "id": "socket2 0.6.5",
-            "target": "socket2"
-          },
-          {
-            "id": "strum 0.28.0",
-            "target": "strum"
-          },
-          {
-            "id": "systemstat 0.2.7",
-            "target": "systemstat"
-          },
-          {
-            "id": "tar 0.4.46",
-            "target": "tar"
-          },
-          {
-            "id": "tempfile 3.27.0",
-            "target": "tempfile"
-          },
-          {
-            "id": "thiserror 2.0.21",
-            "target": "thiserror"
-          },
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "tokio-io-timeout 1.2.1",
-            "target": "tokio_io_timeout"
-          },
-          {
-            "id": "tokio-rustls 0.26.6",
-            "target": "tokio_rustls"
-          },
-          {
-            "id": "tokio-util 0.7.20",
-            "target": "tokio_util"
-          },
-          {
-            "id": "tower 0.5.3",
-            "target": "tower"
-          },
-          {
-            "id": "tower-http 0.7.1",
-            "target": "tower_http"
-          },
-          {
-            "id": "tower-service 0.3.3",
-            "target": "tower_service"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          },
-          {
-            "id": "tracing-subscriber 0.3.23",
-            "target": "tracing_subscriber"
-          },
-          {
-            "id": "url 2.5.9",
-            "target": "url"
-          },
-          {
-            "id": "uuid 1.12.1",
-            "target": "uuid"
-          },
-          {
-            "id": "webpki-root-certs 1.0.12",
-            "target": "webpki_root_certs"
-          },
-          {
-            "id": "x509-parser 0.18.1",
-            "target": "x509_parser"
-          },
-          {
-            "id": "zeroize 1.9.2",
-            "target": "zeroize"
-          },
-          {
-            "id": "zstd 0.14.4",
-            "target": "zstd"
-          }
-        ],
-        "edition": "2024",
-        "proc_macro_deps": [
-          {
-            "id": "async-trait 0.1.92",
-            "target": "async_trait"
-          },
-          {
-            "id": "derive-new 0.7.0",
-            "target": "derive_new"
-          },
-          {
-            "id": "indoc 2.0.8",
-            "target": "indoc"
-          },
-          {
-            "id": "strum_macros 0.28.0",
-            "target": "strum_macros"
-          }
-        ]
-      },
-      "library_target_name": "ic_bn_lib",
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "ic-bn-lib",
-      "package_url": "https://github.com/dfinity/ic-bn-lib",
-      "repository": {
-        "Http": {
-          "sha256": "25e153cd1f8defd7159ddd64e9a25ca8bc734dd9dc2aa9ac53b06d4b8c9c1e4e",
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.11.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_bn_lib",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.11.0"
-    },
-    "ic-bn-lib 0.9.0": {
-      "common_attrs": {
-        "crate_features": [
-          "acme",
-          "acme-alpn",
-          "acme-dns",
-          "cert-providers",
-          "clients-hyper",
-          "custom-domains",
-          "default",
-          "lb",
-          "vector"
-        ],
-        "deps": [
-          {
-            "id": "ahash 0.8.12",
-            "target": "ahash"
-          },
-          {
-            "id": "anyhow 1.0.104",
-            "target": "anyhow"
-          },
-          {
-            "id": "arc-swap 1.9.5",
-            "target": "arc_swap"
-          },
-          {
-            "id": "arrayvec 0.7.8",
-            "target": "arrayvec"
-          },
-          {
-            "id": "async-channel 2.5.0",
-            "target": "async_channel"
-          },
-          {
-            "id": "axum 0.8.9",
-            "target": "axum"
-          },
-          {
-            "id": "axum-extra 0.12.6",
-            "target": "axum_extra"
-          },
-          {
-            "id": "base64 0.23.1",
-            "target": "base64"
-          },
-          {
-            "id": "bytes 1.12.2",
-            "target": "bytes"
-          },
-          {
-            "id": "candid 0.10.41",
-            "target": "candid"
-          },
-          {
-            "id": "chacha20poly1305 0.10.1",
-            "target": "chacha20poly1305"
-          },
-          {
-            "id": "chrono 0.4.45",
-            "target": "chrono"
-          },
-          {
-            "id": "clap 4.6.8",
-            "target": "clap"
-          },
-          {
-            "id": "flate2 1.1.11",
-            "target": "flate2"
-          },
-          {
-            "id": "fqdn 0.5.2",
-            "target": "fqdn"
-          },
-          {
-            "id": "futures 0.3.34",
-            "target": "futures"
-          },
-          {
-            "id": "futures-util 0.3.34",
-            "target": "futures_util"
-          },
-          {
-            "id": "governor 0.10.4",
-            "target": "governor"
-          },
-          {
-            "id": "hex 0.4.3",
-            "target": "hex"
-          },
-          {
-            "id": "hickory-proto 0.26.3",
-            "target": "hickory_proto"
-          },
-          {
-            "id": "hickory-resolver 0.26.3",
-            "target": "hickory_resolver"
-          },
-          {
-            "id": "http 1.5.0",
-            "target": "http"
-          },
-          {
-            "id": "http-body 1.1.0",
-            "target": "http_body"
-          },
-          {
-            "id": "http-body-util 0.1.5",
-            "target": "http_body_util"
-          },
-          {
-            "id": "humantime 2.4.0",
-            "target": "humantime"
-          },
-          {
-            "id": "hyper 1.12.0",
-            "target": "hyper"
-          },
-          {
-            "id": "hyper-rustls 0.27.10",
-            "target": "hyper_rustls"
-          },
-          {
-            "id": "hyper-util 0.1.21",
-            "target": "hyper_util"
-          },
-          {
-            "id": "ic-agent 0.49.3",
-            "target": "ic_agent"
-          },
-          {
-            "id": "ic-custom-domains-canister-api 0.3.0",
-            "target": "ic_custom_domains_canister_api"
-          },
-          {
-            "id": "ic-transport-types 0.49.3",
-            "target": "ic_transport_types"
-          },
-          {
-            "id": "instant-acme 0.8.5",
-            "target": "instant_acme"
-          },
-          {
-            "id": "ipnet 2.12.2",
-            "target": "ipnet"
-          },
-          {
-            "id": "itertools 0.15.0",
-            "target": "itertools"
-          },
-          {
-            "id": "maxminddb 0.29.0",
-            "target": "maxminddb"
-          },
-          {
-            "id": "moka 0.12.16",
-            "target": "moka"
-          },
-          {
-            "id": "nix 0.31.4",
-            "target": "nix"
-          },
-          {
-            "id": "parse-size 1.1.0",
-            "target": "parse_size"
-          },
-          {
-            "id": "pem 4.0.0",
-            "target": "pem"
-          },
-          {
-            "id": "ppp 2.3.0",
-            "target": "ppp"
-          },
-          {
-            "id": "prometheus 0.14.0",
-            "target": "prometheus"
-          },
-          {
             "id": "prost 0.14.6",
             "target": "prost"
           },
@@ -27513,7 +26934,7 @@
             "target": "uuid"
           },
           {
-            "id": "vrl 0.34.0",
+            "id": "vrl 0.38.0",
             "target": "vrl"
           },
           {
@@ -27529,7 +26950,7 @@
             "target": "zeroize"
           },
           {
-            "id": "zstd 0.13.5",
+            "id": "zstd 0.14.4",
             "target": "zstd"
           }
         ],
@@ -27562,8 +26983,8 @@
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "sha256": "28846ee2f665e8cb50bc5dd95ba098f01e20ffd4f9dc31622378cab3f5e286af",
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.9.0/download"
+          "sha256": "25e153cd1f8defd7159ddd64e9a25ca8bc734dd9dc2aa9ac53b06d4b8c9c1e4e",
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.11.0/download"
         }
       },
       "targets": [
@@ -27574,7 +26995,7 @@
           }
         }
       ],
-      "version": "0.9.0"
+      "version": "0.11.0"
     },
     "ic-btc-interface 0.4.0": {
       "common_attrs": {
@@ -28612,11 +28033,11 @@
             "target": "humantime"
           },
           {
-            "id": "ic-bn-lib 0.9.0",
+            "id": "ic-bn-lib 0.11.0",
             "target": "ic_bn_lib"
           },
           {
-            "id": "ic-http-gateway-protocol 0.0.0-git",
+            "id": "ic-http-gateway-protocol 0.7.0",
             "target": "ic_http_gateway_protocol"
           },
           {
@@ -28630,10 +28051,6 @@
           {
             "id": "lazy_static 1.5.1",
             "target": "lazy_static"
-          },
-          {
-            "id": "maxminddb 0.29.0",
-            "target": "maxminddb"
           },
           {
             "id": "moka 0.12.16",
@@ -28678,6 +28095,10 @@
           {
             "id": "strum 0.28.0",
             "target": "strum"
+          },
+          {
+            "id": "systemstat 0.2.7",
+            "target": "systemstat"
           },
           {
             "id": "thiserror 2.0.21",
@@ -28758,7 +28179,7 @@
       "repository": {
         "Git": {
           "commitish": {
-            "Rev": "c3950760e20f7e7f6402637ded1390c64ba6072f"
+            "Rev": "c063f19be31c4b5e988148b08d2200936897672c"
           },
           "remote": "https://github.com/dfinity/ic-gateway"
         }
@@ -28845,7 +28266,7 @@
       ],
       "version": "3.2.0"
     },
-    "ic-http-gateway-protocol 0.0.0-git": {
+    "ic-http-gateway-protocol 0.7.0": {
       "common_attrs": {
         "deps": [
           {
@@ -28873,7 +28294,7 @@
             "target": "http_body_util"
           },
           {
-            "id": "ic-agent 0.49.3",
+            "id": "ic-agent 0.50.0",
             "target": "ic_agent"
           },
           {
@@ -28885,7 +28306,7 @@
             "target": "ic_response_verification"
           },
           {
-            "id": "ic-utils 0.49.3",
+            "id": "ic-utils 0.50.0",
             "target": "ic_utils"
           },
           {
@@ -28903,12 +28324,9 @@
       "name": "ic-http-gateway-protocol",
       "package_url": "https://github.com/dfinity/ic-http-gateway-protocol",
       "repository": {
-        "Git": {
-          "commitish": {
-            "Rev": "a51a25539053a394f28d9a2c3486af4be69fce76"
-          },
-          "remote": "https://github.com/dfinity/ic-http-gateway-protocol",
-          "strip_prefix": "packages/ic-http-gateway-protocol"
+        "Http": {
+          "sha256": "3bef9be888a4a6a07b20959834ed994f508431dbe5f7fb9ee0b9348ac1509542",
+          "url": "https://static.crates.io/crates/ic-http-gateway-protocol/0.7.0/download"
         }
       },
       "targets": [
@@ -28919,7 +28337,7 @@
           }
         }
       ],
-      "version": "0.0.0-git"
+      "version": "0.7.0"
     },
     "ic-identity-hsm 0.50.0": {
       "common_attrs": {
@@ -29492,77 +28910,6 @@
       ],
       "version": "3.0.1"
     },
-    "ic-transport-types 0.49.3": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "candid 0.10.41",
-            "target": "candid"
-          },
-          {
-            "id": "hex 0.4.3",
-            "target": "hex"
-          },
-          {
-            "id": "ic-certification 3.2.0",
-            "target": "ic_certification"
-          },
-          {
-            "id": "leb128 0.2.7",
-            "target": "leb128"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          },
-          {
-            "id": "serde_bytes 0.11.19",
-            "target": "serde_bytes"
-          },
-          {
-            "id": "serde_cbor 0.11.2",
-            "target": "serde_cbor"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
-          },
-          {
-            "id": "thiserror 2.0.21",
-            "target": "thiserror"
-          }
-        ],
-        "edition": "2021",
-        "proc_macro_deps": [
-          {
-            "id": "serde_repr 0.1.21",
-            "target": "serde_repr"
-          }
-        ]
-      },
-      "library_target_name": "ic_transport_types",
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "ic-transport-types",
-      "package_url": "https://github.com/dfinity/agent-rs",
-      "repository": {
-        "Http": {
-          "sha256": "dfaa92cecba48dcd4ef3b626847bb1f54f0d90fb2f1471755141d385f8ffc42c",
-          "url": "https://static.crates.io/crates/ic-transport-types/0.49.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_transport_types",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.49.3"
-    },
     "ic-transport-types 0.50.0": {
       "common_attrs": {
         "deps": [
@@ -29633,93 +28980,6 @@
         }
       ],
       "version": "0.50.0"
-    },
-    "ic-utils 0.49.3": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "candid 0.10.41",
-            "target": "candid"
-          },
-          {
-            "id": "futures-util 0.3.34",
-            "target": "futures_util"
-          },
-          {
-            "id": "ic-agent 0.49.3",
-            "target": "ic_agent"
-          },
-          {
-            "id": "ic-management-canister-types 0.8.0",
-            "target": "ic_management_canister_types"
-          },
-          {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
-          },
-          {
-            "id": "semver 1.0.28",
-            "target": "semver"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          },
-          {
-            "id": "serde_bytes 0.11.19",
-            "target": "serde_bytes"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
-          },
-          {
-            "id": "strum 0.28.0",
-            "target": "strum"
-          },
-          {
-            "id": "thiserror 2.0.21",
-            "target": "thiserror"
-          },
-          {
-            "id": "time 0.3.55",
-            "target": "time"
-          }
-        ],
-        "edition": "2021",
-        "proc_macro_deps": [
-          {
-            "id": "async-trait 0.1.92",
-            "target": "async_trait"
-          },
-          {
-            "id": "strum_macros 0.28.0",
-            "target": "strum_macros"
-          }
-        ]
-      },
-      "library_target_name": "ic_utils",
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "ic-utils",
-      "package_url": "https://github.com/dfinity/agent-rs",
-      "repository": {
-        "Http": {
-          "sha256": "40f34f519a582420f4424cc7751bff5d5ff82b5c54fff83ebe5abec499f706fe",
-          "url": "https://static.crates.io/crates/ic-utils/0.49.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_utils",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.49.3"
     },
     "ic-utils 0.50.0": {
       "common_attrs": {
@@ -33112,20 +32372,13 @@
         "crate_features": [
           "alloc",
           "arithmetic",
-          "default",
           "digest",
           "ecdsa",
           "ecdsa-core",
-          "once_cell",
-          "pem",
-          "pkcs8",
-          "precomputed-tables",
-          "schnorr",
           "serde",
           "serdect",
           "sha2",
           "sha256",
-          "signature",
           "std"
         ],
         "deps": [
@@ -33143,20 +32396,12 @@
             "target": "elliptic_curve"
           },
           {
-            "id": "once_cell 1.21.4",
-            "target": "once_cell"
-          },
-          {
             "id": "serdect 0.2.0",
             "target": "serdect"
           },
           {
             "id": "sha2 0.10.9",
             "target": "sha2"
-          },
-          {
-            "id": "signature 2.2.0",
-            "target": "signature"
           }
         ],
         "edition": "2021",
@@ -33724,7 +32969,7 @@
       ],
       "version": "0.20.2"
     },
-    "lalrpop 0.22.2": {
+    "lalrpop 0.23.2": {
       "common_attrs": {
         "deps": [
           {
@@ -33732,7 +32977,7 @@
             "target": "ascii_canvas"
           },
           {
-            "id": "bit-set 0.8.0",
+            "id": "bit-set 0.11.1",
             "target": "bit_set"
           },
           {
@@ -33740,15 +32985,15 @@
             "target": "ena"
           },
           {
-            "id": "itertools 0.14.0",
+            "id": "itertools 0.15.0",
             "target": "itertools"
           },
           {
-            "id": "lalrpop-util 0.22.2",
+            "id": "lalrpop-util 0.23.2",
             "target": "lalrpop_util"
           },
           {
-            "id": "petgraph 0.7.1",
+            "id": "petgraph 0.8.3",
             "target": "petgraph"
           },
           {
@@ -33760,11 +33005,11 @@
             "target": "regex_syntax"
           },
           {
-            "id": "sha3 0.10.9",
+            "id": "sha3 0.12.0",
             "target": "sha3"
           },
           {
-            "id": "string_cache 0.8.9",
+            "id": "string_cache 0.11.0",
             "target": "string_cache"
           },
           {
@@ -33780,7 +33025,7 @@
             "target": "walkdir"
           }
         ],
-        "edition": "2021"
+        "edition": "2024"
       },
       "library_target_name": "lalrpop",
       "license": "Apache-2.0 OR MIT",
@@ -33793,8 +33038,8 @@
       "package_url": "https://github.com/lalrpop/lalrpop",
       "repository": {
         "Http": {
-          "sha256": "ba4ebbd48ce411c1d10fb35185f5a51a7bfa3d8b24b4e330d30c9e3a34129501",
-          "url": "https://static.crates.io/crates/lalrpop/0.22.2/download"
+          "sha256": "6d315a5ee87f679f2e7caead474b08ec8de60de01a08c942248d4e3c2754565d",
+          "url": "https://static.crates.io/crates/lalrpop/0.23.2/download"
         }
       },
       "targets": [
@@ -33805,7 +33050,7 @@
           }
         }
       ],
-      "version": "0.22.2"
+      "version": "0.23.2"
     },
     "lalrpop-util 0.20.2": {
       "common_attrs": {
@@ -33890,14 +33135,12 @@
       ],
       "version": "0.20.2"
     },
-    "lalrpop-util 0.22.2": {
+    "lalrpop-util 0.23.2": {
+      "build_script_attrs": {},
       "common_attrs": {
-        "edition": "2021",
-        "proc_macro_deps": [
-          {
-            "id": "rustversion 1.0.23",
-            "target": "rustversion"
-          }
+        "edition": "2024",
+        "extra_deps": [
+          ":build_script_build"
         ]
       },
       "library_target_name": "lalrpop_util",
@@ -33911,8 +33154,8 @@
       "package_url": "https://github.com/lalrpop/lalrpop",
       "repository": {
         "Http": {
-          "sha256": "b5baa5e9ff84f1aefd264e6869907646538a52147a755d494517a8007fb48733",
-          "url": "https://static.crates.io/crates/lalrpop-util/0.22.2/download"
+          "sha256": "364b49d1c98c07972e16fe1346463becc08bcd663da04e6e37ab1bea068dce6a",
+          "url": "https://static.crates.io/crates/lalrpop-util/0.23.2/download"
         }
       },
       "targets": [
@@ -33921,9 +33164,15 @@
             "crate_name": "lalrpop_util",
             "crate_root": "src/lib.rs"
           }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
         }
       ],
-      "version": "0.22.2"
+      "version": "0.23.2"
     },
     "language-tags 0.3.2": {
       "common_attrs": {
@@ -36345,70 +35594,6 @@
         }
       ],
       "version": "0.8.4"
-    },
-    "maxminddb 0.29.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "memmap2",
-          "mmap",
-          "simdutf8"
-        ],
-        "deps": [
-          {
-            "id": "ipnetwork 0.21.1",
-            "target": "ipnetwork"
-          },
-          {
-            "id": "log 0.4.35",
-            "target": "log"
-          },
-          {
-            "id": "memchr 2.8.3",
-            "target": "memchr"
-          },
-          {
-            "id": "memmap2 0.9.12",
-            "target": "memmap2"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
-          },
-          {
-            "id": "simdutf8 0.1.5",
-            "target": "simdutf8"
-          },
-          {
-            "id": "thiserror 2.0.21",
-            "target": "thiserror"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "maxminddb",
-      "license": "ISC",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "ISC"
-      ],
-      "name": "maxminddb",
-      "package_url": "https://github.com/oschwald/maxminddb-rust",
-      "repository": {
-        "Http": {
-          "sha256": "65e84ef32bcbf18a95548989e880db4af6fafd563463753afb4b9a149fb2782c",
-          "url": "https://static.crates.io/crates/maxminddb/0.29.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "maxminddb",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.29.0"
     },
     "maxminddb 0.32.0": {
       "common_attrs": {
@@ -40454,7 +39639,7 @@
       ],
       "version": "0.2.0"
     },
-    "ordered-float 4.6.0": {
+    "ordered-float 5.5.1": {
       "common_attrs": {
         "deps": [
           {
@@ -40474,8 +39659,8 @@
       "package_url": "https://github.com/reem/rust-ordered-float",
       "repository": {
         "Http": {
-          "sha256": "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951",
-          "url": "https://static.crates.io/crates/ordered-float/4.6.0/download"
+          "sha256": "7f59006ce1e204c30956638535b74d317bca99477b9356dfaec54c37f6f600ab",
+          "url": "https://static.crates.io/crates/ordered-float/5.5.1/download"
         }
       },
       "targets": [
@@ -40486,7 +39671,7 @@
           }
         }
       ],
-      "version": "4.6.0"
+      "version": "5.5.1"
     },
     "outref 0.5.2": {
       "common_attrs": {
@@ -40515,71 +39700,6 @@
         }
       ],
       "version": "0.5.2"
-    },
-    "p256 0.13.2": {
-      "common_attrs": {
-        "crate_features": [
-          "alloc",
-          "arithmetic",
-          "default",
-          "digest",
-          "ecdsa",
-          "ecdsa-core",
-          "pem",
-          "pkcs8",
-          "sha2",
-          "sha256",
-          "std"
-        ],
-        "deps": [
-          {
-            "alias": "ecdsa_core",
-            "id": "ecdsa 0.16.9",
-            "target": "ecdsa"
-          },
-          {
-            "id": "elliptic-curve 0.13.8",
-            "target": "elliptic_curve"
-          },
-          {
-            "id": "primeorder 0.13.6",
-            "target": "primeorder"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
-          }
-        ],
-        "edition": "2021",
-        "rustc_flags": [
-          "-C",
-          "opt-level=3"
-        ]
-      },
-      "library_target_name": "p256",
-      "license": "Apache-2.0 OR MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "p256",
-      "package_url": "https://github.com/RustCrypto/elliptic-curves/tree/master/p256",
-      "repository": {
-        "Http": {
-          "sha256": "c9863ad85fa8f4460f9c48cb909d38a0d689dba1f6f6988a5e3e0d31071bcd4b",
-          "url": "https://static.crates.io/crates/p256/0.13.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "p256",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.2"
     },
     "p256 0.14.0": {
       "common_attrs": {
@@ -42115,45 +41235,6 @@
         }
       ],
       "version": "0.6.5"
-    },
-    "petgraph 0.7.1": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "fixedbitset 0.5.9",
-            "target": "fixedbitset"
-          },
-          {
-            "id": "indexmap 2.14.2",
-            "target": "indexmap"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "petgraph",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "petgraph",
-      "package_url": "https://github.com/petgraph/petgraph",
-      "repository": {
-        "Http": {
-          "sha256": "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772",
-          "url": "https://static.crates.io/crates/petgraph/0.7.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "petgraph",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.7.1"
     },
     "petgraph 0.8.3": {
       "common_attrs": {
@@ -53801,6 +52882,49 @@
       ],
       "version": "0.11.0"
     },
+    "sha3 0.12.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "digest 0.11.3",
+            "target": "digest"
+          },
+          {
+            "id": "keccak 0.2.2",
+            "target": "keccak"
+          },
+          {
+            "id": "sponge-cursor 0.1.0",
+            "target": "sponge_cursor"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "sha3",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "sha3",
+      "package_url": "https://github.com/RustCrypto/hashes",
+      "repository": {
+        "Http": {
+          "sha256": "bc9bad02c26382724b2d2692c6f179285e4b54eeecd7968f52a50059c3c11759",
+          "url": "https://static.crates.io/crates/sha3/0.12.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sha3",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.12.0"
+    },
     "sha3-asm 0.1.9": {
       "build_script_attrs": {
         "deps": [
@@ -55158,19 +54282,18 @@
       ],
       "version": "0.7.1"
     },
-    "snafu 0.8.9": {
+    "snafu 0.9.2": {
       "common_attrs": {
         "crate_features": [
           "alloc",
           "default",
-          "rust_1_61",
-          "rust_1_65",
+          "rust_1_81",
           "std"
         ],
         "edition": "2018",
         "proc_macro_deps": [
           {
-            "id": "snafu-derive 0.8.9",
+            "id": "snafu-derive 0.9.2",
             "target": "snafu_derive"
           }
         ]
@@ -55186,8 +54309,8 @@
       "package_url": "https://github.com/shepmaster/snafu",
       "repository": {
         "Http": {
-          "sha256": "6e84b3f4eacbf3a1ce05eac6763b4d629d60cbc94d632e4092c54ade71f1e1a2",
-          "url": "https://static.crates.io/crates/snafu/0.8.9/download"
+          "sha256": "e45cb604038abb7b926b679887b3226d8d0f23874b66623625a0454be425a4b7",
+          "url": "https://static.crates.io/crates/snafu/0.9.2/download"
         }
       },
       "targets": [
@@ -55198,13 +54321,10 @@
           }
         }
       ],
-      "version": "0.8.9"
+      "version": "0.9.2"
     },
-    "snafu-derive 0.8.9": {
+    "snafu-derive 0.9.2": {
       "common_attrs": {
-        "crate_features": [
-          "rust_1_61"
-        ],
         "deps": [
           {
             "id": "heck 0.5.0",
@@ -55236,8 +54356,8 @@
       "package_url": "https://github.com/shepmaster/snafu",
       "repository": {
         "Http": {
-          "sha256": "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451",
-          "url": "https://static.crates.io/crates/snafu-derive/0.8.9/download"
+          "sha256": "287f59010008f0d7cf5e3b03196d666c1acc46c8d3e9cf34c28a1a7157601e72",
+          "url": "https://static.crates.io/crates/snafu-derive/0.9.2/download"
         }
       },
       "targets": [
@@ -55248,7 +54368,7 @@
           }
         }
       ],
-      "version": "0.8.9"
+      "version": "0.9.2"
     },
     "socket2 0.6.5": {
       "common_attrs": {
@@ -55523,6 +54643,35 @@
         }
       ],
       "version": "0.8.1"
+    },
+    "sponge-cursor 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "sponge_cursor",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "sponge-cursor",
+      "package_url": "https://github.com/RustCrypto/utils",
+      "repository": {
+        "Http": {
+          "sha256": "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620",
+          "url": "https://static.crates.io/crates/sponge-cursor/0.1.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sponge_cursor",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "sqlite-wasm-rs 0.6.3": {
       "build_script_attrs": {
@@ -62756,11 +61905,11 @@
       ],
       "version": "0.3.1"
     },
-    "vrl 0.34.0": {
+    "vrl 0.38.0": {
       "build_script_attrs": {
         "deps": [
           {
-            "id": "lalrpop 0.22.2",
+            "id": "lalrpop 0.23.2",
             "target": "lalrpop"
           },
           {
@@ -62784,6 +61933,10 @@
               "target": "bytes"
             },
             {
+              "id": "bytestring 1.6.0",
+              "target": "bytestring"
+            },
+            {
               "id": "cfg-if 1.0.5",
               "target": "cfg_if"
             },
@@ -62800,7 +61953,7 @@
               "target": "nom_language"
             },
             {
-              "id": "ordered-float 4.6.0",
+              "id": "ordered-float 5.5.1",
               "target": "ordered_float"
             },
             {
@@ -62824,7 +61977,7 @@
               "target": "simdutf8"
             },
             {
-              "id": "snafu 0.8.9",
+              "id": "snafu 0.9.2",
               "target": "snafu"
             },
             {
@@ -62876,8 +62029,8 @@
       "package_url": "https://github.com/vectordotdev/vrl",
       "repository": {
         "Http": {
-          "sha256": "90d4f0baccba853b3e8420356e8b27662c7971657c17f0260beef35e169f2dc1",
-          "url": "https://static.crates.io/crates/vrl/0.34.0/download"
+          "sha256": "4241d28d1df0ab3979373d7a8fdbf09002df248f348b4ef9962ade93c9ac8dbd",
+          "url": "https://static.crates.io/crates/vrl/0.38.0/download"
         }
       },
       "targets": [
@@ -62894,7 +62047,7 @@
           }
         }
       ],
-      "version": "0.34.0"
+      "version": "0.38.0"
     },
     "vsimd 0.8.0": {
       "common_attrs": {
@@ -68466,46 +67619,6 @@
       ],
       "version": "1.0.23"
     },
-    "zstd 0.13.5": {
-      "common_attrs": {
-        "crate_features": [
-          "arrays",
-          "default",
-          "legacy",
-          "zdict_builder"
-        ],
-        "deps": [
-          {
-            "id": "zstd-safe 7.4.1",
-            "target": "zstd_safe"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "zstd",
-      "license": "BSD-3-Clause",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "BSD-3-Clause"
-      ],
-      "name": "zstd",
-      "package_url": "https://github.com/gyscos/zstd-rs",
-      "repository": {
-        "Http": {
-          "sha256": "50adf04cf3ec914b0b9905c9dde90c80fe74bfd701e331fc80a39c512c525278",
-          "url": "https://static.crates.io/crates/zstd/0.13.5/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "zstd",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.13.5"
-    },
     "zstd 0.14.4": {
       "common_attrs": {
         "crate_features": [
@@ -68545,63 +67658,6 @@
         }
       ],
       "version": "0.14.4"
-    },
-    "zstd-safe 7.4.1": {
-      "build_script_attrs": {
-        "link_deps": [
-          {
-            "id": "zstd-sys 2.1.3+zstd.1.5.7",
-            "target": "zstd_sys"
-          }
-        ]
-      },
-      "common_attrs": {
-        "crate_features": [
-          "arrays",
-          "legacy",
-          "std",
-          "zdict_builder"
-        ],
-        "deps": [
-          {
-            "id": "zstd-sys 2.1.3+zstd.1.5.7",
-            "target": "zstd_sys"
-          }
-        ],
-        "edition": "2018",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "zstd_safe",
-      "license": "BSD-3-Clause",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "BSD-3-Clause"
-      ],
-      "name": "zstd-safe",
-      "package_url": "https://github.com/gyscos/zstd-rs",
-      "repository": {
-        "Http": {
-          "sha256": "498d94ad68720c89b4fbe41b9090850651e68cb2dd9210ce7ffbff3a94653819",
-          "url": "https://static.crates.io/crates/zstd-safe/7.4.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "zstd_safe",
-            "crate_root": "src/lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "7.4.1"
     },
     "zstd-safe 8.3.0": {
       "build_script_attrs": {

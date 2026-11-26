@@ -786,7 +786,7 @@ crate.spec(
     features = ["acme"],
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    tag = "v0.6.12",
+    tag = "v0.7.6",
 )
 crate.spec(
     package = "ic-identity-hsm",
