@@ -69,12 +69,17 @@ fn verify_read_state(envelope: &EnvelopePair) -> Result<(), ApiError> {
     Ok(())
 }
 
-/// Returns the envelope that `/construction/submit` sends at `now`.
+/// Returns the envelope that `/construction/submit` sends at `now`: of those
+/// valid at `now`, the one that expires last, so that its read-state call stays
+/// valid while submit polls with it.
 pub fn current_envelope(envelopes: &[EnvelopePair], now: Time) -> Option<&EnvelopePair> {
-    envelopes.iter().find(|envelope| {
-        let (ingress_start, ingress_expiry) = ingress_window(envelope);
-        ingress_start <= now && ingress_expiry > now
-    })
+    envelopes
+        .iter()
+        .filter(|envelope| {
+            let (ingress_start, ingress_expiry) = ingress_window(envelope);
+            ingress_start <= now && ingress_expiry > now
+        })
+        .max_by_key(|envelope| envelope.update.content.ingress_expiry())
 }
 
 fn ingress_window(envelope: &EnvelopePair) -> (Time, Time) {
@@ -291,6 +296,19 @@ mod tests {
                     "whose read-state call the IC would reject",
                 );
             }
+        }
+
+        #[test]
+        fn submit_sends_the_valid_envelope_that_expires_last() {
+            let now = Time::from_nanos_since_unix_epoch(NOW);
+            let expired = signed(&key(1), NOW);
+            let expiring = signed(&key(1), NOW + 1_000_000_000);
+            let fresh = signed(&key(1), NOW + 200_000_000_000);
+            let future = signed(&key(1), NOW + 600_000_000_000);
+
+            let envelopes = [expired, expiring, fresh.clone(), future];
+            assert_eq!(current_envelope(&envelopes, now), Some(&fresh));
+            assert_eq!(current_envelope(&envelopes[..1], now), None);
         }
 
         #[test]
