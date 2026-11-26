@@ -38,13 +38,14 @@ jobs:
         run: |
           CHANNEL="eng-idx-alerts"
           FULL_MESSAGE="nothing"
+          POST_TO_OPEN_MESSAGING="false"
 
           # if a job was cancelled, never post it to slack
           if [[ "$TRIGGERING_WORKFLOW_CONCLUSION" =~ ^(cancelled)$ ]]; then
             POST_TO_SLACK="false"
             echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT
             exit 0
-          # if a job was successful, don't post it to slack, unless it was a release testing job (see below)
+          # if a job was successful, don't post it to slack
           elif [[ "$TRIGGERING_WORKFLOW_CONCLUSION" =~ ^(success)$ ]]; then
             FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
             POST_TO_SLACK="false"
@@ -54,12 +55,10 @@ jobs:
             POST_TO_SLACK="true"
           fi
 
-          # If the job was release testing, modify the message and channel and post it to slack
+          # Every release testing result goes to Open Messaging, not to slack
           if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
-            CHANNEL="release-management-alerts"
-            COMMIT="$TRIGGERING_WORKFLOW_SHA"
-            FULL_MESSAGE="${FULL_MESSAGE} commit: ${COMMIT}"
-            POST_TO_SLACK="true"
+            POST_TO_SLACK="false"
+            POST_TO_OPEN_MESSAGING="true"
           fi
 
           # Non-IDX alerts
@@ -78,11 +77,11 @@ jobs:
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
           echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT
+          echo "post_to_open_messaging=${POST_TO_OPEN_MESSAGING}" >> "$GITHUB_OUTPUT"
         env:
           TRIGGERING_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
           TRIGGERING_WORKFLOW_BRANCH: ${{ github.event.workflow_run.head_branch }}
           TRIGGERING_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          TRIGGERING_WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
           MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification
@@ -94,19 +93,18 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
-      # Release Testing results also go to the release-management-alerts channel on
-      # Open Messaging, whose incoming webhooks accept Slack's webhook payload. Links,
-      # mrkdwn and the colour bar render only inside an attachment, so the message is
-      # sent as one. This post runs even if the Slack post failed, and its own failure
-      # does not fail the job.
+      # Release Testing results go to the release-management-alerts channel on Open
+      # Messaging, whose incoming webhooks accept Slack's webhook payload. Links, mrkdwn
+      # and the colour bar render only inside an attachment, so the message is sent as
+      # one. A failure to post does not fail the job.
       - name: Post Open Messaging Notification
-        if: ${{ !cancelled() && steps.setup.outputs.post_to_slack == 'true' && github.event.workflow_run.name == 'Release Testing' }}
+        if: ${{ steps.setup.outputs.post_to_open_messaging == 'true' }}
         continue-on-error: true
         timeout-minutes: 2
         shell: bash
         run: |
           if [[ -z "$OPEN_MESSAGING_WEBHOOK_URL" ]]; then
-            echo "The OPEN_MESSAGING_WEBHOOK_RELEASE_MANAGEMENT secret is not set; skipping."
+            echo "::warning::The OPEN_MESSAGING_WEBHOOK_RELEASE_MANAGEMENT secret is not set, so this ${WORKFLOW_NAME} result was not posted anywhere."
             exit 0
           fi
 
