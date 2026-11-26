@@ -503,9 +503,9 @@ fn test_mul_by_g_and_pedersen_are_correct_for_edge_case_scalars() -> CanisterThr
             scalars.push(pow2.sub(&one)?);
             pow2 = pow2.add(&pow2)?;
         }
-        // Repeated bytes. The bytes k * 0x11 put every nonzero signed radix-16 digit at each of
-        // the 64 low positions: the low digits of 0xkk...kk are all k for k < 8, and those of
-        // 0xkk...kk + 1 are all k - 15 for k >= 7 (so all -8 for 0x7777...78)
+        // Repeated bytes. For secp256r1 the bytes k * 0x11 put every nonzero signed radix-16 digit
+        // at each of the 64 low positions: the low digits of 0xkk...kk are all k for k < 8, and
+        // those of 0xkk...kk + 1 are all k - 15 for 7 <= k < 15 (so all -8 for 0x7777...78)
         for byte in [
             0x07, 0x08, 0x0f, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x70, 0x77, 0x78, 0x7f, 0x80,
             0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0xff,
