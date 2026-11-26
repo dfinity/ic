@@ -1,6 +1,6 @@
 use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
-    models::seconds::Seconds, request_types::*,
+    models::seconds::Seconds, request_types::*, signed_target::representative_envelope,
 };
 use ic_nns_governance_api::{
     ManageNeuronCommandRequest,
@@ -233,23 +233,19 @@ impl TryFrom<&models::Request> for Request {
 
     fn try_from(req: &models::Request) -> Result<Self, Self::Error> {
         let (request_type, calls) = req;
-        let payload: &models::EnvelopePair = calls
-            .first()
-            .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?;
 
-        let pid =
-            PrincipalId::try_from(payload.update_content().sender.clone().0).map_err(|e| {
-                ApiError::internal_error(format!(
-                    "Could not parse envelope sender's public key: {e}"
-                ))
-            })?;
+        let update = representative_envelope(calls)?;
+
+        let pid = PrincipalId::try_from(update.sender.clone().0).map_err(|e| {
+            ApiError::internal_error(format!("Could not parse envelope sender's public key: {e}"))
+        })?;
 
         let account = icp_ledger::AccountIdentifier::from(pid);
 
         let manage_neuron = || {
             {
                 convert::decode_canister_method_arg::<ic_nns_governance_api::ManageNeuronRequest>(
-                    &payload.update_content().arg.0,
+                    &update.arg.0,
                 )
                 .map_err(|e| {
                     ApiError::invalid_request(format!("Could not parse manage_neuron: {e:#}"))
@@ -262,7 +258,7 @@ impl TryFrom<&models::Request> for Request {
             RequestType::Send => {
                 let icp_ledger::SendArgs {
                     to, amount, fee, ..
-                } = convert::from_arg(payload.update_content().arg.0.clone())?;
+                } = convert::from_arg(update.arg.0.clone())?;
                 Ok(Request::Transfer(icp_ledger::Operation::Transfer {
                     from: account,
                     to,

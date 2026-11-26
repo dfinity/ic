@@ -1217,3 +1217,71 @@ fn should_combine_neuron_workflow_over_max_ingress_window() {
         .construction_combine(request)
         .expect("the largest transaction should be combined");
 }
+
+#[tokio::test]
+async fn construction_submit_refuses_a_read_state_call_the_ic_would_reject() {
+    use crate::models::{
+        ConstructionCombineRequest, ConstructionPayloadsRequest, ConstructionSubmitRequest,
+        CurveType, PublicKey, Signature, SignatureType, SignedTransaction,
+    };
+    use ic_types::messages::Blob;
+
+    let (handler, network_identifier, operations, pub_key, key) =
+        construction::setup_transfer_test();
+    let payloads = handler
+        .construction_payloads(ConstructionPayloadsRequest {
+            network_identifier: network_identifier.clone(),
+            operations,
+            metadata: None,
+            public_keys: Some(vec![pub_key]),
+        })
+        .unwrap();
+    let signatures = payloads
+        .payloads
+        .into_iter()
+        .map(|payload| {
+            let bytes = hex::decode(&payload.hex_bytes).unwrap();
+            Signature {
+                signing_payload: payload,
+                public_key: PublicKey::new(
+                    hex::encode(key.public_key().serialize_raw()),
+                    CurveType::Edwards25519,
+                ),
+                signature_type: SignatureType::Ed25519,
+                hex_bytes: hex::encode(key.sign_message(&bytes)),
+            }
+        })
+        .collect();
+    let signed_transaction = handler
+        .construction_combine(ConstructionCombineRequest {
+            network_identifier: network_identifier.clone(),
+            unsigned_transaction: payloads.unsigned_transaction,
+            signatures,
+        })
+        .unwrap()
+        .signed_transaction;
+    let submit = |signed_transaction| {
+        handler.construction_submit(ConstructionSubmitRequest {
+            network_identifier: network_identifier.clone(),
+            signed_transaction,
+        })
+    };
+
+    let err = submit(signed_transaction.clone()).await.unwrap_err();
+    assert!(
+        matches!(err, ApiError::NotAvailableOffline(..)),
+        "expected the offline ledger to be reached, got {err:?}"
+    );
+
+    let mut corrupted = SignedTransaction::from_str(&signed_transaction).unwrap();
+    for (_, envelopes) in &mut corrupted.requests {
+        for envelope in envelopes {
+            envelope.read_state.sender_sig = Some(Blob(vec![0; 64]));
+        }
+    }
+    let err = submit(corrupted.to_string()).await.unwrap_err();
+    assert!(
+        format!("{err:?}").contains("whose read-state call the IC would reject"),
+        "unexpected error: {err:?}"
+    );
+}

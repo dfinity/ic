@@ -1,6 +1,7 @@
 use crate::errors::ApiError;
 use crate::models::{ConstructionHashRequest, ConstructionHashResponse, SignedTransaction};
 use crate::request_handler::{RosettaRequestHandler, verify_network_id};
+use crate::signed_target::representative_envelope;
 use crate::transaction_id::{self, TransactionIdentifier};
 use serde_json::map::Map;
 use std::str::FromStr;
@@ -15,6 +16,10 @@ impl RosettaRequestHandler {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let signed_transaction = SignedTransaction::from_str(&msg.signed_transaction)
             .map_err(|err| ApiError::invalid_transaction(format!("{err:?}")))?;
+        for (_, envelopes) in &signed_transaction.requests {
+            representative_envelope(envelopes)?;
+        }
+
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
             signed_transaction
                 .requests
@@ -22,10 +27,10 @@ impl RosettaRequestHandler {
                 .rev()
                 .find(|(rt, _)| rt.is_transfer())
         {
-            TransactionIdentifier::try_from_envelope(
-                request_type.clone(),
-                &envelope_pairs[0].update,
-            )
+            let envelope = envelope_pairs.first().ok_or_else(|| {
+                ApiError::invalid_transaction("A request carries no envelope to hash.")
+            })?;
+            TransactionIdentifier::try_from_envelope(request_type.clone(), &envelope.update)
         } else if signed_transaction
             .requests
             .iter()
