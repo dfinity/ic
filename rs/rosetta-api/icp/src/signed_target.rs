@@ -8,12 +8,17 @@
 //! a signed request through this module, so what they describe is what is
 //! sent.
 
-use crate::{convert, errors::ApiError, models::EnvelopePair, request_types::RequestType};
+use crate::{
+    convert,
+    errors::ApiError,
+    models::{EnvelopePair, SignedTransaction},
+    request_types::RequestType,
+};
+use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_types::{
     CanisterId, Time,
-    messages::{
-        HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState, SignedIngressContent,
-    },
+    crypto::AlgorithmId,
+    messages::{HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState},
 };
 use ic_validator_ingress_message::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
 
@@ -42,8 +47,7 @@ pub fn verify_signed_envelopes<'a>(
 ///
 /// The envelopes must carry the same update up to `ingress_expiry`, and each
 /// must pair its update with the read-state call for that update's result.
-/// `/construction/combine` builds envelopes exactly this way. Both calls must
-/// also carry signatures that the IC accepts.
+/// `/construction/combine` builds envelopes exactly this way.
 pub fn representative_envelope(
     envelopes: &[EnvelopePair],
 ) -> Result<&HttpCanisterUpdate, ApiError> {
@@ -62,7 +66,6 @@ pub fn representative_envelope(
             ));
         }
         verify_read_state(envelope)?;
-        verify_signatures(envelope)?;
     }
     Ok(representative)
 }
@@ -161,33 +164,61 @@ fn verify_method_name(update: &HttpCanisterUpdate, expected: &str) -> Result<(),
     Ok(())
 }
 
-/// The IC rejects a call that is not signed by the key its sender is derived
-/// from. A rejected read-state call would make `/construction/submit` report a
-/// failure for an update that executes. Expiry is checked on submission, so the
-/// signatures are checked as of the envelope's own expiry.
-fn verify_signatures(envelope: &EnvelopePair) -> Result<(), ApiError> {
-    let invalid = |err: String| {
-        ApiError::invalid_request(format!(
-            "Refusing a signed request whose envelope the IC would reject: {err}"
-        ))
-    };
+/// Returns the envelope that `/construction/submit` sends at `now`.
+pub fn current_envelope(envelopes: &[EnvelopePair], now: Time) -> Option<&EnvelopePair> {
+    envelopes.iter().find(|envelope| {
+        let ingress_expiry =
+            Time::from_nanos_since_unix_epoch(envelope.update.content.ingress_expiry());
+        let ingress_start = ingress_expiry
+            .saturating_sub(ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT));
+        ingress_start <= now && ingress_expiry > now
+    })
+}
+
+/// Checks the read-state signature of the envelope that each request of
+/// `transaction` sends at `now`, before any of them is submitted.
+///
+/// `/construction/submit` polls for an update's result with its read-state
+/// call, so a read-state call the IC rejects would report an update that
+/// executes as failed. A read-state call that is anonymous, carries a
+/// delegation or is signed with a canister signature is left to the IC, since
+/// its validity depends on the IC's root key or clock.
+pub fn verify_read_state_signatures(
+    transaction: &SignedTransaction,
+    now: Time,
+) -> Result<(), ApiError> {
     let verifier = IngressMessageVerifier::builder()
-        .with_time_provider(TimeProvider::Constant(Time::from_nanos_since_unix_epoch(
-            envelope.update_content().ingress_expiry,
-        )))
+        .with_time_provider(TimeProvider::Constant(now))
         .build();
-
-    let update = HttpRequest::<SignedIngressContent>::try_from(envelope.update.clone())
-        .map_err(|err| invalid(err.to_string()))?;
-    verifier
-        .validate_request(&update)
-        .map_err(|err| invalid(err.to_string()))?;
-
-    let read_state = HttpRequest::<ReadState>::try_from(envelope.read_state.clone())
-        .map_err(|err| invalid(err.to_string()))?;
-    verifier
-        .validate_request(&read_state)
-        .map_err(|err| invalid(err.to_string()))
+    for (_, envelopes) in &transaction.requests {
+        let Some(envelope) = current_envelope(envelopes, now) else {
+            continue;
+        };
+        let read_state = &envelope.read_state;
+        let Some(sender_pubkey) = &read_state.sender_pubkey else {
+            continue;
+        };
+        let checkable = read_state.sender_delegation.is_none()
+            && user_public_key_from_bytes(&sender_pubkey.0)
+                .is_ok_and(|(key, _)| key.algorithm_id != AlgorithmId::IcCanisterSignature);
+        if !checkable {
+            continue;
+        }
+        HttpRequest::<ReadState>::try_from(read_state.clone())
+            .map_err(|err| err.to_string())
+            .and_then(|request| {
+                verifier
+                    .validate_request(&request)
+                    .map_err(|err| err.to_string())
+            })
+            .map_err(|err| {
+                ApiError::invalid_request(format!(
+                    "Refusing to submit a request whose read-state call the IC would \
+                     reject, since the outcome of its update could not be reported: {err}"
+                ))
+            })?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
