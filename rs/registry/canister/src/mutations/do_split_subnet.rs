@@ -12,9 +12,8 @@ use ic_protobuf::registry::subnet::v1::{
 };
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
-    make_crypto_threshold_signing_pubkey_key, make_routing_table_record_key,
-    make_standard_engine_replica_version_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_crypto_threshold_signing_pubkey_key, make_standard_engine_replica_version_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, WellFormedError, is_subset_of};
 use ic_registry_subnet_type::SubnetType;
@@ -430,7 +429,9 @@ impl Registry {
             return Err("Canister migrations changed");
         }
 
-        if record_changed_across_versions(make_routing_table_record_key()) {
+        if self.get_routing_table_or_panic(initial_registry_version)
+            != self.get_routing_table_or_panic(current_registry_version)
+        {
             return Err("Routing table changed");
         }
 
@@ -861,7 +862,6 @@ mod tests {
         make_canister_migrations_record_key(),
         "Canister migrations changed"
     )]
-    #[case::routing_table_record(make_routing_table_record_key(), "Routing table changed")]
     fn check_if_registry_changed_across_versions_should_fail_when_a_guarded_record_changed(
         #[case] changed_record_key: String,
         #[case] expected_error: &str,
@@ -907,6 +907,41 @@ mod tests {
 
         // Step 3: Verify result(s).
         assert_eq!(check_result, Err(expected_error));
+    }
+
+    #[rstest]
+    fn check_if_registry_changed_across_versions_should_fail_when_the_routing_table_changed() {
+        // Step 1: Prepare the world.
+
+        let _guard = temporarily_enable_subnet_splitting();
+        let source_subnet_id = invariants_compliant_payload().source_subnet_id;
+        let (mut registry, _node_infos) = set_up_registry(invariants_compliant_subnet_info());
+
+        let pre_call_registry_version = registry.latest_version();
+
+        // Simulate another proposal rerouting a canister of the source subnet while the
+        // `setup_initial_dkg` calls are in flight. We skip the invariant checks, since `SUBNET_2`
+        // is not in the registry.
+        let rerouted_canister = CanisterIdRanges::try_from(vec![CanisterIdRange {
+            start: canister_test_id(4),
+            end: canister_test_id(4),
+        }])
+        .unwrap();
+        registry.apply_mutations_for_test(registry.reroute_canister_ranges_mutation(
+            pre_call_registry_version,
+            rerouted_canister,
+            SUBNET_2,
+        ));
+
+        // Step 2: Run the code under test.
+        let check_result = registry.check_if_registry_changed_across_versions(
+            source_subnet_id,
+            pre_call_registry_version,
+            registry.latest_version(),
+        );
+
+        // Step 3: Verify result(s).
+        assert_eq!(check_result, Err("Routing table changed"));
     }
 
     #[derive(Debug)]
