@@ -919,7 +919,7 @@ serde_json = { version = "^1.0.107" }
 serde_regex = "1.1.0"
 serde_with = "3.21.0"
 serde_yaml = "0.9.33"
-sev = { version = "7.1", default-features = false, features = [
+sev = { version = "9.0", default-features = false, features = [
     "crypto_nossl",
     "snp",
 ] }

@@ -259,3 +259,91 @@ fn test_invalid_root_certificate() {
         "Expected error about unexpected root certificate, got {error:?}",
     );
 }
+
+/// Returns an attestation package whose report says it comes from a CPU of the given family and
+/// model, signed with `FakeAttestationReportSigner`'s certificate chain.
+fn attestation_package_for_cpu(family: u8, model: u8) -> SevAttestationPackage {
+    let signer = FakeAttestationReportSigner::default();
+    let mut attestation_report = AttestationReportBuilder::new().build_unsigned();
+    attestation_report.cpuid_fam_id = Some(family);
+    attestation_report.cpuid_mod_id = Some(model);
+    signer
+        .sign_report(&mut attestation_report)
+        .expect("Failed to sign attestation report");
+
+    SevAttestationPackage {
+        attestation_report: Some(
+            attestation_report
+                .to_bytes()
+                .expect("Failed to serialize attestation report")
+                .to_vec(),
+        ),
+        certificate_chain: Some(SevCertificateChain {
+            vcek_pem: Some(signer.get_vcek_pem()),
+            ask_pem: Some(signer.get_ask_pem()),
+            ark_pem: Some(signer.get_ark_pem()),
+        }),
+        custom_data_debug_info: None,
+    }
+}
+
+#[test]
+fn test_attestation_report_from_turin_cpu() {
+    // CPU family 0x1A, models 0x00 to 0x1F are AMD EPYC Turin.
+    for model in [0x00, 0x12, 0x1F] {
+        let attestation_package = attestation_package_for_cpu(0x1A, model);
+
+        ParsedSevAttestationPackage::parse(
+            attestation_package.clone(),
+            SevRootCertificateVerification::TestOnlySkipVerification,
+        )
+        .expect("Failed to verify attestation package");
+
+        // With root certificate verification, the report gets as far as the root certificate check.
+        let error = ParsedSevAttestationPackage::parse(
+            attestation_package,
+            SevRootCertificateVerification::Verify,
+        )
+        .expect_err("Verification should fail due to the fake root certificate")
+        .detail
+        .unwrap();
+
+        assert!(
+            matches!(
+                &error,
+                VerificationErrorDetail::InvalidCertificateChain(VerificationErrorDescription { message })
+                    if message.contains("does not match expected root certificate")
+            ),
+            "Expected error about unexpected root certificate, got {error:?}",
+        );
+    }
+}
+
+#[test]
+fn test_attestation_report_from_cpu_generation_without_root_certificate() {
+    // CPU family 0x1A, model 0x50 is an AMD EPYC Venice, whose AMD root certificate sev doesn't
+    // have.
+    let attestation_package = attestation_package_for_cpu(0x1A, 0x50);
+
+    for root_certificate_verification in [
+        SevRootCertificateVerification::Verify,
+        SevRootCertificateVerification::TestOnlySkipVerification,
+    ] {
+        let error = ParsedSevAttestationPackage::parse(
+            attestation_package.clone(),
+            root_certificate_verification,
+        )
+        .expect_err("Verification should fail due to the unknown root certificate")
+        .detail
+        .unwrap();
+
+        assert!(
+            matches!(
+                &error,
+                VerificationErrorDetail::InvalidAttestationReport(VerificationErrorDescription { message })
+                    if message.contains("Venice")
+            ),
+            "Expected InvalidAttestationReport error about Venice, got {error:?}",
+        );
+    }
+}

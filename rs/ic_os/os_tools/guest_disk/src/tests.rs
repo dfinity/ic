@@ -54,7 +54,7 @@ const TEST_VOLUME_KEY_BYTES: usize = 512 / 8;
 const TEST_PBKDF_ITERATIONS: u32 = 1000;
 
 fn default_launch_tcb() -> TcbVersion {
-    TcbVersion::new(None, 1, 2, 3, 4)
+    TcbVersion::new(None, Some(1), 2, 3, Some(4))
 }
 
 fn default_launch_tcb_as_u64() -> u64 {
@@ -1349,7 +1349,7 @@ fn test_sev_firmware_upgrade_rotates_keyslot_metadata() {
     for partition_name in [Partition::Store, Partition::Var] {
         let mut fixture = TestFixture::new_sev();
 
-        let tcb_v1 = TcbVersion::new(None, 1, 1, 1, 1);
+        let tcb_v1 = TcbVersion::new(None, Some(1), 1, 1, Some(1));
         let tcb_v1_u64 = tcb_version_to_u64(tcb_v1, DEFAULT_GENERATION).unwrap();
         fixture.set_launch_tcb(tcb_v1);
 
@@ -1362,7 +1362,7 @@ fn test_sev_firmware_upgrade_rotates_keyslot_metadata() {
         assert_eq!(token.sev_metadata.tcb_version, tcb_v1_u64);
 
         // Firmware upgrade: TCB changes, measurement stays the same.
-        let tcb_v2 = TcbVersion::new(None, 2, 2, 2, 2);
+        let tcb_v2 = TcbVersion::new(None, Some(2), 2, 2, Some(2));
         let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
         fixture.set_launch_tcb(tcb_v2);
 
@@ -1397,7 +1397,7 @@ fn test_upgrade_vm_can_use_keyslot_with_old_tcb() {
     let mut fixture = TestFixture::new_sev();
     fixture.set_guest_vm_type(GuestVMType::Upgrade);
 
-    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
+    let tcb_v1 = TcbVersion::new(None, Some(1), 0, 0, Some(0));
     let tcb_v1_u64 = tcb_version_to_u64(tcb_v1, DEFAULT_GENERATION).unwrap();
     fixture.set_launch_tcb(tcb_v1);
     fixture
@@ -1405,7 +1405,7 @@ fn test_upgrade_vm_can_use_keyslot_with_old_tcb() {
         .format_with_payload(b"upgrade-vm-old-tcb");
 
     // Firmware upgrade: the Upgrade VM must keep using the old-TCB keyslot.
-    fixture.set_launch_tcb(TcbVersion::new(None, 2, 0, 0, 0));
+    fixture.set_launch_tcb(TcbVersion::new(None, Some(2), 0, 0, Some(0)));
 
     fixture
         .store_partition()
@@ -1433,9 +1433,9 @@ fn test_upgrade_vm_can_use_keyslot_with_old_tcb() {
 /// keyslot is left untouched, so a firmware re-upgrade restores access.
 #[test]
 fn test_firmware_downgrade_cannot_unlock_store() {
-    let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
+    let tcb_v2 = TcbVersion::new(None, Some(2), 0, 0, Some(0));
     let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
-    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
+    let tcb_v1 = TcbVersion::new(None, Some(1), 0, 0, Some(0));
 
     let mut fixture = TestFixture::new_sev();
     fixture.set_launch_tcb(tcb_v2);
@@ -1471,8 +1471,8 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
     let guestos_v2_measurement = [0x22_u8; LAUNCH_MEASUREMENT_LEN];
     let guestos_v3_measurement = [0x33_u8; LAUNCH_MEASUREMENT_LEN];
 
-    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
-    let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
+    let tcb_v1 = TcbVersion::new(None, Some(1), 0, 0, Some(0));
+    let tcb_v2 = TcbVersion::new(None, Some(2), 0, 0, Some(0));
     let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
 
     let mut fixture = TestFixture::new_sev();
@@ -1564,8 +1564,8 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
     let guestos_v1_measurement = [0x11_u8; LAUNCH_MEASUREMENT_LEN];
     let guestos_v2_measurement = [0x22_u8; LAUNCH_MEASUREMENT_LEN];
 
-    let tcb_v1 = TcbVersion::new(None, 1, 0, 0, 0);
-    let tcb_v2 = TcbVersion::new(None, 2, 0, 0, 0);
+    let tcb_v1 = TcbVersion::new(None, Some(1), 0, 0, Some(0));
+    let tcb_v2 = TcbVersion::new(None, Some(2), 0, 0, Some(0));
     let tcb_v2_u64 = tcb_version_to_u64(tcb_v2, DEFAULT_GENERATION).unwrap();
 
     let mut fixture = TestFixture::new_sev();

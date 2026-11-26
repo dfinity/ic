@@ -72,8 +72,14 @@ mod tests {
     fn tcb_version_u64_round_trip() {
         // The legacy (Milan/Genoa) layout does not preserve the FMC version.
         for (generation, tcb) in [
-            (Generation::Milan, TcbVersion::new(None, 1, 2, 3, 4)),
-            (Generation::Turin, TcbVersion::new(Some(5), 1, 2, 3, 4)),
+            (
+                Generation::Milan,
+                TcbVersion::new(None, Some(1), 2, 3, Some(4)),
+            ),
+            (
+                Generation::Turin,
+                TcbVersion::new(Some(5), Some(1), 2, 3, Some(4)),
+            ),
         ] {
             let raw = tcb_version_to_u64(tcb, generation).unwrap();
             assert_eq!(tcb_version_from_u64(raw, generation).unwrap(), tcb);
@@ -83,7 +89,7 @@ mod tests {
     #[test]
     fn reported_tcb_as_u64_matches_raw_report_bytes() {
         let report = AttestationReportBuilder::new()
-            .with_reported_tcb(TcbVersion::new(Some(42), 11, 22, 33, 44))
+            .with_reported_tcb(TcbVersion::new(Some(42), Some(11), 22, 33, Some(44)))
             .build_unsigned();
         let report_bytes = report.to_bytes().unwrap();
         let tcb_u64 = report.reported_tcb_as_u64().unwrap();
@@ -94,7 +100,7 @@ mod tests {
 
     #[test]
     fn launch_tcb_as_u64_matches_launch_tcb_field() {
-        let launch_tcb = TcbVersion::new(Some(7), 1, 2, 3, 4);
+        let launch_tcb = TcbVersion::new(Some(7), Some(1), 2, 3, Some(4));
         let report = AttestationReportBuilder::new()
             .with_launch_tcb(launch_tcb)
             .build_unsigned();

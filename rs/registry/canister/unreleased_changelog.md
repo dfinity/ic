@@ -17,6 +17,9 @@ on the process that this file is part of, see
 * The invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set
   now also requires that `cup_type` is decodable.
 
+* `add_node` accepts SEV-SNP attestation reports from AMD EPYC Turin CPUs with models 0x12 to 0x1F, as
+  it already did for models 0x00 to 0x11.
+
 ## Deprecated
 
 ## Removed
