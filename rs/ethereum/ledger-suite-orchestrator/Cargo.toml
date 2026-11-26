@@ -49,5 +49,6 @@ mockall = { workspace = true }
 paste = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
+rand = { workspace = true }
 scraper = { workspace = true }
 tokio = { workspace = true }

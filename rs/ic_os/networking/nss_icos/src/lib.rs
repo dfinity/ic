@@ -1,6 +1,3 @@
-// `libnss_host_hooks!` expands to a `lazy_static!` invocation, so the macro must be in scope here.
-#[macro_use]
-extern crate lazy_static;
 #[macro_use]
 extern crate libnss;
 

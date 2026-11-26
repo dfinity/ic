@@ -357,6 +357,7 @@ system_test(
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -364,7 +365,6 @@ system_test(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
-        "@crate_index//:k256",
         "@crate_index//:rand",
         "@crate_index//:reqwest",
         "@crate_index//:serde_cbor",

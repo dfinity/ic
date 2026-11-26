@@ -381,6 +381,12 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
+        "ckbtc_minter_unchecked_utxos_count",
+        state::read_state(|s| s.unchecked_utxos().count()) as f64,
+        "Total number of suspended UTXOs due to an error of the Bitcoin checker.",
+    )?;
+
+    metrics.encode_gauge(
         "ckbtc_minter_mint_status_unknown_utxos_count",
         state::read_state(|s| s.mint_status_unknown_utxos().count()) as f64,
         "Total number of UTXOs with unknown mint status.",

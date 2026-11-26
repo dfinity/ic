@@ -5,10 +5,10 @@ use config_tool::guestos::generate_ic_config;
 use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config_tool::setupos::deployment_json::{VmResources, get_deployment_settings};
+use config_tool::validation::validate_node_reward_type;
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
-use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 use url::Url;
@@ -128,13 +128,7 @@ pub fn main() -> Result<()> {
                 resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac.as_deref())?;
 
             if let Some(ref node_reward_type) = node_reward_type {
-                let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
-                if !node_reward_type_pattern.is_match(node_reward_type) {
-                    anyhow::bail!(
-                        "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                        node_reward_type
-                    );
-                }
+                validate_node_reward_type(node_reward_type)?;
             } else {
                 println!("Node reward type is not set. Skipping validation.");
             }

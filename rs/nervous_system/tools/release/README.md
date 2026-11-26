@@ -220,9 +220,6 @@ the following requirements:
 
 If your proposal text checks out, the script then prompts you for your HSM pin.
 
-After that, it prints out the command it is about to execute, and ask you to confirm. To confirm,
-type in "yes".
-
 Once the proposal(s) have been made, take a note of the proposal ID (printed at the end).
 
 You will need to notify people about this proposal so that they know to vote on it.

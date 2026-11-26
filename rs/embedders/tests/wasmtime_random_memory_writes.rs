@@ -743,13 +743,17 @@ mod tests {
         with_test_replica_logger(|log| {
             let subnet_type = SubnetType::Application;
 
-            let dst: u32 = 0;
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-
             // Set maximum number of instructions to some low value to trap
             // Note: system API calls get charged per call, see system_api::charges
             let max_num_instructions = NumInstructions::new(200_000);
+
+            // `write_bytes` is charged one instruction per `BYTES_PER_INSTRUCTION`
+            // bytes it copies, so copying this payload alone costs more than
+            // `max_num_instructions`.
+            let payload_size = (max_num_instructions.get() as usize + 1) * BYTES_PER_INSTRUCTION;
+            let dst: u32 = 0;
+            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
+            payload.extend(vec![1; payload_size]);
 
             // Consumes less than max_num_instructions.
             let instructions_consumed_without_data = get_num_instructions_consumed(

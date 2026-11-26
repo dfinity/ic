@@ -26,7 +26,7 @@ unsafe extern "C" {
     fn LLVMFuzzerRunDriver(
         argc: *const isize,
         argv: *const *const *const u8,
-        UserCb: fn(data: *const u8, size: usize) -> i32,
+        UserCb: unsafe fn(data: *const u8, size: usize) -> i32,
     ) -> i32;
 
 }

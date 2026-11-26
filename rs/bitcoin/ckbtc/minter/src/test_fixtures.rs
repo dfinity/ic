@@ -16,6 +16,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
+pub const HOUR: Duration = Duration::from_secs(60 * 60);
 pub const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 pub const MINTER_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
 pub const BTC_CHECKER_CANISTER_ID: Principal =
@@ -485,6 +486,7 @@ pub mod arbitrary {
         prop_oneof![
             Just(SuspendedReason::ValueTooSmall),
             Just(SuspendedReason::Quarantined),
+            Just(SuspendedReason::Unchecked),
         ]
     }
 

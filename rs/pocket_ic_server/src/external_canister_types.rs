@@ -143,7 +143,7 @@ pub struct DnssecConfig {
 
 #[derive(CandidType)]
 pub struct DohConfig {
-    pub allowed_domains: Vec<String>,
+    pub reserved_domains: Option<Vec<String>>,
     pub max_cache_age_secs: Option<u64>,
 }
 

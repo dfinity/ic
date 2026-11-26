@@ -8,6 +8,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 grub = { path = "../../boot/grub" }
 ratatui = { workspace = true }
+ratatui-textarea = "0.9.4"
 tracing = { workspace = true }
 scopeguard = { workspace = true }
-tui-textarea = "0.7"

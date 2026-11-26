@@ -6,7 +6,7 @@ use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use proptest::prelude::*;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 #[test]

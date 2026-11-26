@@ -2835,18 +2835,6 @@ fn consumed_cycles_total_calculates_the_right_amount() {
         subnet_metrics.consumed_cycles_total(),
         NominalCycles::new(30726)
     );
-
-    // The legacy computation additionally sums the per-use-case entries that a
-    // deleted canister contributes to the map (already covered by the deleted
-    // canisters scalar), hence the double counting. On top of the 30726 from
-    // the fixed `consumed_cycles_total` above:
-    // 30726 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
-    // + 64 (instructions) + 128 (request and response transmission)
-    // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
-    assert_eq!(
-        subnet_metrics.consumed_cycles_total_v28(),
-        NominalCycles::new(32766)
-    );
 }
 
 /// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in

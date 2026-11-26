@@ -3,6 +3,10 @@ set -xeuo pipefail
 
 cd "${CI_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 
+# Make Cargo's own lints fail the build.
+# The `--deny warnings` passed to clippy below only reaches rustc and clippy.
+export CARGO_BUILD_WARNINGS=deny
+
 cargo fmt -- --check
 
 clippy_args=(
