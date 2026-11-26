@@ -10,9 +10,12 @@
 
 use crate::{convert, errors::ApiError, models::EnvelopePair, request_types::RequestType};
 use ic_types::{
-    CanisterId,
-    messages::{HttpCanisterUpdate, HttpReadStateContent},
+    CanisterId, Time,
+    messages::{
+        HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState, SignedIngressContent,
+    },
 };
+use ic_validator_ingress_message::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
 
 /// Ledger method behind `RequestType::Send`.
 const SEND_PB: &str = "send_pb";
@@ -39,7 +42,8 @@ pub fn verify_signed_envelopes<'a>(
 ///
 /// The envelopes must carry the same update up to `ingress_expiry`, and each
 /// must pair its update with the read-state call for that update's result.
-/// `/construction/combine` builds envelopes exactly this way.
+/// `/construction/combine` builds envelopes exactly this way. Both calls must
+/// also carry signatures that the IC accepts.
 pub fn representative_envelope(
     envelopes: &[EnvelopePair],
 ) -> Result<&HttpCanisterUpdate, ApiError> {
@@ -58,6 +62,7 @@ pub fn representative_envelope(
             ));
         }
         verify_read_state(envelope)?;
+        verify_signatures(envelope)?;
     }
     Ok(representative)
 }
@@ -156,13 +161,44 @@ fn verify_method_name(update: &HttpCanisterUpdate, expected: &str) -> Result<(),
     Ok(())
 }
 
+/// The IC rejects a call that is not signed by the key its sender is derived
+/// from. A rejected read-state call would make `/construction/submit` report a
+/// failure for an update that executes. Expiry is checked on submission, so the
+/// signatures are checked as of the envelope's own expiry.
+fn verify_signatures(envelope: &EnvelopePair) -> Result<(), ApiError> {
+    let invalid = |err: String| {
+        ApiError::invalid_request(format!(
+            "Refusing a signed request whose envelope the IC would reject: {err}"
+        ))
+    };
+    let verifier = IngressMessageVerifier::builder()
+        .with_time_provider(TimeProvider::Constant(Time::from_nanos_since_unix_epoch(
+            envelope.update_content().ingress_expiry,
+        )))
+        .build();
+
+    let update = HttpRequest::<SignedIngressContent>::try_from(envelope.update.clone())
+        .map_err(|err| invalid(err.to_string()))?;
+    verifier
+        .validate_request(&update)
+        .map_err(|err| invalid(err.to_string()))?;
+
+    let read_state = HttpRequest::<ReadState>::try_from(envelope.read_state.clone())
+        .map_err(|err| invalid(err.to_string()))?;
+    verifier
+        .validate_request(&read_state)
+        .map_err(|err| invalid(err.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::request_handler::make_sig_data;
     use ic_types::{
         PrincipalId,
         messages::{Blob, HttpCallContent, HttpRequestEnvelope},
     };
+    use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
 
     fn controller() -> PrincipalId {
         PrincipalId::new_user_test_id(1)
@@ -195,25 +231,50 @@ mod tests {
             method_name: "manage_neuron".to_string(),
             arg: Blob(arg.to_vec()),
             nonce: None,
-            sender: Blob(vec![2]),
+            sender: Blob(signer().generate_principal_id().unwrap().into_vec()),
             ingress_expiry: 1_000,
             sender_info: None,
         }
     }
 
+    fn signer() -> Ed25519KeyPair {
+        Ed25519KeyPair::deserialize_raw(&[7; 32]).unwrap()
+    }
+
+    fn other_key() -> Ed25519KeyPair {
+        Ed25519KeyPair::deserialize_raw(&[8; 32]).unwrap()
+    }
+
     fn pair(update: HttpCanisterUpdate) -> EnvelopePair {
-        let read_state = convert::make_read_state_from_update(&update);
+        signed_pair(update, &signer(), &signer())
+    }
+
+    fn signed_pair(
+        update: HttpCanisterUpdate,
+        update_key: &Ed25519KeyPair,
+        read_state_key: &Ed25519KeyPair,
+    ) -> EnvelopePair {
+        let read_state = HttpReadStateContent::ReadState {
+            read_state: convert::make_read_state_from_update(&update),
+        };
+        let update_sig = update_key.sign(&make_sig_data(&update.id()));
+        let read_state_sig = read_state_key.sign(&make_sig_data(&read_state.id()));
+        let pubkey = |key: &Ed25519KeyPair| {
+            Some(Blob(
+                Ed25519KeyPair::der_encode_pk(key.get_pb_key()).unwrap(),
+            ))
+        };
         EnvelopePair {
             update: HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call { update },
-                sender_pubkey: None,
-                sender_sig: None,
+                sender_pubkey: pubkey(update_key),
+                sender_sig: Some(Blob(update_sig)),
                 sender_delegation: None,
             },
             read_state: HttpRequestEnvelope::<HttpReadStateContent> {
-                content: HttpReadStateContent::ReadState { read_state },
-                sender_pubkey: None,
-                sender_sig: None,
+                content: read_state,
+                sender_pubkey: pubkey(read_state_key),
+                sender_sig: Some(Blob(read_state_sig)),
                 sender_delegation: None,
             },
         }
@@ -253,6 +314,27 @@ mod tests {
             representative_envelope(&[spliced]),
             "must read the result of that",
         );
+    }
+
+    #[test]
+    fn every_call_must_be_signed_by_its_sender() {
+        let base = update(b"disburse neuron 7");
+        let mut later = base.clone();
+        later.ingress_expiry = base.ingress_expiry + 1_000;
+
+        let mut corrupted = pair(later.clone());
+        corrupted.read_state.sender_sig = Some(Blob(vec![0; 64]));
+        let cases = [
+            signed_pair(later.clone(), &signer(), &other_key()),
+            signed_pair(later, &other_key(), &signer()),
+            corrupted,
+        ];
+        for envelope in cases {
+            assert_rejected(
+                representative_envelope(&[pair(base.clone()), envelope]),
+                "whose envelope the IC would reject",
+            );
+        }
     }
 
     #[test]

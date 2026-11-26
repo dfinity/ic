@@ -14049,6 +14049,7 @@ dependencies = [
  "ic-rosetta-test-utils",
  "ic-sys",
  "ic-types",
+ "ic-validator-ingress-message",
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
