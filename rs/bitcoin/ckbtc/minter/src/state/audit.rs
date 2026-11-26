@@ -180,6 +180,23 @@ pub fn ignore_utxo<R: CanisterRuntime>(
     );
 }
 
+pub fn suspend_unchecked_utxo<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    utxo: Utxo,
+    account: Account,
+    now: Timestamp,
+    runtime: &R,
+) {
+    discard_utxo(
+        state,
+        utxo,
+        account,
+        SuspendedReason::Unchecked,
+        now,
+        runtime,
+    );
+}
+
 fn discard_utxo<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     utxo: Utxo,
