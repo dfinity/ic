@@ -10,9 +10,12 @@
 
 use crate::{convert, errors::ApiError, models::EnvelopePair, request_types::RequestType};
 use ic_types::{
-    CanisterId,
-    messages::{HttpCanisterUpdate, HttpReadStateContent},
+    CanisterId, Time,
+    messages::{
+        HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState, SignedIngressContent,
+    },
 };
+use ic_validator_ingress_message::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
 
 /// Ledger method behind `RequestType::Send`.
 const SEND_PB: &str = "send_pb";
@@ -39,7 +42,8 @@ pub fn verify_signed_envelopes<'a>(
 ///
 /// The envelopes must carry the same update up to `ingress_expiry`, and each
 /// must pair its update with the read-state call for that update's result.
-/// `/construction/combine` builds envelopes exactly this way.
+/// `/construction/combine` builds envelopes exactly this way. Both calls must
+/// also carry signatures that the IC accepts.
 pub fn representative_envelope(
     envelopes: &[EnvelopePair],
 ) -> Result<&HttpCanisterUpdate, ApiError> {
@@ -58,6 +62,7 @@ pub fn representative_envelope(
             ));
         }
         verify_read_state(envelope)?;
+        verify_signatures(envelope)?;
     }
     Ok(representative)
 }
@@ -154,6 +159,35 @@ fn verify_method_name(update: &HttpCanisterUpdate, expected: &str) -> Result<(),
         )));
     }
     Ok(())
+}
+
+/// The IC rejects a call that is not signed by the key its sender is derived
+/// from. A rejected read-state call would make `/construction/submit` report a
+/// failure for an update that executes. Expiry is checked on submission, so the
+/// signatures are checked as of the envelope's own expiry.
+fn verify_signatures(envelope: &EnvelopePair) -> Result<(), ApiError> {
+    let invalid = |err: String| {
+        ApiError::invalid_request(format!(
+            "Refusing a signed request whose envelope the IC would reject: {err}"
+        ))
+    };
+    let verifier = IngressMessageVerifier::builder()
+        .with_time_provider(TimeProvider::Constant(Time::from_nanos_since_unix_epoch(
+            envelope.update_content().ingress_expiry,
+        )))
+        .build();
+
+    let update = HttpRequest::<SignedIngressContent>::try_from(envelope.update.clone())
+        .map_err(|err| invalid(err.to_string()))?;
+    verifier
+        .validate_request(&update)
+        .map_err(|err| invalid(err.to_string()))?;
+
+    let read_state = HttpRequest::<ReadState>::try_from(envelope.read_state.clone())
+        .map_err(|err| invalid(err.to_string()))?;
+    verifier
+        .validate_request(&read_state)
+        .map_err(|err| invalid(err.to_string()))
 }
 
 #[cfg(test)]
