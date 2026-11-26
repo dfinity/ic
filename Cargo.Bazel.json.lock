@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "79f868872e18fd82e8ff6bda23b12b34cbb41a18505b171bc8c3be3585a39804",
+  "checksum": "e875bb5e30d4d767782da9a695ef95b2ee36aef71121278c8308b18ca192ac22",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17933,7 +17933,7 @@
             "target": "ic_cdk_management_canister"
           },
           {
-            "id": "ic-cdk-timers 1.0.0",
+            "id": "ic-cdk-timers 1.0.1",
             "target": "ic_cdk_timers"
           },
           {
@@ -28023,7 +28023,7 @@
       ],
       "version": "0.1.1"
     },
-    "ic-cdk-timers 1.0.0": {
+    "ic-cdk-timers 1.0.1": {
       "build_script_attrs": {
         "link_deps": [
           {
@@ -28063,8 +28063,8 @@
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "sha256": "6852b9c1d4a82ff50fc7318599298aee8bfb082bd7e9fe7e5c1420692b2170f7",
-          "url": "https://static.crates.io/crates/ic-cdk-timers/1.0.0/download"
+          "sha256": "4607ae7ca6ac2bc99ba485893a355807f14af6a7aa3c493f1109b9401b0562e3",
+          "url": "https://static.crates.io/crates/ic-cdk-timers/1.0.1/download"
         }
       },
       "targets": [
@@ -28081,7 +28081,7 @@
           }
         }
       ],
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "ic-certificate-verification 3.2.0": {
       "common_attrs": {
@@ -68838,7 +68838,7 @@
     "ic-cdk 0.20.3",
     "ic-cdk-bitcoin-canister 0.2.0",
     "ic-cdk-management-canister 0.1.1",
-    "ic-cdk-timers 1.0.0",
+    "ic-cdk-timers 1.0.1",
     "ic-certificate-verification 3.2.0",
     "ic-certification 3.2.0",
     "ic-certified-map 0.4.1",

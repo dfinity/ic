@@ -2,7 +2,7 @@
 //!
 //!
 use candid::{CandidType, Principal, Reserved};
-use ic_cdk_timers::set_timer_interval;
+use ic_cdk_timers::set_timer_interval_serial;
 use ic_stable_structures::{Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
@@ -544,7 +544,7 @@ impl Storable for Event {
 #[allow(clippy::disallowed_methods)]
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "accepted",
             |r| matches!(r, RequestState::Accepted { .. }),
@@ -552,7 +552,7 @@ pub fn start_timers() {
         )
         .await
     });
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "controllers_changed",
             |r| matches!(r, RequestState::ControllersChanged { .. }),
@@ -560,7 +560,7 @@ pub fn start_timers() {
         )
         .await
     });
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "stopped",
             |r| matches!(r, RequestState::StoppedAndReady { .. }),
@@ -568,7 +568,7 @@ pub fn start_timers() {
         )
         .await
     });
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "renamed_replaced_canister",
             |r| matches!(r, RequestState::RenamedReplacedCanister { .. }),
@@ -576,7 +576,7 @@ pub fn start_timers() {
         )
         .await
     });
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "updated_routing_table",
             |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
@@ -584,7 +584,7 @@ pub fn start_timers() {
         )
         .await
     });
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "routing_table_change_accepted",
             |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
@@ -592,7 +592,7 @@ pub fn start_timers() {
         )
         .await
     });
-    set_timer_interval(interval, async || {
+    set_timer_interval_serial(interval, async || {
         process_all_by_predicate(
             "migrated_canister_deleted",
             |r| matches!(r, RequestState::MigratedCanisterDeleted { .. }),
@@ -601,10 +601,10 @@ pub fn start_timers() {
         .await
     });
 
-    set_timer_interval(interval, async || process_all_succeeded().await);
+    set_timer_interval_serial(interval, async || process_all_succeeded().await);
 
     // This one has a different type from the generic ones above.
-    set_timer_interval(interval, async || process_all_failed().await);
+    set_timer_interval_serial(interval, async || process_all_failed().await);
 }
 
 /// Rate limit active requests:
