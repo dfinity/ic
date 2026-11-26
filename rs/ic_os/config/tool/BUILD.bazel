@@ -7,11 +7,7 @@ TEMPLATES = [
     "templates/metrics-proxy-hostos.yaml.template",
 ]
 
-exports_files(TEMPLATES + [
-    # Read by //ic-os/components:test_metrics_proxy_units for the generated
-    # metrics-proxy config path.
-    "src/lib.rs",
-])
+exports_files(TEMPLATES)
 
 # `include_str!`d by tests only, so it stays off the library's compile_data.
 TEST_GOLDENS = [
