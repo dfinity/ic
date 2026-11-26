@@ -8,12 +8,17 @@
 //! a signed request through this module, so what they describe is what is
 //! sent.
 
-use crate::{convert, errors::ApiError, models::EnvelopePair, request_types::RequestType};
+use crate::{
+    convert,
+    errors::ApiError,
+    models::{EnvelopePair, SignedTransaction},
+    request_types::RequestType,
+};
+use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_types::{
     CanisterId, Time,
-    messages::{
-        HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState, SignedIngressContent,
-    },
+    crypto::AlgorithmId,
+    messages::{HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState},
 };
 use ic_validator_ingress_message::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
 
@@ -42,8 +47,7 @@ pub fn verify_signed_envelopes<'a>(
 ///
 /// The envelopes must carry the same update up to `ingress_expiry`, and each
 /// must pair its update with the read-state call for that update's result.
-/// `/construction/combine` builds envelopes exactly this way. Both calls must
-/// also carry signatures that the IC accepts.
+/// `/construction/combine` builds envelopes exactly this way.
 pub fn representative_envelope(
     envelopes: &[EnvelopePair],
 ) -> Result<&HttpCanisterUpdate, ApiError> {
@@ -62,7 +66,6 @@ pub fn representative_envelope(
             ));
         }
         verify_read_state(envelope)?;
-        verify_signatures(envelope)?;
     }
     Ok(representative)
 }
@@ -161,44 +164,70 @@ fn verify_method_name(update: &HttpCanisterUpdate, expected: &str) -> Result<(),
     Ok(())
 }
 
-/// The IC rejects a call that is not signed by the key its sender is derived
-/// from. A rejected read-state call would make `/construction/submit` report a
-/// failure for an update that executes. Expiry is checked on submission, so the
-/// signatures are checked as of the envelope's own expiry.
-fn verify_signatures(envelope: &EnvelopePair) -> Result<(), ApiError> {
-    let invalid = |err: String| {
-        ApiError::invalid_request(format!(
-            "Refusing a signed request whose envelope the IC would reject: {err}"
-        ))
-    };
+/// Returns the envelope that `/construction/submit` sends at `now`.
+pub fn current_envelope(envelopes: &[EnvelopePair], now: Time) -> Option<&EnvelopePair> {
+    envelopes.iter().find(|envelope| {
+        let ingress_expiry =
+            Time::from_nanos_since_unix_epoch(envelope.update.content.ingress_expiry());
+        let ingress_start = ingress_expiry
+            .saturating_sub(ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT));
+        ingress_start <= now && ingress_expiry > now
+    })
+}
+
+/// Checks the read-state signature of the envelope that each request of
+/// `transaction` sends at `now`, before any of them is submitted.
+///
+/// `/construction/submit` polls for an update's result with its read-state
+/// call, so a read-state call the IC rejects would report an update that
+/// executes as failed. A read-state call that is anonymous, carries a
+/// delegation or is signed with a canister signature is left to the IC, since
+/// its validity depends on the IC's root key or clock.
+pub fn verify_read_state_signatures(
+    transaction: &SignedTransaction,
+    now: Time,
+) -> Result<(), ApiError> {
     let verifier = IngressMessageVerifier::builder()
-        .with_time_provider(TimeProvider::Constant(Time::from_nanos_since_unix_epoch(
-            envelope.update_content().ingress_expiry,
-        )))
+        .with_time_provider(TimeProvider::Constant(now))
         .build();
-
-    let update = HttpRequest::<SignedIngressContent>::try_from(envelope.update.clone())
-        .map_err(|err| invalid(err.to_string()))?;
-    verifier
-        .validate_request(&update)
-        .map_err(|err| invalid(err.to_string()))?;
-
-    let read_state = HttpRequest::<ReadState>::try_from(envelope.read_state.clone())
-        .map_err(|err| invalid(err.to_string()))?;
-    verifier
-        .validate_request(&read_state)
-        .map_err(|err| invalid(err.to_string()))
+    for (_, envelopes) in &transaction.requests {
+        let Some(envelope) = current_envelope(envelopes, now) else {
+            continue;
+        };
+        let read_state = &envelope.read_state;
+        let Some(sender_pubkey) = &read_state.sender_pubkey else {
+            continue;
+        };
+        let checkable = read_state.sender_delegation.is_none()
+            && user_public_key_from_bytes(&sender_pubkey.0)
+                .is_ok_and(|(key, _)| key.algorithm_id != AlgorithmId::IcCanisterSignature);
+        if !checkable {
+            continue;
+        }
+        HttpRequest::<ReadState>::try_from(read_state.clone())
+            .map_err(|err| err.to_string())
+            .and_then(|request| {
+                verifier
+                    .validate_request(&request)
+                    .map_err(|err| err.to_string())
+            })
+            .map_err(|err| {
+                ApiError::invalid_request(format!(
+                    "Refusing to submit a request whose read-state call the IC would \
+                     reject, since the outcome of its update could not be reported: {err}"
+                ))
+            })?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request_handler::make_sig_data;
     use ic_types::{
         PrincipalId,
         messages::{Blob, HttpCallContent, HttpRequestEnvelope},
     };
-    use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
 
     fn controller() -> PrincipalId {
         PrincipalId::new_user_test_id(1)
@@ -231,50 +260,25 @@ mod tests {
             method_name: "manage_neuron".to_string(),
             arg: Blob(arg.to_vec()),
             nonce: None,
-            sender: Blob(signer().generate_principal_id().unwrap().into_vec()),
+            sender: Blob(vec![2]),
             ingress_expiry: 1_000,
             sender_info: None,
         }
     }
 
-    fn signer() -> Ed25519KeyPair {
-        Ed25519KeyPair::deserialize_raw(&[7; 32]).unwrap()
-    }
-
-    fn other_key() -> Ed25519KeyPair {
-        Ed25519KeyPair::deserialize_raw(&[8; 32]).unwrap()
-    }
-
     fn pair(update: HttpCanisterUpdate) -> EnvelopePair {
-        signed_pair(update, &signer(), &signer())
-    }
-
-    fn signed_pair(
-        update: HttpCanisterUpdate,
-        update_key: &Ed25519KeyPair,
-        read_state_key: &Ed25519KeyPair,
-    ) -> EnvelopePair {
-        let read_state = HttpReadStateContent::ReadState {
-            read_state: convert::make_read_state_from_update(&update),
-        };
-        let update_sig = update_key.sign(&make_sig_data(&update.id()));
-        let read_state_sig = read_state_key.sign(&make_sig_data(&read_state.id()));
-        let pubkey = |key: &Ed25519KeyPair| {
-            Some(Blob(
-                Ed25519KeyPair::der_encode_pk(key.get_pb_key()).unwrap(),
-            ))
-        };
+        let read_state = convert::make_read_state_from_update(&update);
         EnvelopePair {
             update: HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call { update },
-                sender_pubkey: pubkey(update_key),
-                sender_sig: Some(Blob(update_sig)),
+                sender_pubkey: None,
+                sender_sig: None,
                 sender_delegation: None,
             },
             read_state: HttpRequestEnvelope::<HttpReadStateContent> {
-                content: read_state,
-                sender_pubkey: pubkey(read_state_key),
-                sender_sig: Some(Blob(read_state_sig)),
+                content: HttpReadStateContent::ReadState { read_state },
+                sender_pubkey: None,
+                sender_sig: None,
                 sender_delegation: None,
             },
         }
@@ -316,24 +320,78 @@ mod tests {
         );
     }
 
-    #[test]
-    fn every_call_must_be_signed_by_its_sender() {
-        let base = update(b"disburse neuron 7");
-        let mut later = base.clone();
-        later.ingress_expiry = base.ingress_expiry + 1_000;
+    mod read_state_signatures {
+        use super::*;
+        use crate::{
+            models::SignedTransaction, request_handler::make_sig_data, request_types::RequestType,
+        };
+        use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
 
-        let mut corrupted = pair(later.clone());
-        corrupted.read_state.sender_sig = Some(Blob(vec![0; 64]));
-        let cases = [
-            signed_pair(later.clone(), &signer(), &other_key()),
-            signed_pair(later, &other_key(), &signer()),
-            corrupted,
-        ];
-        for envelope in cases {
-            assert_rejected(
-                representative_envelope(&[pair(base.clone()), envelope]),
-                "whose envelope the IC would reject",
-            );
+        const NOW: u64 = 1_700_000_000_000_000_000;
+
+        fn key(seed: u8) -> Ed25519KeyPair {
+            Ed25519KeyPair::deserialize_raw(&[seed; 32]).unwrap()
+        }
+
+        fn signed(read_state_key: &Ed25519KeyPair, ingress_expiry: u64) -> EnvelopePair {
+            let signer = key(1);
+            let mut envelope = pair(HttpCanisterUpdate {
+                sender: Blob(signer.generate_principal_id().unwrap().into_vec()),
+                ingress_expiry,
+                ..update(b"disburse neuron 7")
+            });
+            let read_state_id = envelope.read_state.content.id();
+            envelope.read_state.sender_pubkey = Some(Blob(
+                Ed25519KeyPair::der_encode_pk(read_state_key.get_pb_key()).unwrap(),
+            ));
+            envelope.read_state.sender_sig =
+                Some(Blob(read_state_key.sign(&make_sig_data(&read_state_id))));
+            envelope
+        }
+
+        fn current(read_state_key: &Ed25519KeyPair) -> EnvelopePair {
+            signed(read_state_key, NOW + 60_000_000_000)
+        }
+
+        fn verify(requests: Vec<Vec<EnvelopePair>>) -> Result<(), ApiError> {
+            let transaction = SignedTransaction {
+                requests: requests
+                    .into_iter()
+                    .map(|envelopes| (RequestType::Send, envelopes))
+                    .collect(),
+            };
+            verify_read_state_signatures(&transaction, Time::from_nanos_since_unix_epoch(NOW))
+        }
+
+        #[test]
+        fn the_sent_read_state_call_of_every_request_must_be_signed_by_its_sender() {
+            let mut corrupted = current(&key(1));
+            corrupted.read_state.sender_sig = Some(Blob(vec![0; 64]));
+            let expired = signed(&key(2), NOW);
+
+            verify(vec![
+                vec![current(&key(1))],
+                vec![expired, current(&key(1))],
+            ])
+            .unwrap();
+            for bad in [corrupted, current(&key(2))] {
+                assert_rejected(
+                    verify(vec![vec![current(&key(1))], vec![bad]]),
+                    "whose read-state call the IC would reject",
+                );
+            }
+        }
+
+        #[test]
+        fn read_state_calls_that_depend_on_the_ic_are_left_to_it() {
+            let mut delegated = current(&key(2));
+            delegated.read_state.sender_delegation = Some(vec![]);
+            let mut anonymous = current(&key(2));
+            anonymous.read_state.sender_pubkey = None;
+            let mut unknown_key = current(&key(2));
+            unknown_key.read_state.sender_pubkey = Some(Blob(vec![1, 2, 3]));
+
+            verify(vec![vec![delegated], vec![anonymous], vec![unknown_key]]).unwrap();
         }
     }
 

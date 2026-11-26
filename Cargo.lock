@@ -14026,6 +14026,7 @@ dependencies = [
  "ic-agent 0.50.0",
  "ic-base-types",
  "ic-crypto-sha2",
+ "ic-crypto-standalone-sig-verifier",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-ed25519 0.6.0",
