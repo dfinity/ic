@@ -54,7 +54,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
   If any of the versions in the proposal are not on the blessed upgrade path, the proposal will fail.
     "
 
-    check_or_set_dfx_hsm_pin
+    confirm_by_entering_dfx_hsm_pin
 
     cmd=($IC_ADMIN --use-hsm --slot=0
         --key-id=01 --pin="$DFX_HSM_PIN"
@@ -78,9 +78,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
         cmd+=(--dry-run)
     fi
 
-    confirm_submit_proposal_command "${cmd[@]}"
-
-    "${cmd[@]}"
+    submit_proposal_using_ic_admin "${cmd[@]}"
 }
 
 if ! is_variable_set IC_ADMIN; then

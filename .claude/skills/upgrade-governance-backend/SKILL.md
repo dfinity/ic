@@ -320,9 +320,9 @@ For each SNS proposal:
 
 Note: Do NOT pipe through `sed` — it buffers output and hides the interactive HSM PIN prompt.
 
-The submit scripts output `proposal NNNNN` in the ic-admin response. After the user
-confirms submissions are done, read each `/tmp/proposal-*.out` file and extract the
-proposal ID by grepping for `proposal [0-9]+`.
+The submit scripts output `https://dashboard.internetcomputer.org/proposal/$PROPOSAL_ID`.
+After the user confirms submissions are done, read each `/tmp/proposal-*.out` file
+and extract the proposal ID by grepping for that URL.
 
 Store proposal IDs as `NNS_PROPOSAL_IDS` and `SNS_PROPOSAL_IDS`.
 
