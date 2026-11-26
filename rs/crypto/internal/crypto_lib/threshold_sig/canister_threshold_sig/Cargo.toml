@@ -11,7 +11,7 @@ documentation.workspace = true
 [dependencies]
 curve25519-dalek = { workspace = true }
 fe-derive = { path = "fe-derive" }
-group = "0.13"
+group = "0.14"
 hex = { workspace = true }
 hex-literal = { workspace = true }
 ic-crypto-internal-hmac = { path = "../../hmac" }

@@ -15,9 +15,9 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:ratatui",
+        "@crate_index//:ratatui-textarea",
         "@crate_index//:scopeguard",
         "@crate_index//:tracing",
-        "@crate_index//:tui-textarea",
     ],
 )
 
@@ -32,8 +32,8 @@ rust_test(
         "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:ratatui",
+        "@crate_index//:ratatui-textarea",
         "@crate_index//:scopeguard",
         "@crate_index//:tracing",
-        "@crate_index//:tui-textarea",
     ],
 )

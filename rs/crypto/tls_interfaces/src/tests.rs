@@ -110,9 +110,7 @@ mod tls_public_key_cert {
         let bad_serialized = "{\"certificate_der\":[31,41,59,26]}";
 
         let error: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(bad_serialized);
-        assert_matches!(error, Err(json5::Error::Message { msg, .. } )
-            if msg.contains("Error parsing DER")
-        );
+        assert_matches!(error, Err(e) if e.to_string().contains("Error parsing DER"));
     }
 
     #[test]

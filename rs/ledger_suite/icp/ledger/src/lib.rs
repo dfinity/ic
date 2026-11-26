@@ -199,7 +199,7 @@ pub struct Ledger {
     pub icrc1_minting_account: Option<Account>,
     // This is a set of BlockIndices that have been notified.
     #[serde(default)]
-    pub blocks_notified: IntMap<()>,
+    pub blocks_notified: IntMap<u64, ()>,
     /// How long transactions are remembered to detect duplicates.
     pub transaction_window: Duration,
     /// For each transaction, record the block in which the

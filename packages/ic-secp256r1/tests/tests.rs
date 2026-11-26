@@ -17,6 +17,55 @@ fn test_rng() -> ChaCha20Rng {
     test_rng_with_seed(seed)
 }
 
+/// The order n of the secp256r1 group, big-endian (SEC 2, section 2.4.2)
+const SECP256R1_ORDER: [u8; 32] =
+    hex!("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
+
+/// Returns a - b, for 32-byte big-endian integers a >= b
+fn sub_be(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
+    use num_bigint::BigUint;
+    let diff = (BigUint::from_bytes_be(a) - BigUint::from_bytes_be(b)).to_bytes_be();
+    let mut result = [0_u8; 32];
+    result[32 - diff.len()..].copy_from_slice(&diff);
+    result
+}
+
+/// An RNG that hands out a fixed byte sequence through `fill_bytes` and
+/// counts the bytes handed out. Its other methods panic.
+struct ScriptedRng {
+    bytes: Vec<u8>,
+    consumed: usize,
+}
+
+impl ScriptedRng {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self { bytes, consumed: 0 }
+    }
+}
+
+impl rand::RngCore for ScriptedRng {
+    fn next_u32(&mut self) -> u32 {
+        panic!("ScriptedRng hands out bytes only through fill_bytes")
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        panic!("ScriptedRng hands out bytes only through fill_bytes")
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        let end = self.consumed + dest.len();
+        assert!(end <= self.bytes.len(), "ScriptedRng ran out of bytes");
+        dest.copy_from_slice(&self.bytes[self.consumed..end]);
+        self.consumed = end;
+    }
+
+    fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+        panic!("ScriptedRng hands out bytes only through fill_bytes")
+    }
+}
+
+impl rand::CryptoRng for ScriptedRng {}
+
 #[test]
 fn should_pass_wycheproof_ecdsa_secp256r1_verification_tests() -> Result<(), KeyDecodingError> {
     use wycheproof::ecdsa::*;
@@ -66,6 +115,33 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     let message_hash = sha256.finalize();
     let generated_sig = sk.sign_digest(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
+}
+
+#[test]
+fn should_sign_a_digest_of_at_least_the_group_order_like_its_reduction() {
+    // ECDSA uses the digest modulo the group order n, and RFC 6979 derives
+    // the nonce from bits2octets(digest), which reduces the digest modulo n
+    // too (RFC 6979, section 2.3.4). So a digest of at least n gets the same
+    // signature as its reduction.
+    let sk = PrivateKey::deserialize_sec1(&hex!(
+        "c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721"
+    ))
+    .expect("Valid key");
+    let pk = sk.public_key();
+
+    let digest = [0xff_u8; 32];
+    // n > 2^255, so subtracting n once reduces a 32-byte value modulo n
+    let reduced = sub_be(&digest, &SECP256R1_ORDER);
+
+    let sig = sk
+        .sign_digest(&digest)
+        .expect("a 32-byte digest can be signed");
+    let reduced_sig = sk
+        .sign_digest(&reduced)
+        .expect("a 32-byte digest can be signed");
+    assert_eq!(sig, reduced_sig);
+    assert!(pk.verify_signature_prehashed(&digest, &sig));
+    assert!(pk.verify_signature_prehashed(&reduced, &reduced_sig));
 }
 
 #[test]
@@ -178,6 +254,57 @@ fn test_sign_prehash_works_with_any_size_input_gte_16() {
 }
 
 #[test]
+fn should_reject_digests_shorter_than_16_bytes() {
+    let rng = &mut test_rng();
+
+    let sk = PrivateKey::generate_using_rng(rng);
+    let pk = sk.public_key();
+
+    for len in (0..=17).chain([32]) {
+        let bytes = rng.r#gen::<[u8; 32]>();
+        let digest = &bytes[..len];
+        let mut zero_prefixed = [0_u8; 32];
+        zero_prefixed[32 - len..].copy_from_slice(digest);
+
+        let sig = sk
+            .sign_digest(&zero_prefixed)
+            .expect("a 32-byte digest can be signed");
+        assert!(pk.verify_signature_prehashed(&zero_prefixed, &sig));
+
+        if len < 16 {
+            assert_eq!(sk.sign_digest(digest), None, "len = {len}");
+            assert!(!pk.verify_signature_prehashed(digest, &sig), "len = {len}");
+        } else {
+            assert_eq!(sk.sign_digest(digest), Some(sig), "len = {len}");
+            assert!(pk.verify_signature_prehashed(digest, &sig), "len = {len}");
+        }
+    }
+}
+
+#[test]
+fn should_use_only_the_leftmost_32_bytes_of_a_longer_digest() {
+    let rng = &mut test_rng();
+
+    let sk = PrivateKey::generate_using_rng(rng);
+    let pk = sk.public_key();
+
+    // 2^29 bytes is the shortest digest whose length in bits overflows a
+    // u32, on which the rfc6979 crate panics. vec! gets this zeroed 512 MiB
+    // digest from calloc, which takes fresh pages from the OS without
+    // writing them, so only the page written below takes memory.
+    for len in [64, 1 << 29] {
+        let mut digest = vec![0_u8; len];
+        rng.fill(&mut digest[..64]);
+
+        let sig = sk
+            .sign_digest(&digest)
+            .expect("a digest of at least 16 bytes can be signed");
+        assert_eq!(Some(sig), sk.sign_digest(&digest[..32]), "len = {len}");
+        assert!(pk.verify_signature_prehashed(&digest, &sig), "len = {len}");
+    }
+}
+
+#[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys()
 -> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();
@@ -272,6 +399,28 @@ fn should_insecure_keygen_for_testing_be_deterministic() {
         hex::encode(PrivateKey::generate_insecure_key_for_testing(9000).serialize_sec1()),
         "20bfd7f85be7ce1f54ea1b0d750ae3324ab7897fde3235e189ec697f0fade983"
     );
+}
+
+#[test]
+fn generate_using_rng_draws_32_bytes_until_they_encode_a_scalar_in_range() {
+    // generate_using_rng draws 32 bytes at a time with fill_bytes until they
+    // encode a scalar in [1, n), where n is the group order. Zero and values
+    // of at least n are rejected, not reduced modulo n.
+    let n_minus_1 = hex!("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550");
+    let mut one = [0_u8; 32];
+    one[31] = 1;
+
+    for valid in [n_minus_1, one] {
+        // 0, n and 2^256 - 1 are rejected and `valid` is accepted, so the
+        // bytes after it are never drawn
+        let mut rng =
+            ScriptedRng::new([[0_u8; 32], SECP256R1_ORDER, [0xff; 32], valid, [0x42; 32]].concat());
+
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        assert_eq!(sk.serialize_sec1(), valid);
+        assert_eq!(rng.consumed, 128);
+    }
 }
 
 #[test]
@@ -506,7 +655,7 @@ SRX0gAHGwZEgbRHaxgEPtpUyCnHhHL/VUmSB6GgerMzD6LzDY6qt
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
                 format!("{e:?}"),
-                "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.2.840.10045.3.1.7) })\""
+                "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) })\""
             );
         }
         Err(e) => panic!("Unexpected error {e:?}"),
@@ -525,7 +674,7 @@ KZh4l7SeYvLtL818ibSx/IXoUHNp4/gMp+x2sxwA/mtWO5PdPg7ksg==
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
                 format!("{e:?}"),
-                "\"OidUnknown { oid: ObjectIdentifier(1.2.840.10045.3.1.7) }\""
+                "\"OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) }\""
             );
         }
         Err(e) => panic!("Unexpected error {e:?}"),

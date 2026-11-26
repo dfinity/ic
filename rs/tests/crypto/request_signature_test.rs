@@ -336,11 +336,13 @@ pub fn request_signature_test(env: TestEnv) {
 }
 
 pub fn random_ecdsa_secp256k1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
-    Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
+    let pem = ic_secp256k1::PrivateKey::generate_using_rng(rng).serialize_rfc5915_pem();
+    Secp256k1Identity::from_pem(pem.as_bytes()).unwrap()
 }
 
 pub fn random_ecdsa_secp256r1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Prime256v1Identity {
-    Prime256v1Identity::from_private_key(p256::SecretKey::random(rng))
+    let pem = ic_secp256r1::PrivateKey::generate_using_rng(rng).serialize_rfc5915_pem();
+    Prime256v1Identity::from_pem(pem.as_bytes()).unwrap()
 }
 
 // Test sending a query/update from the anonymous user that returns

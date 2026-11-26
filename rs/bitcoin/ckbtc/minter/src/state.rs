@@ -1350,15 +1350,14 @@ impl CkBtcMinterState {
     /// The returned UTXOs include:
     /// * new UTXOs that are not known to the minter,
     /// * UTXOs that were previously ignored and that can be re-evaluated,
-    /// * UTXOs that were previously quarantined and that can be re-evaluated.
+    /// * UTXOs that were previously quarantined and that can be re-evaluated,
+    /// * UTXOs that previously could not be checked and that can be re-evaluated.
     pub fn processable_utxos_for_account<I: IntoIterator<Item = Utxo>>(
         &self,
         all_utxos_for_account: I,
         account: &Account,
         now: &Timestamp,
     ) -> (ProcessableUtxos, Vec<SuspendedUtxo>) {
-        const DAY: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
-
         let is_known = |utxo: &Utxo| {
             self.utxos_state_addresses
                 .get(account)
@@ -1376,15 +1375,16 @@ impl CkBtcMinterState {
         for utxo in all_utxos_for_account.into_iter() {
             match self.suspended_utxos.contains_utxo(&utxo, account) {
                 (Some(last_time_checked), Some(reason)) => {
+                    let retry_delay = reason.retry_delay();
                     match now.checked_duration_since(*last_time_checked) {
-                        Some(elapsed) if elapsed >= DAY => {
+                        Some(elapsed) if elapsed >= retry_delay => {
                             processable_utxos.insert_once_suspended_utxo(utxo, reason);
                         }
                         _ => suspended_utxos.push(SuspendedUtxo {
                             utxo,
                             reason: *reason,
                             earliest_retry: last_time_checked
-                                .saturating_add(DAY)
+                                .saturating_add(retry_delay)
                                 .as_nanos_since_unix_epoch(),
                         }),
                     }
@@ -1428,7 +1428,7 @@ impl CkBtcMinterState {
             SuspendedReason::ValueTooSmall => {
                 assert!(utxo.value < self.deposit_btc_min_amount || utxo.value <= self.check_fee);
             }
-            SuspendedReason::Quarantined => {}
+            SuspendedReason::Quarantined | SuspendedReason::Unchecked => {}
         }
     }
 
@@ -1738,17 +1738,21 @@ impl CkBtcMinterState {
     }
 
     pub fn ignored_utxos(&self) -> impl Iterator<Item = &Utxo> {
-        self.suspended_utxos.iter().filter_map(|(u, r)| match r {
-            SuspendedReason::ValueTooSmall => Some(u),
-            SuspendedReason::Quarantined => None,
-        })
+        self.suspended_utxos_with_reason(SuspendedReason::ValueTooSmall)
     }
 
     pub fn quarantined_utxos(&self) -> impl Iterator<Item = &Utxo> {
-        self.suspended_utxos.iter().filter_map(|(u, r)| match r {
-            SuspendedReason::ValueTooSmall => None,
-            SuspendedReason::Quarantined => Some(u),
-        })
+        self.suspended_utxos_with_reason(SuspendedReason::Quarantined)
+    }
+
+    pub fn unchecked_utxos(&self) -> impl Iterator<Item = &Utxo> {
+        self.suspended_utxos_with_reason(SuspendedReason::Unchecked)
+    }
+
+    fn suspended_utxos_with_reason(&self, reason: SuspendedReason) -> impl Iterator<Item = &Utxo> {
+        self.suspended_utxos
+            .iter()
+            .filter_map(move |(u, r)| (*r == reason).then_some(u))
     }
 
     pub fn mint_status_unknown_utxos(&self) -> impl Iterator<Item = &Utxo> {
@@ -1835,6 +1839,7 @@ pub struct ProcessableUtxos {
     new_utxos: BTreeSet<Utxo>,
     previously_ignored_utxos: BTreeSet<Utxo>,
     previously_quarantined_utxos: BTreeSet<Utxo>,
+    previously_unchecked_utxos: BTreeSet<Utxo>,
 }
 
 impl ProcessableUtxos {
@@ -1843,13 +1848,17 @@ impl ProcessableUtxos {
             .iter()
             .chain(&self.previously_ignored_utxos)
             .chain(&self.previously_quarantined_utxos)
+            .chain(&self.previously_unchecked_utxos)
     }
 }
 
 impl IntoIterator for ProcessableUtxos {
     type Item = Utxo;
     type IntoIter = Chain<
-        Chain<btree_set::IntoIter<Utxo>, btree_set::IntoIter<Utxo>>,
+        Chain<
+            Chain<btree_set::IntoIter<Utxo>, btree_set::IntoIter<Utxo>>,
+            btree_set::IntoIter<Utxo>,
+        >,
         btree_set::IntoIter<Utxo>,
     >;
 
@@ -1858,6 +1867,7 @@ impl IntoIterator for ProcessableUtxos {
             .into_iter()
             .chain(self.previously_ignored_utxos)
             .chain(self.previously_quarantined_utxos)
+            .chain(self.previously_unchecked_utxos)
     }
 }
 
@@ -1867,6 +1877,7 @@ impl ProcessableUtxos {
         match reason {
             SuspendedReason::ValueTooSmall => self.previously_ignored_utxos.insert(utxo),
             SuspendedReason::Quarantined => self.previously_quarantined_utxos.insert(utxo),
+            SuspendedReason::Unchecked => self.previously_unchecked_utxos.insert(utxo),
         };
     }
 
@@ -1888,6 +1899,10 @@ impl ProcessableUtxos {
             !self.previously_ignored_utxos.contains(utxo),
             "BUG: UTXO is already known in previously_ignored_utxos"
         );
+        assert!(
+            !self.previously_unchecked_utxos.contains(utxo),
+            "BUG: UTXO is already known in previously_unchecked_utxos"
+        );
     }
 }
 
@@ -1908,6 +1923,22 @@ pub enum SuspendedReason {
     ValueTooSmall,
     /// UTXO that the Bitcoin checker considered tainted.
     Quarantined,
+    /// UTXO for which the Bitcoin checker returned an error.
+    Unchecked,
+}
+
+impl SuspendedReason {
+    /// Minimum time between two evaluations of a UTXO suspended for this reason.
+    pub fn retry_delay(&self) -> Duration {
+        const HOUR: Duration = Duration::from_secs(60 * 60);
+        const DAY: Duration = Duration::from_secs(24 * HOUR.as_secs());
+        match self {
+            SuspendedReason::ValueTooSmall | SuspendedReason::Quarantined => DAY,
+            // A checker error may go away when the checker is upgraded or uses another
+            // provider, so the UTXO is retried sooner.
+            SuspendedReason::Unchecked => HOUR,
+        }
+    }
 }
 
 impl SuspendedUtxos {

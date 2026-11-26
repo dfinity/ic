@@ -2,9 +2,9 @@ use hex_literal::hex;
 use k256::elliptic_curve::{
     Group,
     group::{GroupEncoding, ff::PrimeField},
-    ops::{Invert, LinearCombination, LinearCombinationExt, MulByGenerator, Reduce},
+    ops::{LinearCombination, Reduce},
     scalar::IsHigh,
-    sec1::FromEncodedPoint,
+    sec1::FromSec1Point,
 };
 use std::ops::Neg;
 use std::sync::LazyLock;
@@ -162,7 +162,7 @@ impl Scalar {
             return None;
         }
 
-        k256::Scalar::from_repr(*k256::FieldBytes::from_slice(bytes))
+        k256::Scalar::from_repr(k256::FieldBytes::try_from(bytes).ok()?)
             .into_option()
             .map(Self::new)
     }
@@ -189,11 +189,11 @@ impl Scalar {
         let offset = extended.len() - bytes.len();
         extended[offset..].copy_from_slice(bytes); // zero pad
 
-        let fb0 = k256::FieldBytes::from_slice(&extended[..Self::BYTES]);
-        let fb1 = k256::FieldBytes::from_slice(&extended[Self::BYTES..]);
+        let fb0 = k256::FieldBytes::try_from(&extended[..Self::BYTES]).expect("Correct size");
+        let fb1 = k256::FieldBytes::try_from(&extended[Self::BYTES..]).expect("Correct size");
 
-        let s0 = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb0);
-        let s1 = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb1);
+        let s0 = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&fb0);
+        let s1 = <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&fb1);
 
         // 2^256 mod n (secp256k1 group order)
         let shift = k256::Scalar::from_repr(k256::FieldBytes::from(hex!(
@@ -302,8 +302,8 @@ impl Point {
     /// If the value encoded is not a valid point on the curve, then
     /// None is returned
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
-        match k256::EncodedPoint::from_bytes(bytes) {
-            Ok(ept) => k256::AffinePoint::from_encoded_point(&ept)
+        match k256::Sec1Point::from_bytes(bytes) {
+            Ok(ept) => k256::AffinePoint::from_sec1_point(&ept)
                 .into_option()
                 .map(|p| Self::new(k256::ProjectivePoint::from(p))),
             Err(_) => None,
@@ -330,7 +330,10 @@ impl Point {
     /// Equivalent to p1*s1 + p2*s2
     #[inline]
     pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
-        Self::new(k256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
+        Self::new(k256::ProjectivePoint::lincomb(&[
+            (p1.p, s1.s),
+            (p2.p, s2.s),
+        ]))
     }
 
     /// Perform multi-exponentiation
@@ -345,7 +348,7 @@ impl Point {
         p3: &Point,
         s3: &Scalar,
     ) -> Self {
-        Self::new(k256::ProjectivePoint::lincomb_ext(&[
+        Self::new(k256::ProjectivePoint::lincomb(&[
             (p1.p, s1.s),
             (p2.p, s2.s),
             (p3.p, s3.s),
@@ -355,7 +358,7 @@ impl Point {
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {
         let g = Self::generator();
         let h = Self::generator_h();
-        Self::new(k256::ProjectivePoint::lincomb(&g.p, &s1.s, &h.p, &s2.s))
+        Self::new(k256::ProjectivePoint::lincomb(&[(g.p, s1.s), (h.p, s2.s)]))
     }
 
     /// Add two points

@@ -107,6 +107,7 @@ rs/bitcoin/ckbtc/minter/* //rs/bitcoin/ckbtc/minter:ckbtc_minter_canbench_test
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test_local
 
 rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns_local
+                        //rs/migration_canister:migration_canister_test
 
 rs/node_rewards/canister/* //rs/nns/integration_tests:node_provider_remuneration
 

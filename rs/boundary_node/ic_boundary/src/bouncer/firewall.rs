@@ -87,7 +87,7 @@ impl Set {
             let mut set = HashSet::new();
 
             if let Some(elem) = &v.elem {
-                for x in elem {
+                for x in elem.iter() {
                     if let Expression::String(ip) = x {
                         set.insert(IpAddr::from_str(ip)?);
                     }
@@ -101,10 +101,10 @@ impl Set {
     }
 
     // Converts a list of ips into an NFTables object
-    fn convert(&self, addrs: Vec<IpAddr>) -> NfListObject {
+    fn convert(&self, addrs: Vec<IpAddr>) -> NfListObject<'static> {
         let elem = addrs
             .into_iter()
-            .map(|x| Expression::String(x.to_string()))
+            .map(|x| Expression::String(x.to_string().into()))
             .collect::<Vec<_>>();
 
         // There is a discrepancy between `cargo clippy` and `bazel lint`.
@@ -112,9 +112,9 @@ impl Set {
         #[allow(clippy::clone_on_copy)]
         NfListObject::Element(schema::Element {
             family: self.family,
-            table: self.table.clone(),
-            name: self.name.clone(),
-            elem,
+            table: self.table.clone().into(),
+            name: self.name.clone().into(),
+            elem: elem.into(),
         })
     }
 
@@ -139,7 +139,7 @@ impl Set {
     }
 
     // Applies the required changes to the given batch
-    fn apply(&self, batch: &mut Batch, addrs: Vec<IpAddr>) -> Result<bool, Error> {
+    fn apply(&self, batch: &mut Batch<'static>, addrs: Vec<IpAddr>) -> Result<bool, Error> {
         let new = addrs.into_iter().collect::<HashSet<_>>();
         let old = self.list()?;
 
@@ -198,7 +198,7 @@ impl NftablesFw {
     }
 
     // Prepares the batch with required changes that can be applied by nft
-    fn prepare_batch(&self, decisions: Vec<Decision>) -> Result<Option<Batch>, Error> {
+    fn prepare_batch(&self, decisions: Vec<Decision>) -> Result<Option<Batch<'static>>, Error> {
         let v4 = decisions
             .clone()
             .into_iter()
@@ -264,7 +264,7 @@ mod test {
     }
 
     impl Execute for MockExecutor {
-        fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables>, Error> {
+        fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables<'static>>, Error> {
             let payload =
                 serde_json::to_string(payload).context("failed to serialize Nftables struct")?;
             *self.stdin.lock().unwrap() = payload;

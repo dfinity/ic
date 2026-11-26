@@ -28,7 +28,7 @@ use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
-use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
+use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair, KeyUsagePurpose};
 use serde::{Deserialize, Deserializer, Serialize};
 use slog::info;
 use std::collections::BTreeMap;
@@ -552,7 +552,7 @@ impl InternetComputer {
             .distinguished_name
             .push(DnType::CommonName, domains[0].clone());
         let leaf_cert = leaf_params
-            .signed_by(&leaf_key, &ca_cert, &ca_key)
+            .signed_by(&leaf_key, &Issuer::from_params(&ca_params, &ca_key))
             .context("signing the API BN certificate")?;
 
         LocalApiBoundaryNodesPlaynet {

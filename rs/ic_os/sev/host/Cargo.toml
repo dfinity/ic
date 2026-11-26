@@ -4,7 +4,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-der = { workspace = true }
+der = { workspace = true, features = ["alloc", "pem"] }
 mockall = { workspace = true }
 reqwest = { workspace = true }
 sev = { workspace = true }

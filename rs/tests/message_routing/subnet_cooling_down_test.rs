@@ -1,8 +1,8 @@
 /* tag::catalog[]
 Title:: Draining and halting a subnet that is "cooling down", downloading,
 validating and merging the states of the subnets to merge, rerouting the
-canister ID ranges of the subnet, proposing the recovery CUP of the subnet it is
-merged into and uploading the merged state to it, with the subnet merging tool.
+canister ID ranges of the subnet, and recovering the subnet it is merged into
+at the merged state, with the subnet merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
@@ -14,8 +14,10 @@ condition to hold, and it then halts the subnet and the subnet it is told to
 merge it into at their next CUP, downloads and validates the state each halted
 at, assembles the merged state from them, has the canister ID ranges of the
 subnet rerouted to the subnet it is merged into, proposes the recovery CUP of
-that subnet at the merged state, and uploads the merged state to a node of that
-subnet. The cooling down subnet also holds calls
+that subnet at the merged state, uploads the merged state to a node of that
+subnet, waits until that node reports the recovery CUP, and unhalts that
+subnet, after which the canisters of the cooling down subnet are served by the
+subnet it is merged into. The cooling down subnet also holds calls
 waiting for responses that never arrive: they are not drained, but make it
 possible to assert that a subnet merge populates the ingress history properly.
 
@@ -147,14 +149,25 @@ Runbook::
    * The time is past the times of the CUPs both subnets halted at.
 
    Recovering a subnet that was instructed to halt at its next CUP replaces
-   that instruction with a plain halt, so also check that `D` is halted.
+   that instruction with a plain halt, so also check that `D` is halted: it
+   stays halted until `UnhaltDestinationSubnet`.
 21. Execute `UploadStateToDestinationSubnet`, which uploads the merged state to `D`'s
    node, replacing the state directory holding the checkpoint it halted at.
 22. Execute `RestartDestinationReplica` to set permissions on the installed
    state and start the vault and replica on that node.
 23. After `RestartDestinationReplica`: check that the checkpoints directory
-   of `D`'s node holds exactly the merged checkpoint, and that the replica on
-   that node is running again and started from it.
+   of `D`'s node holds no checkpoint below the merged checkpoint, i.e. the one
+   `D` halted at was replaced, and that the replica on that node is running
+   again at or above the height of the merged checkpoint.
+24. The following steps of the tool are executed:
+   `WaitForCupOnDestinationSubnet`, which waits until `D`'s node reports the
+   recovery CUP, i.e. it came up on the merged state, and
+   `UnhaltDestinationSubnet`, which submits a proposal unhalting `D`.
+25. After `UnhaltDestinationSubnet`: check that the call loops of `UDS` and
+   `UOS` of step 2, stalled since step 11, advance again. Their peers `USD` and
+   `USO` were hosted by `S` and are served by `D` now: `UDS`'s loop only
+   advances once `D` executes again, and `UOS`'s loop once the calls from `O`
+   to a canister of `S` are responded to again.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -164,8 +177,9 @@ query calls and becomes "merge ready", and the loops of `UDS` and `UOS` of step
 downloads from them pass validation, the merged state it assembles from them
 holds exactly the canisters of both, and the registry version the tool records
 routes the canister ID ranges of `S` to `D`; and the registry holds the
-recovery CUP contents of `D` at the merged state, with `D` halted; and the
-replica on `D`'s node runs on the merged state the tool uploaded to it.
+recovery CUP contents of `D` at the merged state, with `D` halted; the replica
+on `D`'s node runs on the merged state the tool uploaded to it; and once `D` is
+unhalted, the call loops of `UDS` and `UOS` advance again.
 
 end::catalog[] */
 
@@ -322,6 +336,11 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// into the timeout of its Bazel target.
 const HALT_TIMEOUT: Duration = Duration::from_millis(TWO_DKG_INTERVALS * ROUND_MILLIS);
 
+/// Timeout for the call loops of `UDS` and `UOS` to advance again once `D` is
+/// unhalted (step 25): the nodes of `D` have to pick up the registry version
+/// unhalting `D`, and `O` has to deliver the calls of `UOS` to `D`.
+const LOOPS_RESUMED_TIMEOUT: Duration = Duration::from_secs(180);
+
 /// How long the loops of `UDS` and `UOS` are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 
@@ -329,17 +348,19 @@ const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
 /// stay at the height their subnet halts at (step 13).
 const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 
-/// Timeouts of the test itself, above the sum of the timeouts of its steps
-/// (dominated by `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT` and
-/// the replica restart timeout, about 1700s together), so that a stuck step fails
-/// with its own error. `HALT_TIMEOUT` is counted once although it applies to
-/// each of the two subnets: both are scheduled to halt before either is waited
-/// for, so the two waits overlap. The overall timeout additionally covers the
-/// setup (booting the IC and installing the NNS) and has to stay well below the
-/// 3600s of the `eternal` timeout of the Bazel target, which also covers what
-/// runs outside of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2200);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(2800);
+/// Timeouts of the test itself, above the sum of the timeouts of its steps,
+/// so that a stuck step fails with its own error. The sum is dominated by
+/// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
+/// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
+/// 15s apart, about 525s) and `LOOPS_RESUMED_TIMEOUT`, about 2425s together.
+/// `HALT_TIMEOUT` is counted once although it applies to each of the two
+/// subnets: both are scheduled to halt before either is waited for, so the two
+/// waits overlap. The overall timeout additionally covers the setup (booting
+/// the IC and installing the NNS) and has to stay below the 3600s of the
+/// `eternal` timeout of the Bazel target, which also covers what runs outside
+/// of the test driver's own timeouts.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2900);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3400);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
@@ -664,7 +685,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 23: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 25: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -714,6 +735,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         merging_args,
     );
     let mut executed_steps = vec![];
+    let mut stalled_iterations = vec![];
     for (step_type, step) in merging {
         info!(logger, "Next step: {step_type:?}");
         info!(logger, "{}", step.descr());
@@ -729,7 +751,7 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
             }
             StepType::CheckMergeReadiness => {
                 info!(logger, "Step 10 done: subnet S is \"merge ready\"");
-                runtime.block_on(check_loops_stalled(context));
+                stalled_iterations = runtime.block_on(check_loops_stalled(context));
             }
             StepType::HaltSourceSubnetAtCupHeight => {}
             StepType::HaltDestinationSubnetAtCupHeight => {}
@@ -793,9 +815,17 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                 ));
                 info!(
                     logger,
-                    "Step 23 done: the replica on {} started from the merged checkpoint {checkpoint}",
+                    "Step 23 done: the replica on {} runs on the merged checkpoint {checkpoint}",
                     node.get_ip_addr()
                 );
+            }
+            StepType::WaitForCupOnDestinationSubnet => {}
+            StepType::UnhaltDestinationSubnet => {
+                info!(
+                    logger,
+                    "Step 24 done: subnet D came up on the merged state and is unhalted"
+                );
+                runtime.block_on(check_loops_resumed(context, &stalled_iterations));
             }
         }
     }
@@ -808,8 +838,8 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
     info!(
         logger,
         "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
-         merged, the canister ID ranges of S rerouted to D, the recovery CUP of D proposed and \
-         the merged state uploaded to D, by the subnet merging tool"
+         merged, the canister ID ranges of S rerouted to D, and D recovered at the merged state \
+         and unhalted, by the subnet merging tool"
     );
 }
 
@@ -1319,7 +1349,9 @@ async fn check_ingress_and_queries_rejected(context: &Context<'_>) {
 ///
 /// Iterations whose call to `S` was rejected with `SYS_TRANSIENT` do not count
 /// (see `start_call_loop`).
-async fn check_loops_stalled(context: &Context<'_>) {
+///
+/// Returns the iterations the loops are stalled at.
+async fn check_loops_stalled(context: &Context<'_>) -> Vec<u64> {
     let logger = &context.logger;
     info!(
         logger,
@@ -1332,7 +1364,7 @@ async fn check_loops_stalled(context: &Context<'_>) {
         before.push(global_counter(canister).await.unwrap());
     }
     tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
-    for ((canister, name), before) in canisters.into_iter().zip(before) {
+    for ((canister, name), &before) in canisters.into_iter().zip(&before) {
         let after = global_counter(canister).await.unwrap();
         assert_eq!(
             before, after,
@@ -1347,6 +1379,45 @@ async fn check_loops_stalled(context: &Context<'_>) {
     info!(
         logger,
         "Step 11 done: the call loops of UDS and UOS are stalled"
+    );
+    before
+}
+
+/// Step 25: check that the call loops of `UDS` and `UOS` advance past the
+/// iterations `stalled_iterations` they were stalled at in step 11, i.e. that
+/// their calls to `USD` and `USO`, which `D` serves after the merge, are
+/// replied again.
+async fn check_loops_resumed(context: &Context<'_>, stalled_iterations: &[u64]) {
+    let logger = &context.logger;
+    info!(
+        logger,
+        "Step 25: Checking that the call loops of UDS and UOS advance again"
+    );
+    let canisters = [(&context.uds, "UDS"), (&context.uos, "UOS")];
+    for ((canister, name), &stalled) in canisters.into_iter().zip(stalled_iterations) {
+        retry_with_msg_async!(
+            format!("waiting until {name}'s call loop advances past iteration {stalled}"),
+            logger,
+            LOOPS_RESUMED_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let iteration = global_counter(canister).await?;
+                if iteration <= stalled {
+                    bail!("{name}'s call loop is still at iteration {iteration}");
+                }
+                Ok(())
+            }
+        )
+        .await
+        .unwrap_or_else(|e| panic!("{name}'s call loop did not advance after the merge: {e}"));
+        info!(
+            logger,
+            "Step 25: {name}'s call loop advanced past iteration {stalled}"
+        );
+    }
+    info!(
+        logger,
+        "Step 25 done: the call loops of UDS and UOS advance again"
     );
 }
 

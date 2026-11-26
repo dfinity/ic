@@ -1976,7 +1976,7 @@ fn credit_refund() {
 /// persisted subnet-level total and the loaded canisters, exactly as
 /// `refresh_consumed_cycles` does on every commit. Were the two to diverge, the
 /// certified `/subnet/<subnet_id>/metrics` subtree -- and hence the state hash
-/// from certification version `V29` on -- would differ across a restart.
+/// -- would differ across a restart.
 #[test]
 fn consumed_cycles_total_is_the_same_across_a_restart() {
     // Non-zero subnet-level consumption, covering both ways it accumulates:
