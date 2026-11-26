@@ -165,7 +165,7 @@ fn manage_neuron_args_exceeding_decoding_quotas() -> Vec<(&'static str, Vec<u8>)
 }
 
 fn set_dissolve_timestamp_sender() -> PrincipalId {
-    PrincipalId::new_user_test_id(1)
+    PrincipalId::new_anonymous()
 }
 
 fn set_dissolve_timestamp_update(

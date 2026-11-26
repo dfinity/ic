@@ -29,9 +29,12 @@ use ic_nns_governance_api::{
     manage_neuron, manage_neuron::NeuronIdOrSubaccount,
 };
 use ic_types::{
-    CanisterId, PrincipalId,
-    messages::{HttpCanisterUpdate, HttpReadStateContent},
+    CanisterId, PrincipalId, Time,
+    messages::{
+        HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState, SignedIngressContent,
+    },
 };
+use ic_validator_ingress_message::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
 
 const MANAGE_NEURON: &str = "manage_neuron";
 const CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT: &str = "claim_or_refresh_neuron_from_account";
@@ -74,7 +77,8 @@ pub fn verify_signed_envelopes<'a>(
 ///
 /// The envelopes must carry the same update up to `ingress_expiry`, and each
 /// must pair its update with the read-state call for that update's result.
-/// `/construction/combine` builds envelopes exactly this way.
+/// `/construction/combine` builds envelopes exactly this way. Both calls must
+/// also carry signatures that the IC accepts.
 pub fn representative_envelope(
     envelopes: &[EnvelopePair],
 ) -> Result<&HttpCanisterUpdate, ApiError> {
@@ -93,6 +97,7 @@ pub fn representative_envelope(
             ));
         }
         verify_read_state(envelope)?;
+        verify_signatures(envelope)?;
     }
     Ok(representative)
 }
@@ -436,6 +441,35 @@ fn mismatch(field: &str, displayed: u64, signed: u64, source: &str) -> ApiError 
         "Rosetta would display {field} {displayed}, but {source} says {signed}. Refusing \
          to describe a request that differs from the payload being signed."
     ))
+}
+
+/// The IC rejects a call that is not signed by the key its sender is derived
+/// from. A rejected read-state call would make `/construction/submit` report a
+/// failure for an update that executes. Expiry is checked on submission, so the
+/// signatures are checked as of the envelope's own expiry.
+fn verify_signatures(envelope: &EnvelopePair) -> Result<(), ApiError> {
+    let invalid = |err: String| {
+        ApiError::invalid_request(format!(
+            "Refusing a signed request whose envelope the IC would reject: {err}"
+        ))
+    };
+    let verifier = IngressMessageVerifier::builder()
+        .with_time_provider(TimeProvider::Constant(Time::from_nanos_since_unix_epoch(
+            envelope.update_content().ingress_expiry,
+        )))
+        .build();
+
+    let update = HttpRequest::<SignedIngressContent>::try_from(envelope.update.clone())
+        .map_err(|err| invalid(err.to_string()))?;
+    verifier
+        .validate_request(&update)
+        .map_err(|err| invalid(err.to_string()))?;
+
+    let read_state = HttpRequest::<ReadState>::try_from(envelope.read_state.clone())
+        .map_err(|err| invalid(err.to_string()))?;
+    verifier
+        .validate_request(&read_state)
+        .map_err(|err| invalid(err.to_string()))
 }
 
 #[cfg(test)]

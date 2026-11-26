@@ -31,6 +31,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
+ic-validator-ingress-message = { path = "../../validator/ingress_message" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
