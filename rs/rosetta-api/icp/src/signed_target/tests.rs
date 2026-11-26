@@ -100,6 +100,7 @@ mod read_state_signatures {
     use crate::{
         models::SignedTransaction, request_handler::make_sig_data, request_types::RequestType,
     };
+    use ic_types::messages::{Delegation, SignedDelegation};
     use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
 
     const NOW: u64 = 1_700_000_000_000_000_000;
@@ -139,34 +140,104 @@ mod read_state_signatures {
     }
 
     #[test]
-    fn the_sent_read_state_call_of_every_request_must_be_signed_by_its_sender() {
+    fn the_read_state_call_of_every_unexpired_envelope_must_be_signed_by_its_sender() {
+        let expired = signed(&key(2), NOW);
+        let future =
+            |read_state_key: &Ed25519KeyPair| signed(read_state_key, NOW + 600_000_000_000);
         let mut corrupted = current(&key(1));
         corrupted.read_state.sender_sig = Some(Blob(vec![0; 64]));
-        let expired = signed(&key(2), NOW);
+        let mut without_credentials = current(&key(1));
+        without_credentials.read_state.sender_pubkey = None;
+        without_credentials.read_state.sender_sig = None;
+        let mut malformed_key = current(&key(1));
+        malformed_key.read_state.sender_pubkey = Some(Blob(vec![1, 2, 3]));
 
         verify(vec![
             vec![current(&key(1))],
-            vec![expired, current(&key(1))],
+            vec![expired, current(&key(1)), future(&key(1))],
         ])
         .unwrap();
-        for bad in [corrupted, current(&key(2))] {
+        for bad in [
+            vec![corrupted],
+            vec![current(&key(2))],
+            vec![current(&key(1)), future(&key(2))],
+            vec![without_credentials],
+            vec![malformed_key],
+        ] {
             assert_rejected(
-                verify(vec![vec![current(&key(1))], vec![bad]]),
+                verify(vec![vec![current(&key(1))], bad]),
                 "whose read-state call the IC would reject",
             );
         }
     }
 
     #[test]
-    fn read_state_calls_that_depend_on_the_ic_are_left_to_it() {
-        let mut delegated = current(&key(2));
-        delegated.read_state.sender_delegation = Some(vec![]);
-        let mut anonymous = current(&key(2));
-        anonymous.read_state.sender_pubkey = None;
-        let mut unknown_key = current(&key(2));
-        unknown_key.read_state.sender_pubkey = Some(Blob(vec![1, 2, 3]));
+    fn submit_sends_the_valid_envelope_that_expires_last() {
+        let now = Time::from_nanos_since_unix_epoch(NOW);
+        let expired = signed(&key(1), NOW);
+        let expiring = signed(&key(1), NOW + 1_000_000_000);
+        let fresh = signed(&key(1), NOW + 200_000_000_000);
+        let future = signed(&key(1), NOW + 600_000_000_000);
 
-        verify(vec![vec![delegated], vec![anonymous], vec![unknown_key]]).unwrap();
+        let envelopes = [expired, expiring, fresh.clone(), future];
+        assert_eq!(current_envelope(&envelopes, now), Some(&fresh));
+        assert_eq!(current_envelope(&envelopes[..1], now), None);
+    }
+
+    fn delegation() -> Option<Vec<SignedDelegation>> {
+        Some(vec![SignedDelegation::new(
+            Delegation::new(vec![1, 2, 3], Time::from_nanos_since_unix_epoch(NOW + 1)),
+            vec![0; 64],
+        )])
+    }
+
+    fn canister_key() -> Blob {
+        let mut der = vec![
+            0x30, 0x1b, 0x30, 0x0c, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xb8, 0x43,
+            0x01, 0x02, 0x03, 0x0b, 0x00,
+        ];
+        der.extend_from_slice(b"public key");
+        let (key, _) = user_public_key_from_bytes(&der).unwrap();
+        assert_eq!(key.algorithm_id, AlgorithmId::IcCanisterSignature);
+        Blob(der)
+    }
+
+    #[test]
+    fn delegated_and_canister_signed_read_state_calls_must_be_from_their_sender() {
+        let mut delegated = current(&key(1));
+        delegated.read_state.sender_delegation = delegation();
+        let mut canister_signed = pair(HttpCanisterUpdate {
+            sender: Blob(PrincipalId::new_self_authenticating(&canister_key().0).into_vec()),
+            ingress_expiry: NOW + 60_000_000_000,
+            ..update(b"disburse neuron 7")
+        });
+        canister_signed.read_state.sender_pubkey = Some(canister_key());
+        canister_signed.read_state.sender_sig = Some(Blob(vec![0; 64]));
+        let anonymous = pair(HttpCanisterUpdate {
+            sender: Blob(PrincipalId::new_anonymous().into_vec()),
+            ingress_expiry: NOW + 60_000_000_000,
+            ..update(b"disburse neuron 7")
+        });
+        verify(vec![
+            vec![delegated],
+            vec![canister_signed],
+            vec![anonymous],
+        ])
+        .unwrap();
+
+        let mut empty_delegation = current(&key(1));
+        empty_delegation.read_state.sender_delegation = Some(vec![]);
+        empty_delegation.read_state.sender_sig = Some(Blob(vec![0; 64]));
+        let mut foreign_delegation = current(&key(2));
+        foreign_delegation.read_state.sender_delegation = delegation();
+        let mut foreign_canister_key = current(&key(1));
+        foreign_canister_key.read_state.sender_pubkey = Some(canister_key());
+        for bad in [empty_delegation, foreign_delegation, foreign_canister_key] {
+            assert_rejected(
+                verify(vec![vec![bad]]),
+                "whose read-state call the IC would reject",
+            );
+        }
     }
 }
 
