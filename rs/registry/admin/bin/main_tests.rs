@@ -351,6 +351,23 @@ fn split_subnet_parses_flags_and_derives_title() {
 }
 
 #[test]
+fn pause_and_unpause_canister_migrations_parse_and_derive_titles() {
+    let SubCommand::ProposeToPauseCanisterMigrations(cmd) =
+        Opts::parse_from(["ic-admin", "propose-to-pause-canister-migrations"]).subcmd
+    else {
+        panic!("Expected a ProposeToPauseCanisterMigrations sub-command");
+    };
+    assert_eq!(cmd.title(), "Pause canister migrations");
+
+    let SubCommand::ProposeToUnpauseCanisterMigrations(cmd) =
+        Opts::parse_from(["ic-admin", "propose-to-unpause-canister-migrations"]).subcmd
+    else {
+        panic!("Expected a ProposeToUnpauseCanisterMigrations sub-command");
+    };
+    assert_eq!(cmd.title(), "Unpause canister migrations");
+}
+
+#[test]
 fn convert_from_flags_to_create_service_nervous_system_without_start_time() {
     let logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
     let token_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAAAAAAEAAEvUrSNAAAAAElFTkSuQmCC";
