@@ -3103,6 +3103,8 @@ dependencies = [
  "deterministic_ips",
  "fs_extra",
  "ic-config",
+ "ic-types",
+ "idna",
  "ipnet",
  "macaddr",
  "network",
