@@ -1,9 +1,12 @@
 use anyhow::ensure;
 use ic_recovery::{IC_CHECKPOINTS_PATH, IC_DATA_PATH};
 use ic_subnet_merging::metrics_helper::{fetch_available_metrics, replica_values};
-use ic_system_test_driver::driver::test_env_api::{IcNodeSnapshot, RETRY_BACKOFF, SshSession};
+use ic_system_test_driver::driver::test_env_api::{
+    HasRegistryVersion, IcNodeSnapshot, RETRY_BACKOFF, SshSession, TopologySnapshot,
+};
 use ic_system_test_driver::retry_with_msg_async;
-use slog::Logger;
+use ic_types::SubnetId;
+use slog::{Logger, info};
 use std::time::Duration;
 
 const REPLICA_RESTART_TIMEOUT: Duration = Duration::from_secs(300);
@@ -70,4 +73,32 @@ pub(crate) async fn check_merged_state_running(
     .unwrap_or_else(|e| {
         panic!("the replica on node {node_ip} did not start from the merged state: {e}")
     });
+}
+
+/// Checks that the registry no longer holds the source subnet, after syncing
+/// `topology` to the newest registry version.
+///
+/// Precondition: the registry canister has already deleted the source subnet,
+/// so a single sync suffices and the check does not wait for the deletion.
+pub(crate) async fn check_source_subnet_deleted(
+    logger: &Logger,
+    topology: &TopologySnapshot,
+    source_subnet_id: SubnetId,
+) {
+    let topology = topology
+        .block_for_newest_mainnet_registry_version()
+        .await
+        .expect("failed to sync the registry with the NNS");
+    let remaining: Vec<_> = topology.subnets().map(|subnet| subnet.subnet_id).collect();
+    assert!(
+        !remaining.contains(&source_subnet_id),
+        "subnet {source_subnet_id} is still in the registry at version {}: {remaining:?}",
+        topology.get_registry_version(),
+    );
+    info!(
+        logger,
+        "Subnet {source_subnet_id} is gone as of registry version {}; the remaining subnets are \
+         {remaining:?}",
+        topology.get_registry_version(),
+    );
 }

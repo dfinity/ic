@@ -27,7 +27,8 @@ Runbook::
    state of its own node with the merged state, waits until its own node
    reports the recovery CUP, unhalts `D`, waits until every subnet other than
    `S` routes the canisters of `S` to `D`, deletes `S`, and waits until the
-   registry no longer holds `S`.
+   registry no longer holds `S`. Then check that the registry the test
+   driver observes no longer holds `S` either.
 3. Check that the merged state on the node of `D` is a single checkpoint
    holding the canisters of both `S` and `D`, and that the registry holds the
    recovery CUP of `D` at the height of that checkpoint.
@@ -233,6 +234,17 @@ pub fn test(env: TestEnv) {
         s_subnet.subnet_id,
         d_subnet.subnet_id,
     );
+    runtime.block_on(subnet_merging_checks::check_source_subnet_deleted(
+        &logger,
+        &topology,
+        s_subnet.subnet_id,
+    ));
+    info!(
+        logger,
+        "Step 2 done: the subnet merging tool ran through all its steps but Cleanup on node \
+         {}, and S is gone from the registry",
+        d_node.get_ip_addr()
+    );
 
     let merged_checkpoint =
         check_merged_state_proposed(&env, &d_node, d_subnet.subnet_id, &canisters);
@@ -251,7 +263,9 @@ pub fn test(env: TestEnv) {
 }
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
-/// of `S`, through all its steps but `Cleanup` and without prompts.
+/// of `S`, through all its steps but `Cleanup` and without prompts. `Cleanup`
+/// is skipped because it would delete the working directory of the tool, which
+/// the later steps inspect.
 fn run_tool_on_node(
     env: &TestEnv,
     s_node: &IcNodeSnapshot,
@@ -324,12 +338,6 @@ fn run_tool_on_node(
         Ok(output) => info!(logger, "The subnet merging tool finished:\n{output}"),
         Err(err) => panic!("The subnet merging tool failed on node {d_node_ip}:\n{err}"),
     }
-
-    info!(
-        logger,
-        "Step 2 done: the subnet merging tool ran through all its steps but Cleanup on node \
-         {d_node_ip}, and S is deleted"
-    );
 }
 
 /// Step 3: check that the tool assembled the merged state in its directory on

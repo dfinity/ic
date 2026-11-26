@@ -24,7 +24,7 @@ use ic_recovery::{
     },
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
-use ic_registry_client_helpers::subnet::SubnetListRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
@@ -1046,22 +1046,17 @@ impl Step for CheckSourceSubnetDeletedStep {
             &self.logger,
             || {
                 let registry_version = self.registry_helper.latest_registry_version()?;
-                let subnet_ids = self
+                let deleted = self
                     .registry_helper
                     .registry_client()
-                    .get_subnet_ids(registry_version)
+                    .is_subnet_deleted(source_subnet_id, registry_version)
                     .map_err(|err| {
                         RecoveryError::RegistryError(format!(
-                            "Failed to get the subnet ids at registry version \
-                             {registry_version}: {err}"
-                        ))
-                    })?
-                    .ok_or_else(|| {
-                        RecoveryError::RegistryError(format!(
-                            "No subnet list at registry version {registry_version}"
+                            "Failed to check whether subnet {source_subnet_id} is deleted at \
+                             registry version {registry_version}: {err}"
                         ))
                     })?;
-                if subnet_ids.contains(&source_subnet_id) {
+                if !deleted {
                     return Err(RecoveryError::RegistryError(format!(
                         "Subnet {source_subnet_id} is still in the registry at version \
                          {registry_version}"
