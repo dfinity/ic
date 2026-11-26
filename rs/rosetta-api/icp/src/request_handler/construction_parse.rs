@@ -846,7 +846,7 @@ mod tests {
             canister_id: Blob(CanisterId::from_u64(1).get().to_vec()),
             method_name: "manage_neuron".to_string(),
             arg: Blob(arg),
-            sender: Blob(PrincipalId::new_user_test_id(1).to_vec()),
+            sender: Blob(PrincipalId::new_anonymous().to_vec()),
             ingress_expiry: 1,
             nonce: None,
             sender_info: None,
