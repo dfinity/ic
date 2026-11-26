@@ -13,7 +13,7 @@ use crate::{
 };
 use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_types::{
-    Time,
+    PrincipalId, Time,
     crypto::AlgorithmId,
     messages::{HttpCanisterUpdate, HttpReadStateContent, HttpRequest, ReadState},
 };
@@ -97,9 +97,10 @@ fn ingress_window(envelope: &EnvelopePair) -> (Time, Time) {
 /// call, so a read-state call the IC rejects would report an update that
 /// executes as failed. Each request's envelope is picked when that request is
 /// sent, so every unexpired envelope is checked, as of the start of its ingress
-/// window or `now` if later. A read-state call that carries a delegation or is
-/// signed with a canister signature is left to the IC, since its validity
-/// depends on the IC's clock or root key.
+/// window or `now` if later. Of a read-state call that carries a delegation or
+/// is signed with a canister signature, only that its sender is derived from
+/// its public key is checked, since the rest depends on the IC's clock or root
+/// key.
 pub fn verify_read_state_signatures(
     transaction: &SignedTransaction,
     now: Time,
@@ -116,13 +117,34 @@ pub fn verify_read_state_signatures(
 }
 
 fn verify_read_state_signature(envelope: &EnvelopePair, at: Time) -> Result<(), ApiError> {
+    let refuse = |err: String| {
+        ApiError::invalid_request(format!(
+            "Refusing to submit a request whose read-state call the IC would \
+             reject, since the outcome of its update could not be reported: {err}"
+        ))
+    };
     let read_state = &envelope.read_state;
-    let depends_on_ic = read_state.sender_delegation.is_some()
-        || read_state.sender_pubkey.as_ref().is_some_and(|key| {
-            user_public_key_from_bytes(&key.0)
-                .is_ok_and(|(key, _)| key.algorithm_id == AlgorithmId::IcCanisterSignature)
-        });
-    if depends_on_ic {
+    let delegated = read_state
+        .sender_delegation
+        .as_ref()
+        .is_some_and(|delegations| !delegations.is_empty());
+    let canister_signed = read_state.sender_pubkey.as_ref().is_some_and(|key| {
+        user_public_key_from_bytes(&key.0)
+            .is_ok_and(|(key, _)| key.algorithm_id == AlgorithmId::IcCanisterSignature)
+    });
+    if delegated || canister_signed {
+        let HttpReadStateContent::ReadState {
+            read_state: content,
+        } = &read_state.content;
+        let derived = read_state
+            .sender_pubkey
+            .as_ref()
+            .map(|key| PrincipalId::new_self_authenticating(&key.0).into_vec());
+        if derived.as_ref() != Some(&content.sender.0) {
+            return Err(refuse(
+                "its sender is not derived from its public key".to_string(),
+            ));
+        }
         return Ok(());
     }
     let verifier = IngressMessageVerifier::builder()
@@ -135,12 +157,7 @@ fn verify_read_state_signature(envelope: &EnvelopePair, at: Time) -> Result<(), 
                 .validate_request(&request)
                 .map_err(|err| err.to_string())
         })
-        .map_err(|err| {
-            ApiError::invalid_request(format!(
-                "Refusing to submit a request whose read-state call the IC would \
-                 reject, since the outcome of its update could not be reported: {err}"
-            ))
-        })
+        .map_err(refuse)
 }
 
 #[cfg(test)]
@@ -228,6 +245,7 @@ mod tests {
         use crate::{
             models::SignedTransaction, request_handler::make_sig_data, request_types::RequestType,
         };
+        use ic_types::messages::{Delegation, SignedDelegation};
         use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
 
         const NOW: u64 = 1_700_000_000_000_000_000;
@@ -311,17 +329,60 @@ mod tests {
             assert_eq!(current_envelope(&envelopes[..1], now), None);
         }
 
+        fn delegation() -> Option<Vec<SignedDelegation>> {
+            Some(vec![SignedDelegation::new(
+                Delegation::new(vec![1, 2, 3], Time::from_nanos_since_unix_epoch(NOW + 1)),
+                vec![0; 64],
+            )])
+        }
+
+        fn canister_key() -> Blob {
+            let mut der = vec![
+                0x30, 0x1b, 0x30, 0x0c, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xb8, 0x43,
+                0x01, 0x02, 0x03, 0x0b, 0x00,
+            ];
+            der.extend_from_slice(b"public key");
+            let (key, _) = user_public_key_from_bytes(&der).unwrap();
+            assert_eq!(key.algorithm_id, AlgorithmId::IcCanisterSignature);
+            Blob(der)
+        }
+
         #[test]
-        fn delegated_and_anonymous_read_state_calls_are_not_refused() {
-            let mut delegated = current(&key(2));
-            delegated.read_state.sender_delegation = Some(vec![]);
-            let anonymous = pair(HttpCanisterUpdate {
-                sender: Blob(ic_types::PrincipalId::new_anonymous().into_vec()),
+        fn delegated_and_canister_signed_read_state_calls_must_be_from_their_sender() {
+            let mut delegated = current(&key(1));
+            delegated.read_state.sender_delegation = delegation();
+            let mut canister_signed = pair(HttpCanisterUpdate {
+                sender: Blob(PrincipalId::new_self_authenticating(&canister_key().0).into_vec()),
                 ingress_expiry: NOW + 60_000_000_000,
                 ..update(b"disburse neuron 7")
             });
+            canister_signed.read_state.sender_pubkey = Some(canister_key());
+            canister_signed.read_state.sender_sig = Some(Blob(vec![0; 64]));
+            let anonymous = pair(HttpCanisterUpdate {
+                sender: Blob(PrincipalId::new_anonymous().into_vec()),
+                ingress_expiry: NOW + 60_000_000_000,
+                ..update(b"disburse neuron 7")
+            });
+            verify(vec![
+                vec![delegated],
+                vec![canister_signed],
+                vec![anonymous],
+            ])
+            .unwrap();
 
-            verify(vec![vec![delegated], vec![anonymous]]).unwrap();
+            let mut empty_delegation = current(&key(1));
+            empty_delegation.read_state.sender_delegation = Some(vec![]);
+            empty_delegation.read_state.sender_sig = Some(Blob(vec![0; 64]));
+            let mut foreign_delegation = current(&key(2));
+            foreign_delegation.read_state.sender_delegation = delegation();
+            let mut foreign_canister_key = current(&key(1));
+            foreign_canister_key.read_state.sender_pubkey = Some(canister_key());
+            for bad in [empty_delegation, foreign_delegation, foreign_canister_key] {
+                assert_rejected(
+                    verify(vec![vec![bad]]),
+                    "whose read-state call the IC would reject",
+                );
+            }
         }
     }
 
