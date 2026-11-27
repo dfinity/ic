@@ -406,6 +406,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_venice_is_rejected_before_firmware_access() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().to_path_buf();
+
+        // The mock has no expectations, so any firmware call panics. Without the firmware's chip
+        // id and TCB, the provider can't query the AMD key server either.
+        let firmware = MockSevHostFirmware::new();
+
+        assert!(
+            HostSevCertificateProvider::new_for_test(
+                cache_dir,
+                Box::new(firmware),
+                Generation::Venice,
+            )
+            .load_certificate_chain_pem()
+            .await
+            .expect_err("Expected error")
+            .to_string()
+            .contains("SEV-SNP certificate chain is not supported on Venice")
+        );
+    }
+
+    #[tokio::test]
     async fn test_invalid_cached_certificate() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
