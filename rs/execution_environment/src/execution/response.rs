@@ -210,6 +210,7 @@ impl ResponseHelper {
                 round.log,
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
+                response.deadline,
                 original.callback.prepayment_for_response_transmission,
                 original.subnet_cycles_config,
             );

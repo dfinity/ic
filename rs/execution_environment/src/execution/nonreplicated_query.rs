@@ -85,6 +85,15 @@ pub fn execute_non_replicated_query(
             ),
             None,
         ),
+        NonReplicatedQueryKind::Transform => (
+            ApiType::transform(
+                time,
+                hypervisor.subnet_id(),
+                payload.to_vec(),
+                data_certificate,
+            ),
+            None,
+        ),
         NonReplicatedQueryKind::Stateful {
             call_origin,
             sender_info,

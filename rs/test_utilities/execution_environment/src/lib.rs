@@ -2490,6 +2490,7 @@ impl ExecutionTest {
                 &self.log,
                 &no_op_counter,
                 response,
+                ic_types::messages::NO_DEADLINE,
                 prepayment_for_response_transmission,
                 self.get_own_subnet_cycles_config(),
             )

@@ -6,7 +6,7 @@ use ic_https_outcalls_pricing::{
 };
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
-    HttpsOutcallResult, https_outcall_result,
+    HttpsOutcallResult, MAX_MESSAGE_SIZE_BYTES, https_outcall_result,
     https_outcalls_service_client::HttpsOutcallsServiceClient,
 };
 use ic_interfaces::execution_environment::{
@@ -23,7 +23,7 @@ use ic_types::{
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        CanisterHttpResponseContent, DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Replication, Transform,
         validate_http_headers_and_body,
     },
@@ -145,7 +145,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // Tonic clients use &mut self and can only send one request at a time.
         // It is suggested to clone the underlying channel which is cheap.
         // https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html
-        let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
+        let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone())
+            .max_decoding_message_size(MAX_MESSAGE_SIZE_BYTES);
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let pricing_factory = self.pricing_factory.clone();
@@ -186,7 +187,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             // The response size cap the caller asked for, which is what we hold
             // the final (post-transform) response to.
             let max_response_size_bytes = request_max_response_bytes
-                .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get());
+                .map_or(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, |bytes| bytes.get());
             let is_flexible = matches!(request_replication, Replication::Flexible { .. });
 
             let mut payload = async {
@@ -205,7 +206,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 .await?;
 
                 // Validate and convert the adapter response.
-                let canister_http_payload = validate_response(adapter_response)?;
+                let canister_http_payload =
+                    validate_response(adapter_response, max_response_size_bytes)?;
 
                 metrics
                     .http_request_duration
@@ -494,9 +496,10 @@ async fn execute_http_request(
 }
 
 /// Convert the raw adapter response into a [`CanisterHttpResponsePayload`]
-/// and validate its headers and body.
+/// and validate its headers and body, which must not exceed `max_response_size_bytes`.
 fn validate_response(
     response: HttpsOutcallResponse,
+    max_response_size_bytes: u64,
 ) -> Result<CanisterHttpResponsePayload, CanisterHttpReject> {
     let HttpsOutcallResponse {
         status,
@@ -518,6 +521,7 @@ fn validate_response(
     validate_http_headers_and_body(
         canister_http_payload.headers.get(),
         &canister_http_payload.body,
+        max_response_size_bytes,
     )
     .map_err(|e| CanisterHttpReject {
         reject_code: RejectCode::SysFatal,
@@ -1081,6 +1085,57 @@ mod tests {
             }
         }
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
+    }
+
+    /// The client delivers the largest response that a bounded-wait call may ask for.
+    #[tokio::test]
+    async fn test_client_delivers_the_largest_bounded_wait_response() {
+        use ic_types::canister_http::MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES;
+
+        let headers = vec![HttpHeader {
+            name: "Content-Type".to_string(),
+            value: "application/octet-stream".to_string(),
+        }];
+        let headers_size: usize = headers.iter().map(|h| h.name.len() + h.value.len()).sum();
+        let body =
+            vec![0xAB; MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES as usize - headers_size];
+        let response = HttpsOutcallResponse {
+            status: 200,
+            headers: headers.clone(),
+            content: body.clone(),
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
+        let (svc, _handle) = setup_system_query_mock();
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+            MetricsRegistry::default(),
+            no_op_logger(),
+        );
+
+        let mut request = build_mock_canister_http_request(420, None);
+        request.context.max_response_bytes = Some(NumBytes::from(
+            MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
+        ));
+        assert_eq!(client.send(request), Ok(()));
+        let response = loop {
+            match client.try_receive() {
+                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Ok((response, _)) => break response,
+            }
+        };
+
+        // Describe a mismatch without printing megabytes of body.
+        assert!(
+            response == build_mock_canister_http_response_success(420, 200, headers, body),
+            "unexpected response: {}",
+            match &response.content {
+                CanisterHttpResponseContent::Success(content) => format!("{} bytes", content.len()),
+                CanisterHttpResponseContent::Reject(reject) => format!("{reject:?}"),
+            }
+        );
     }
 
     /// Test case where adapter encounters an UNAVAILABLE  error in executing the http request.
@@ -1909,6 +1964,7 @@ mod tests {
     async fn test_max_response_size() {
         use ic_types::batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE;
         use ic_types::canister_http::{
+            MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
             MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH, MAX_CANISTER_HTTP_HEADER_NUM,
             MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE,
         };
@@ -1926,28 +1982,29 @@ mod tests {
                 value: h,
             });
         }
-        let x = build_mock_canister_http_response_success(
-            420,
-            200,
-            headers,
-            vec![
-                0;
-                (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) - MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
-            ],
-        );
-        if let CanisterHttpResponseContent::Success(content) = x.content {
-            // Subtract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
-            assert!(content.len() <= MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024);
-            assert!(
-                content.len() as u64
-                    <= MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES,
-                "encoding the largest allowed response overflows the \
-                 {CANDID_OVERHEAD_RESERVE_BYTES}-byte Candid reserve: {} bytes encoded, from \
-                 {MAX_CANISTER_HTTP_RESPONSE_BYTES} bytes of headers and body",
-                content.len(),
+        for max_response_bytes in [
+            MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
+        ] {
+            let x = build_mock_canister_http_response_success(
+                420,
+                200,
+                headers.clone(),
+                vec![0; (max_response_bytes as usize) - MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE],
             );
-        } else {
-            panic!("build_mock_canister_http_response_success should not return this case");
+            if let CanisterHttpResponseContent::Success(content) = x.content {
+                // Subtract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
+                assert!(content.len() <= MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024);
+                assert!(
+                    content.len() as u64 <= max_response_bytes + CANDID_OVERHEAD_RESERVE_BYTES,
+                    "encoding the largest allowed response overflows the \
+                     {CANDID_OVERHEAD_RESERVE_BYTES}-byte Candid reserve: {} bytes encoded, from \
+                     {max_response_bytes} bytes of headers and body",
+                    content.len(),
+                );
+            } else {
+                panic!("build_mock_canister_http_response_success should not return this case");
+            }
         }
     }
 }

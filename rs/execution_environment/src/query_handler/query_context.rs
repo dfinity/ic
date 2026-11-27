@@ -219,9 +219,12 @@ impl<'a> QueryContext<'a> {
         };
 
         let query_kind = match &method {
-            WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
-                caller: query.source(),
-                sender_info: query.sender_info(),
+            WasmMethod::Query(_) => match query.source {
+                QuerySource::System => NonReplicatedQueryKind::Transform,
+                QuerySource::User { .. } => NonReplicatedQueryKind::Pure {
+                    caller: query.source(),
+                    sender_info: query.sender_info(),
+                },
             },
             WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),

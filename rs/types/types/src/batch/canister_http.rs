@@ -23,11 +23,17 @@ use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
-pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
+pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
 
-/// The total [`CountBytes`] up to which the payload builder delivers a flexible outcall's
-/// responses, so that the whole group still fits into a payload once encoded.
-pub const MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize =
+/// The total [`CountBytes`] up to which the payload builder delivers the responses of a
+/// flexible outcall made by an unbounded-wait call, so that once encoded they fit into the
+/// response memory reserved for the call.
+pub const MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize = 2 * 1024 * 1024 - 64 * 1024;
+
+/// The total [`CountBytes`] up to which the payload builder delivers the responses of a
+/// flexible outcall made by a bounded-wait call, so that the whole group still fits into a
+/// payload once encoded.
+pub const MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize =
     MAX_CANISTER_HTTP_PAYLOAD_SIZE - 64 * 1024;
 
 /// The smallest response content that P2P strips from block proposals sent to peers.

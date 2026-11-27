@@ -24,7 +24,7 @@ use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseShare,
-        MAX_CANISTER_HTTP_REJECT_BYTES, MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication,
+        DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, MAX_CANISTER_HTTP_REJECT_BYTES, Replication,
         ReplicationKind, canister_http_threshold, max_http_outcall_response_size,
     },
 };
@@ -354,7 +354,7 @@ pub fn max_usage_fee(
 ) -> Cycles {
     let replication_kind = replication.kind();
     let raw_response_size =
-        max_response_bytes.unwrap_or(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES));
+        max_response_bytes.unwrap_or(NumBytes::from(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES));
     usage_fee(
         replication_kind,
         MAX_RESPONSE_TIME,
@@ -539,6 +539,7 @@ mod tests {
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
             CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
+            MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES, MAX_CANISTER_HTTP_RESPONSE_BYTES,
         },
         crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
         messages::CallbackId,
@@ -1000,7 +1001,7 @@ mod tests {
     const MAX_TRANSFORM_FEE: u128 = 5_000_000_000 / 13; // 384_615_384
     /// The consensus fee at N = 13 of delivering the largest response a *fully*
     /// replicated outcall without a response limit may have, i.e.
-    /// `MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES`. Its
+    /// `DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES`. Its
     /// allowance is split across all 13 replicas while only the `threshold` of 9 that
     /// agree on the response contribute their share of the fee, so the plain
     /// `9_490 * 2_001_024 = 18_989_717_760` is scaled to
@@ -1368,12 +1369,13 @@ mod tests {
 
     #[test]
     fn the_replicas_behind_a_result_cover_its_consensus_fee() {
-        const SIZES: [u64; 5] = [
+        const SIZES: [u64; 6] = [
             0,
             1_000,
             MAX_CANISTER_HTTP_REJECT_BYTES,
             100_000,
             MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
         ];
         for subnet_size in [1, 4, 7, 13, 34, 40].map(NumberOfNodes::from) {
             for transformed_bytes in SIZES {
@@ -1631,7 +1633,7 @@ mod tests {
                     usage_fee(
                         replication_kind,
                         MAX_RESPONSE_TIME,
-                        NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES),
+                        NumBytes::from(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES),
                         MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
                         NumBytes::from(max_http_outcall_response_size(None)),
                         subnet_size,
@@ -1646,7 +1648,7 @@ mod tests {
                     (Duration::from_secs(30), 1_000_000, 2_500_000_000, 1_000_000),
                     (
                         MAX_RESPONSE_TIME,
-                        MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                        DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
                         MAX_INSTRUCTIONS_PER_QUERY_MESSAGE.get(),
                         max_http_outcall_response_size(None) - 1,
                     ),

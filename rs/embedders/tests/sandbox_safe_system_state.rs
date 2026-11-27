@@ -270,6 +270,7 @@ fn correct_charging_source_canister_for_a_request() {
         &no_op_logger(),
         &no_op_counter,
         &response.response_payload,
+        response.deadline,
         request.prepayment_for_response_transmission,
         subnet_cycles_config,
     );

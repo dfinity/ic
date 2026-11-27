@@ -10,7 +10,8 @@ use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::CanisterId;
 use ic_types::canister_http::{
-    CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, ReplicationKind,
+    CanisterHttpRequestContext, DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, PricingVersion,
+    ReplicationKind,
 };
 use ic_types::messages::Response;
 use ic_types_cycles::NominalCycles;
@@ -401,8 +402,7 @@ impl ExecutionEnvironmentMetrics {
 
         let max_response_size = match context.max_response_bytes {
             Some(response_size) => response_size.get(),
-            // Defaults to maximum response size.
-            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            None => DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
         };
 
         self.http_outcalls_metrics

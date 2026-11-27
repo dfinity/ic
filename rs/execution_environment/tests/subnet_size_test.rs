@@ -14,7 +14,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_types::messages::SignedIngressBuilder;
-use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
+use ic_types::canister_http::DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
 use ic_types::{CanisterId, ComputeAllocation, NumBytes, NumInstructions, PrincipalId, SubnetId};
@@ -703,8 +703,7 @@ fn calculate_http_request_cost(
 ) -> Cycles {
     let response_size = match response_size_limit {
         Some(response_size) => response_size.get(),
-        // Defaults to maximum response size.
-        None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        None => DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
     };
     (config.http_request_linear_baseline_fee
         + config.http_request_quadratic_baseline_fee * (subnet_size as u64)

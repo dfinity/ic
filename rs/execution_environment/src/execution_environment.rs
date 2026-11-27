@@ -68,7 +68,8 @@ use ic_replicated_state::{
 };
 use ic_types::batch::ChainKeyData;
 use ic_types::canister_http::{
-    CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
+    CanisterHttpRequestContext, DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, PricingVersion,
+    RefundStatus,
 };
 use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
 use ic_types::crypto::{
@@ -809,8 +810,7 @@ impl ExecutionEnvironment {
 
                             let max_response_size = match context.max_response_bytes {
                                 Some(response_size) => response_size.get(),
-                                // Defaults to maximum response size.
-                                None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                                None => DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
                             };
 
                             info!(

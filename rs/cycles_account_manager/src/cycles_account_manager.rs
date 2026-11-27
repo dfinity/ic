@@ -12,8 +12,9 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, NumberOfNodes,
     PrincipalId, SubnetId,
-    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication, ReplicationKind},
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
+    canister_http::{DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, Replication, ReplicationKind},
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE, Payload, SignedIngress},
+    time::CoarseTime,
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
@@ -969,18 +970,24 @@ impl CyclesAccountManager {
 
     /// Returns the refund cycles for the response transmission bytes reserved at
     /// the initial call time.
+    ///
+    /// Only a guaranteed response is bounded by the bytes reserved. A best-effort
+    /// response (one with a `deadline`), such as a bounded-wait HTTP outcall's, may
+    /// be larger, in which case nothing is refunded.
     pub fn refund_for_response_transmission(
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
         response: &Payload,
+        deadline: CoarseTime,
         prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<RequestAndResponseTransmission> {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
         let transmitted_bytes = response.size_bytes().get();
-        debug_assert!(transmitted_bytes <= max_expected_bytes);
-        if max_expected_bytes < transmitted_bytes {
+        let unexpected_size = deadline == NO_DEADLINE && max_expected_bytes < transmitted_bytes;
+        debug_assert!(!unexpected_size);
+        if unexpected_size {
             error_counter.inc();
             error!(
                 log,
@@ -1379,8 +1386,7 @@ impl CyclesAccountManager {
         let subnet_size = subnet_cycles_config.subnet_size;
         let response_size = match response_size_limit {
             Some(response_size) => response_size.get(),
-            // Defaults to maximum response size.
-            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            None => DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
         };
 
         let amount = (self.config.http_request_linear_baseline_fee
@@ -1448,8 +1454,7 @@ impl CyclesAccountManager {
     ) -> CompoundCycles<HTTPOutcalls> {
         let max_response_size = match response_size_limit {
             Some(response_size) => response_size.get(),
-            // Defaults to maximum response size.
-            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            None => DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
         };
         let amount = (Cycles::new(4_000_000)
             + Cycles::new(50_000) * (subnet_cycles_config.subnet_size as u64)

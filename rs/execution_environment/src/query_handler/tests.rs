@@ -17,6 +17,7 @@ use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     NumInstructions,
+    canister_http::MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
@@ -705,6 +706,36 @@ fn query_calls_to_cooling_down_subnet_are_rejected() {
 
     // All 3 queries above were observed by the query handler metrics.
     assert_eq!(queries_handled_before + 3, queries_handled(&test));
+}
+
+/// A transform, i.e. a system query, may reply with the largest response a bounded-wait
+/// outcall may receive, more than a user's query may.
+#[test]
+fn transform_may_reply_with_the_largest_outcall_response() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let max = MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES as u32;
+    let reply_of = |size: u32| wasm().push_equal_bytes(0, size).append_and_reply().build();
+
+    match test.system_query(canister, "query", reply_of(max)) {
+        Ok(WasmResult::Reply(reply)) => assert_eq!(reply.len(), max as usize),
+        result => panic!("unexpected result: {result:?}"),
+    }
+    let err = test
+        .system_query(canister, "query", reply_of(max + 1))
+        .unwrap_err();
+    assert!(
+        err.description()
+            .contains(&format!("cannot be larger than {max}")),
+        "{err}"
+    );
+    let err = test
+        .non_replicated_query(canister, "query", reply_of(max))
+        .unwrap_err();
+    assert!(
+        err.description().contains("cannot be larger than 3145728"),
+        "{err}"
+    );
 }
 
 const COMPOSITE_QUERY_WAT: &str = r#"

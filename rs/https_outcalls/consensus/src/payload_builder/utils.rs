@@ -10,8 +10,7 @@ use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
         CanisterHttpOutOfCycles, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
-        stripping_savings,
+        FlexibleCanisterHttpResponses, stripping_savings,
     },
     canister_http::{
         CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
@@ -888,7 +887,8 @@ struct FlexibleCandidate<'a> {
 /// - **TooManyRejects**: more nodes returned rejects than the slack
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
-///   (approximated by `count_bytes()`) exceed [`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`].
+///   (approximated by `count_bytes()`) exceed the request's
+///   [limit](CanisterHttpRequestContext::max_flexible_responses_size).
 /// - **OutOfCycles**: delivering a response can never be paid for again (see
 ///   [`check_flexible_out_of_cycles`]).
 /// - **Pending**: not enough data to decide yet.
@@ -1012,7 +1012,7 @@ pub(crate) fn find_flexible_result(
             .map(|candidate| candidate.size)
             .sum();
 
-        if smallest_content_sum > MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
+        if smallest_content_sum > context.max_flexible_responses_size() {
             let all_seen_shares: Vec<_> = ok_candidates
                 .iter()
                 .chain(reject_candidates.iter())
@@ -1077,7 +1077,8 @@ struct FlexibleSelection<'a> {
 
 /// Returns how many (up to `max_to_select`) of `candidates` to include in the payload, and
 /// which extra shares of `all_shares` to fund them with. Returns `None` if even the smallest
-/// `min_to_select` responses exceed [`MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE`] or do not fit
+/// `min_to_select` responses exceed the request's
+/// [limit](CanisterHttpRequestContext::max_flexible_responses_size) or do not fit
 /// into what is left of the block, or if the committee's unspent allowance can not cover their
 /// cost.
 ///
@@ -1102,7 +1103,7 @@ fn select_flexible_responses<'a>(
     for selected in (min_to_select..=max_to_select).rev() {
         let selected = &candidates[..selected];
         let responses_size: usize = selected.iter().map(|candidate| candidate.size).sum();
-        if responses_size > MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
+        if responses_size > context.max_flexible_responses_size() {
             continue;
         }
         // Compute the cost of the current selection without any extra shares.

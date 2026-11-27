@@ -48,8 +48,9 @@ use ic_types::{
     batch::{
         CanisterHttpAsyncSpent, CanisterHttpInitialSpent, CanisterHttpPayload, CanisterHttpSpent,
         ConsensusResponse, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
-        MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE, ValidationContext,
+        FlexibleCanisterHttpResponses, MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CanisterHttpRequestContext,
@@ -1035,7 +1036,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
                     ok_entry_sizes.sort_unstable();
                     let smallest_sum: usize = ok_entry_sizes.iter().take(min_known_ok_needed).sum();
-                    if smallest_sum <= MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE {
+                    if smallest_sum <= context.max_flexible_responses_size() {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(
                                 callback_id,
@@ -1612,7 +1613,8 @@ fn flexible_error_into_consensus_response(
 
             let message = format!(
                 "Responses too large: need at least {min_responses} \
-                 OK responses to fit within {MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE} bytes, \
+                 OK responses to fit within {MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE} bytes \
+                 ({MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE} bytes for a bounded-wait call), \
                  but even the smallest {min_known_ok_needed} \
                  (= {min_responses} min_responses - {num_unseen} unseen) of {num_ok} \
                  OK responses have sizes [{}] bytes \
