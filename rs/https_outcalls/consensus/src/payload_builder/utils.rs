@@ -674,7 +674,7 @@ impl NonFlexibleCandidate<'_> {
     /// The [`PayloadSize`] of the response returned by [`Self::into_response`], without
     /// cloning its content.
     pub(crate) fn payload_size(&self) -> PayloadSize {
-        PayloadSize::new(self.count_bytes(), wire_savings([&self.content.content]))
+        PayloadSize::response(self.count_bytes(), wire_savings([&self.content.content]))
     }
 
     /// Clones the borrowed content into an owned [`CanisterHttpResponseWithConsensus`].
@@ -718,36 +718,45 @@ fn assemble_non_flexible_response<'a>(
 }
 
 /// The estimated size of a part of the payload, in memory and in a block proposal
-/// sent to peers, from which response contents are stripped.
+/// sent to peers, from which response contents are stripped, and how many responses
+/// it counts as towards the limit on responses per block.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct PayloadSize {
     memory: usize,
     wire: usize,
+    responses: usize,
 }
 
 impl PayloadSize {
-    /// The size of a part of `memory` bytes, on which stripping saves `savings`.
-    pub(crate) fn new(memory: usize, savings: usize) -> Self {
+    /// The size of a response of `memory` bytes, on which stripping saves `savings`.
+    pub(crate) fn response(memory: usize, savings: usize) -> Self {
         Self {
             memory,
             wire: memory.saturating_sub(savings),
+            responses: 1,
         }
     }
 
-    /// The size of a part that is sent as it is.
-    pub(crate) fn unstripped(memory: usize) -> Self {
-        Self::new(memory, 0)
+    /// The size of a part that is sent as it is and does not count as a response.
+    fn not_a_response(memory: usize) -> Self {
+        Self {
+            memory,
+            wire: memory,
+            responses: 0,
+        }
     }
 
     /// The size of the message, both as the payload builder takes it up and as
-    /// validators count it towards the block's payload size.
+    /// validators count it towards the block's limits. Timeouts are cheap to validate
+    /// and an asynchronous receipt's response already counted, so neither counts as a
+    /// response.
     pub(crate) fn of(message: &PayloadMessage) -> Self {
         match message {
-            PayloadMessage::Response(response) => Self::new(
+            PayloadMessage::Response(response) => Self::response(
                 response.count_bytes(),
                 wire_savings([&response.content.content]),
             ),
-            PayloadMessage::FlexibleResponses(group) => Self::new(
+            PayloadMessage::FlexibleResponses(group) => Self::response(
                 group.count_bytes(),
                 wire_savings(group.responses.iter().map(|entry| &entry.response.content)),
             ),
@@ -755,21 +764,32 @@ impl PayloadSize {
                 error @ FlexibleCanisterHttpError::TooManyRejects {
                     reject_responses, ..
                 },
-            ) => Self::new(
+            ) => Self::response(
                 error.count_bytes(),
                 wire_savings(reject_responses.iter().map(|entry| &entry.response.content)),
             ),
-            PayloadMessage::FlexibleError(error) => Self::unstripped(error.count_bytes()),
-            PayloadMessage::Timeout(callback_id) => Self::unstripped(callback_id.count_bytes()),
-            PayloadMessage::Divergence(divergence) => Self::unstripped(divergence.count_bytes()),
-            PayloadMessage::OutOfCycles(error) => Self::unstripped(error.count_bytes()),
-            PayloadMessage::AsyncReceipt(share) => Self::unstripped(share.count_bytes()),
+            PayloadMessage::FlexibleError(
+                error @ (FlexibleCanisterHttpError::ResponsesTooLarge { .. }
+                | FlexibleCanisterHttpError::OutOfCycles { .. }),
+            ) => Self::response(error.count_bytes(), 0),
+            PayloadMessage::FlexibleError(error @ FlexibleCanisterHttpError::Timeout { .. }) => {
+                Self::not_a_response(error.count_bytes())
+            }
+            PayloadMessage::Timeout(callback_id) => Self::not_a_response(callback_id.count_bytes()),
+            PayloadMessage::Divergence(divergence) => Self::response(divergence.count_bytes(), 0),
+            PayloadMessage::OutOfCycles(error) => Self::response(error.count_bytes(), 0),
+            PayloadMessage::AsyncReceipt(share) => Self::not_a_response(share.count_bytes()),
         }
     }
 
     /// The size in a block proposal sent to peers.
     pub(crate) fn wire(&self) -> usize {
         self.wire
+    }
+
+    /// How many responses the part counts as.
+    pub(crate) fn responses(&self) -> usize {
+        self.responses
     }
 }
 
@@ -783,38 +803,38 @@ fn wire_savings<'a>(contents: impl IntoIterator<Item = &'a CanisterHttpResponseC
     }
 }
 
-/// The messages of a payload, its limits in memory and on the wire, and how much of
-/// them its parts take up so far.
+/// The messages of a payload, its limits in memory, on the wire and on its responses,
+/// and how much of them its parts take up so far.
 pub(crate) struct PayloadBudget {
     messages: Vec<PayloadMessage>,
     taken: PayloadSize,
     limits: PayloadSize,
-    /// How many of the messages count towards the limit on responses per block.
-    responses: usize,
 }
 
 impl PayloadBudget {
-    pub(crate) fn new(memory_limit: NumBytes, wire_limit: NumBytes) -> Self {
+    pub(crate) fn new(memory_limit: NumBytes, wire_limit: NumBytes, max_responses: usize) -> Self {
         Self {
             messages: vec![],
             taken: PayloadSize::default(),
             limits: PayloadSize {
                 memory: memory_limit.get() as usize,
                 wire: wire_limit.get() as usize,
+                responses: max_responses,
             },
-            responses: 0,
         }
     }
 
-    /// How many of the messages count towards the limit on responses per block.
-    pub(crate) fn responses(&self) -> usize {
-        self.responses
+    /// Whether no further response fits into the payload.
+    pub(crate) fn responses_full(&self) -> bool {
+        self.taken.responses >= self.limits.responses
     }
 
-    /// Whether a part of the given size still fits into the payload.
+    /// Whether a part of the given size still fits into the payload. The limit on
+    /// responses is inclusive, unlike the ones on bytes.
     pub(crate) fn fits(&self, size: PayloadSize) -> bool {
         self.taken.memory + size.memory < self.limits.memory
             && self.taken.wire + size.wire < self.limits.wire
+            && self.taken.responses + size.responses <= self.limits.responses
     }
 
     /// Adds the message to the payload if it still fits, and returns whether it did.
@@ -824,7 +844,7 @@ impl PayloadBudget {
         if fits {
             self.taken.memory += size.memory;
             self.taken.wire += size.wire;
-            self.responses += usize::from(message.counts_towards_response_limit());
+            self.taken.responses += size.responses;
             self.messages.push(message);
         }
         fits
@@ -1116,7 +1136,7 @@ fn select_flexible_responses<'a>(
                 .sum::<usize>();
         let savings = selected.iter().map(|candidate| candidate.savings).sum();
         // Return the selection if it also fits into the block.
-        if budget.fits(PayloadSize::new(size, savings)) {
+        if budget.fits(PayloadSize::response(size, savings)) {
             return Some(FlexibleSelection {
                 count: selected.len(),
                 extra_shares,

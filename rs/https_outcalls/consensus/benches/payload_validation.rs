@@ -477,7 +477,9 @@ impl<'a> PayloadAssembler<'a> {
         };
 
         assert!(
-            payload.num_limited_responses()
+            payload.responses.len()
+                + payload.divergence_responses.len()
+                + payload.flexible_responses.len()
                 <= ic_types::canister_http::CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
             "too many responses for a single block"
         );

@@ -441,7 +441,7 @@ fn max_responses() {
             });
 
         let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
-        assert!(parsed_payload.num_limited_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK);
+        assert!(num_limited_responses(&parsed_payload) <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK);
     })
 }
 
@@ -480,7 +480,7 @@ fn timeouts_bypass_max_responses_per_block() {
 
             let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
 
-            assert_eq!(parsed.num_limited_responses(), 0);
+            assert_eq!(num_limited_responses(&parsed), 0);
             assert_eq!(parsed.timeouts.len(), num_contexts);
 
             payload_builder
@@ -538,7 +538,7 @@ fn flexible_timeouts_bypass_max_responses_per_block() {
             assert!(parsed.responses.is_empty());
             assert!(parsed.timeouts.is_empty());
             // Flexible timeouts must not count against the per-block response cap.
-            assert_eq!(parsed.num_limited_responses(), 0);
+            assert_eq!(num_limited_responses(&parsed), 0);
 
             // The builder's own honest payload must pass validation.
             payload_builder
@@ -553,9 +553,8 @@ fn flexible_timeouts_bypass_max_responses_per_block() {
     );
 }
 
-/// Divergence responses must be counted by num_limited_responses() and
-/// therefore be subject to the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit
-/// during validation.
+/// Divergence responses count towards CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, so
+/// that limit applies to them during validation.
 #[test]
 fn divergence_responses_count_toward_max_responses() {
     test_config_with_http_feature(true, 4, |payload_builder, _| {
@@ -2770,7 +2769,7 @@ fn flexible_build_respects_max_responses_per_block() {
         let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(
-            parsed.num_limited_responses(),
+            num_limited_responses(&parsed),
             CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
         );
     });
@@ -9106,7 +9105,7 @@ fn async_receipts_do_not_count_towards_the_per_block_limit() {
                 CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
             );
             assert_eq!(
-                payload.num_limited_responses(),
+                num_limited_responses(&payload),
                 CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
             );
             assert_eq!(
@@ -9480,4 +9479,27 @@ fn into_messages_emits_asynchronous_spend_reports() {
             (second, BTreeMap::from([(node_test_id(1), Cycles::new(7))])),
         ])
     );
+}
+
+/// How many of the payload's responses count towards
+/// [`CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`]: all but timeouts and asynchronous
+/// receipts. Written out here independently of the payload builder's own count.
+fn num_limited_responses(payload: &CanisterHttpPayload) -> usize {
+    let CanisterHttpPayload {
+        responses,
+        timeouts: _,
+        divergence_responses,
+        out_of_cycles,
+        flexible_responses,
+        flexible_errors,
+        async_receipts: _,
+    } = payload;
+    responses.len()
+        + divergence_responses.len()
+        + out_of_cycles.len()
+        + flexible_responses.len()
+        + flexible_errors
+            .iter()
+            .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
+            .count()
 }

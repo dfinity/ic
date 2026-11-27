@@ -181,7 +181,11 @@ impl CanisterHttpPayloadBuilderImpl {
         let delivered_canister_http_request_contexts =
             &subnet_call_context_manager.delivered_canister_http_request_contexts;
 
-        let mut budget = PayloadBudget::new(memory_limit, wire_limit);
+        let mut budget = PayloadBudget::new(
+            memory_limit,
+            wire_limit,
+            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        );
 
         // Metrics counters
         let mut total_share_count = 0;
@@ -249,7 +253,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                     continue;
                 }
-                if budget.responses() >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                if budget.responses_full() {
                     // We use `continue` here and not `break` so that more
                     // timeouts can be included in the payload.
                     continue;
@@ -397,7 +401,7 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        if budget.responses() >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+        if budget.responses_full() {
             warn!(
                 every_n_seconds => 15,
                 self.log,
@@ -1225,16 +1229,13 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 ),
             )
         })?;
-        // Counts the messages on the wire as the payload builder does.
-        let wire_size: usize = messages
+        // Counts the messages as the payload builder does.
+        let (wire_size, responses) = messages
             .iter()
-            .map(|message| PayloadSize::of(message).wire())
-            .sum();
-        // Counts the responses as the payload builder does.
-        let responses = messages
-            .iter()
-            .filter(|message| message.counts_towards_response_limit())
-            .count();
+            .map(PayloadSize::of)
+            .fold((0, 0), |(wire, responses), size| {
+                (wire + size.wire(), responses + size.responses())
+            });
         if responses > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
             invalid_artifact(InvalidCanisterHttpPayloadReason::TooManyResponses {
                 expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,

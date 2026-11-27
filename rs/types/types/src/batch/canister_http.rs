@@ -307,30 +307,6 @@ impl CanisterHttpPayload {
             + async_receipts.len()
     }
 
-    /// Returns the number of responses that count towards
-    /// [`CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`](crate::canister_http::CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK),
-    /// i.e. all of them except timeouts, which are cheap to validate, and asynchronous
-    /// receipts, as the response they belong to already counted towards it.
-    pub fn num_limited_responses(&self) -> usize {
-        let CanisterHttpPayload {
-            responses,
-            timeouts: _,
-            divergence_responses,
-            out_of_cycles,
-            flexible_responses,
-            flexible_errors,
-            async_receipts: _,
-        } = self;
-        responses.len()
-            + divergence_responses.len()
-            + out_of_cycles.len()
-            + flexible_responses.len()
-            + flexible_errors
-                .iter()
-                .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
-                .count()
-    }
-
     /// Returns true, if this is an empty payload
     pub fn is_empty(&self) -> bool {
         self.num_responses() == 0
