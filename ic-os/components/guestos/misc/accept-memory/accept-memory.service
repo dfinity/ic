@@ -1,0 +1,19 @@
+[Unit]
+Description=Accept all of a TEE guest's memory in the background
+# Only SEV-SNP guests have memory to accept.
+ConditionKernelCommandLine=dfinity.tee
+
+[Service]
+# In the background (`simple`), as it takes minutes; at the lowest priorities.
+Type=simple
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+# This service's own tmpfs, so that the memory filling it is freed when the service exits; in 4 KiB
+# pages, as finding free 2 MiB blocks can take compaction.
+TemporaryFileSystem=/run/accept-memory:size=100%,huge=never,mode=0700
+ExecStart=/opt/ic/bin/accept-memory.sh /run/accept-memory
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

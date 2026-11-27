@@ -93,6 +93,8 @@ def component_files(mode):
         Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
         Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
         Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
+        Label("guestos/misc/accept-memory/accept-memory.sh"): "/opt/ic/bin/accept-memory.sh",
+        Label("guestos/misc/accept-memory/accept-memory.service"): "/etc/systemd/system/accept-memory.service",
 
         # monitoring
         Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
