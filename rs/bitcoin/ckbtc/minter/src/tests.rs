@@ -1443,6 +1443,43 @@ mod submit_pending_requests {
         });
     }
 
+    #[tokio::test]
+    async fn should_not_return_known_main_utxo_at_different_height() {
+        init_state_with_ecdsa_public_key();
+
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        runtime.expect_event_logger().return_const(CkBtcEventLogger);
+
+        let main_account = icrc_ledger_types::icrc1::account::Account {
+            owner: minter(),
+            subaccount: None,
+        };
+        let known_utxo = utxo();
+        mutate_state(|s| {
+            audit::add_utxos(s, None, main_account, vec![known_utxo.clone()], &runtime)
+        });
+
+        // After a reorg, the Bitcoin canister reports the same outpoint at a different height.
+        let reincluded_utxo = ic_btc_interface::Utxo {
+            height: known_utxo.height + 1,
+            ..known_utxo
+        };
+        runtime
+            .expect_get_utxos()
+            .times(1)
+            .return_const(Ok(GetUtxosResponse {
+                utxos: vec![reincluded_utxo],
+                tip_height: 0,
+                next_page: None,
+            }));
+
+        let main_address = minter_address().display(Network::Mainnet);
+        let new_utxos = crate::fetch_main_utxos(&main_address, &runtime).await;
+
+        assert_eq!(new_utxos, vec![]);
+    }
+
     fn init_state_with_ecdsa_public_key() {
         init_state(crate::test_fixtures::init_args());
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
