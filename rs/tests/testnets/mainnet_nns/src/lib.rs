@@ -45,15 +45,15 @@ pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOv
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
     ..VmResourceOverrides::const_default()
 };
-/// Request to be deployed in `zh1` by default to be physically closer to the backup pod.
+/// Request to be deployed in `dm1` by default to be physically closer to the backup pod.
 pub fn mainnet_node_required_host_features() -> Vec<HostFeature> {
-    vec![HostFeature::DC("zh1".to_string())]
+    vec![HostFeature::DC("dm1".to_string())]
 }
 
 /// Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
 /// NNS_STATE_ON_BACKUP_POD environment variable.
 const NNS_STATE_ON_BACKUP_POD: &str =
-    "dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst";
+    "dev@dm1-spm51.dm1.dfinity.network:/home/dev/nns_state.tar.zst";
 
 // Constants for paths used in the test environment
 const PATH_STATE_TARBALL: &str = "nns_state.tar.zst";

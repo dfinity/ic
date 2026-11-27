@@ -79,7 +79,7 @@ system_test_nns(
     name = "nr_large_with_mainnet_state",
     backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_forward_ssh_agent = True,
-    colocated_test_driver_vm_required_host_features = ["dc=zh1"],
+    colocated_test_driver_vm_required_host_features = ["dc=dm1"],
     colocated_test_driver_vm_resources = {
         "vcpus": None,
         "memory_kibibytes": None,

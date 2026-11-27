@@ -56,7 +56,7 @@ jobs:
   nns-recovery-mainnet-state:
     name: Bazel Test NNS Recovery with Mainnet State
     runs-on:
-      group: zh1
+      group: dm1
       labels: dind-large
     container: *container-setup
     timeout-minutes: 130
