@@ -395,11 +395,18 @@ mod tests {
 
         // Step 3: Verify result: an error, not a panic.
         let error = result.unwrap_err();
+
+        // Step 3.1: The message blames the shards as a whole, since no single
+        // shard is invalid on its own.
         assert!(
-            error.msg.contains("not form a valid routing table"),
+            error
+                .msg
+                .contains("routing table shards do not form a valid routing table"),
             "{}",
             error.msg
         );
+
+        // Step 3.2: The error has a source.
         assert!(error.source.is_some());
     }
 
