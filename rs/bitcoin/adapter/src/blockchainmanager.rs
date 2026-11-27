@@ -806,7 +806,8 @@ pub mod test {
     use bitcoin::{BlockHash, block::Header as BlockHeader, p2p::message::NetworkMessage};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
-        BLOCK_1_ENCODED, BLOCK_2_ENCODED, generate_headers, generate_large_block_blockchain,
+        BLOCK_1_ENCODED, BLOCK_2_ENCODED, block_from_header, generate_headers,
+        generate_large_block_blockchain,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -1452,10 +1453,7 @@ pub mod test {
         );
 
         // Create and add a block to the cache, remove the hash
-        let block = Block {
-            header: next_headers[3],
-            txdata: vec![],
-        };
+        let block = block_from_header(next_headers[3]);
         {
             let blockchain = &blockchain_manager.blockchain;
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers).await;
@@ -1491,10 +1489,7 @@ pub mod test {
             .map(|h| h.block_hash())
             .collect::<Vec<_>>();
         // Create and add a block to the cache, remove the hash
-        let block_3 = Block {
-            header: next_headers[2],
-            txdata: vec![],
-        };
+        let block_3 = block_from_header(next_headers[2]);
 
         {
             let blockchain = &blockchain_manager.blockchain;
@@ -1551,10 +1546,7 @@ pub mod test {
             .map(|h| h.block_hash())
             .collect::<Vec<_>>();
         // Create and add a block to the cache, remove the hash
-        let block_5 = Block {
-            header: next_headers[4],
-            txdata: vec![],
-        };
+        let block_5 = block_from_header(next_headers[4]);
 
         {
             let blockchain = &blockchain_manager.blockchain;

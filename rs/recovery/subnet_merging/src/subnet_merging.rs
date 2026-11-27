@@ -1,11 +1,15 @@
 use crate::{
-    admin_helper::{get_propose_to_cool_down_subnet_command, get_propose_to_merge_subnets_command},
+    admin_helper::{
+        get_propose_to_cool_down_subnet_command, get_propose_to_delete_subnet_command,
+        get_propose_to_merge_subnets_command,
+    },
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
-        ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        ProposeRecoveryCupStep, RestartDestinationReplicaStep, StopReplicaAtHaltingCheckpointStep,
-        UploadMergedStateStep, ValidateCupStep, WaitForHaltingCupStep, WaitForRecoveryCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
+        CheckRoutingTableStep, CheckSourceSubnetDeletedStep, ComputeExpectedMergedManifestStep,
+        DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
+        StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
+        WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -118,6 +122,17 @@ pub enum StepType {
     WaitForCupOnDestinationSubnet,
     /// Submit a proposal to unhalt the destination subnet.
     UnhaltDestinationSubnet,
+    /// Wait until every subnet other than the source subnet has reached the
+    /// registry version recorded by `CheckRegistryForRoutingTableEntry`.
+    CheckRegistryVersionOnAllSubnets,
+    /// Submit a proposal to delete the source subnet.
+    DeleteSourceSubnet,
+    /// Wait until the registry no longer holds the source subnet, i.e. until
+    /// the proposal deleting it has been executed.
+    CheckRegistryForSourceSubnetDeletion,
+    /// Delete everything in the recovery directory of the tool, the downloaded
+    /// and the merged states included.
+    Cleanup,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -165,9 +180,12 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for the proposals labeling the source
-    /// subnet as "cooling down" and merging it into the destination subnet to
-    /// be adopted, executed and visible in the registry.
+    /// How long to wait, in seconds, for each of the proposals labeling the
+    /// source subnet as "cooling down", merging it into the destination subnet
+    /// and deleting it to be adopted, executed and visible in the registry.
+    /// Also how long to wait for every other subnet to reach the registry
+    /// version at which the source subnet is merged into the destination
+    /// subnet.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -233,12 +251,20 @@ impl SubnetMerging {
         )
         .expect("Failed to initialize recovery");
 
-        Self::check_subnets_preconditions(
-            &recovery,
-            subnet_merging_args.source_subnet_id,
-            subnet_merging_args.destination_subnet_id,
-        )
-        .expect("Subnets should satisfy all the preconditions");
+        // Once the proposal deleting the source subnet has been submitted, the
+        // registry may no longer hold that subnet, so the preconditions cannot
+        // be checked when resuming after `DeleteSourceSubnet`.
+        let source_subnet_may_be_deleted = subnet_merging_args
+            .next_step
+            .is_some_and(|next_step| next_step as usize > StepType::DeleteSourceSubnet as usize);
+        if !source_subnet_may_be_deleted {
+            Self::check_subnets_preconditions(
+                &recovery,
+                subnet_merging_args.source_subnet_id,
+                subnet_merging_args.destination_subnet_id,
+            )
+            .expect("Subnets should satisfy all the preconditions");
+        }
 
         let layout =
             Layout::new(&recovery, &logger).expect("Failed to create the working directories");
@@ -749,7 +775,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::MergeSubnets
             | StepType::CheckRegistryForRoutingTableEntry
             | StepType::ProposeCupForDestinationSubnet
-            | StepType::UnhaltDestinationSubnet => {}
+            | StepType::UnhaltDestinationSubnet
+            | StepType::CheckRegistryVersionOnAllSubnets
+            | StepType::DeleteSourceSubnet
+            | StepType::CheckRegistryForSourceSubnetDeletion
+            | StepType::Cleanup => {}
         }
     }
 
@@ -872,6 +902,33 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             .into(),
             StepType::WaitForCupOnDestinationSubnet => self.wait_for_recovery_cup_step()?.into(),
             StepType::UnhaltDestinationSubnet => self.unhalt_destination_subnet_step().into(),
+            StepType::CheckRegistryVersionOnAllSubnets => CheckRegistryVersionOnAllSubnetsStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+            StepType::DeleteSourceSubnet => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_delete_subnet_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+            StepType::CheckRegistryForSourceSubnetDeletion => CheckSourceSubnetDeletedStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
         };
 
         Ok(step)

@@ -56,7 +56,7 @@ async fn send_flexible_request(
     let FlexibleRemoteHttpRequest { request, cycles } = request;
 
     let result = Call::unbounded_wait(Principal::management_canister(), "flexible_http_request")
-        .with_raw_args(&request.encode())
+        .with_raw_args(&request)
         .with_cycles(u128::from(cycles))
         .await
         .map(|response| response.into_bytes())

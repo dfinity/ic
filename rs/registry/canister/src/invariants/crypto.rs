@@ -18,6 +18,7 @@ use ic_registry_keys::{
     maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
+use ic_types::consensus::CupType;
 use ic_types::crypto::KeyPurpose;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use prost::Message;
@@ -54,7 +55,7 @@ type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 ///  * At most 1 subnet can be an ECDSA signing subnet for a given key_id (for now)
 ///  * Subnets specified in ECDSA signing subnet lists exists and contain the equivalent key in their configs
 ///  * The high threshold signing public key stored explicitly for a subnet matches the one in the
-///    CUP of the subnet, and the CUP of the subnet has a type set
+///    CUP of the subnet, and the CUP of the subnet has a type that decodes into a [`CupType`]
 ///
 /// It is NOT CHECKED that the crypto keys are fully well-formed or valid, as these
 /// checks are expensive in terms of computation (about 200 times more expensive then just parsing,
@@ -468,7 +469,7 @@ fn check_high_threshold_public_key_and_cup_contents(
                 continue;
             }
         };
-        let initial_ni_dkg_transcript_high_threshold = match cup_contents
+        let initial_ni_dkg_transcript_high_threshold = match &cup_contents
             .initial_ni_dkg_transcript_high_threshold
         {
             Some(initial_ni_dkg_transcript_high_threshold) => {
@@ -483,7 +484,7 @@ fn check_high_threshold_public_key_and_cup_contents(
             }
         };
         let public_key_bytes_from_cup = match extract_subnet_threshold_sig_public_key(
-            &initial_ni_dkg_transcript_high_threshold,
+            initial_ni_dkg_transcript_high_threshold,
         ) {
             Ok(public_key_bytes_from_cup) => public_key_bytes_from_cup.into_bytes(),
             Err(e) => {
@@ -503,11 +504,12 @@ fn check_high_threshold_public_key_and_cup_contents(
             continue;
         }
 
-        // Also, check that the cup contents has a type set
-        if cup_contents.cup_type.is_none() {
+        // Also, check that the cup contents has a decodable type.
+        if let Err(err) = CupType::try_from(&cup_contents) {
             bad_subnets.insert(subnet_id);
             println!(
-                "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: cup contents for subnet {subnet_id} has no cup_type set"
+                "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: \
+                 cup_type of cup contents for subnet {subnet_id} cannot be decoded: {err:?}"
             );
             continue;
         }

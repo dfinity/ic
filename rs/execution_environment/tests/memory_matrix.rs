@@ -39,9 +39,10 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::units::{GIB, KIB};
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2,
-    Method, Payload as _, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    BoundedGlobals, BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset,
+    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
 };
@@ -1436,7 +1437,7 @@ fn metadata_upload_payload(
         canister_id: canister_id.get(),
         replace_snapshot,
         wasm_module_size: metadata.wasm_module_size,
-        globals: metadata.globals,
+        globals: BoundedGlobals::new(metadata.globals),
         wasm_memory_size: metadata.wasm_memory_size,
         stable_memory_size: metadata.stable_memory_size,
         certified_data: metadata.certified_data,
