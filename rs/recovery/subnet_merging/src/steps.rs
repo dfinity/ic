@@ -8,8 +8,9 @@ use crate::{
     },
 };
 
-use ic_base_types::SubnetId;
+use ic_base_types::{RegistryVersion, SubnetId};
 use ic_cup_explorer::get_cup;
+use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
@@ -24,6 +25,7 @@ use ic_recovery::{
     },
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
@@ -976,4 +978,113 @@ impl Step for WaitForRecoveryCupStep {
 
         Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, height, state_hash)
     }
+}
+
+/// Waits until every subnet other than the source subnet has reached the
+/// registry version recorded by `CheckRoutingTableStep`, i.e. routes the
+/// canisters that used to be hosted by the source subnet to the destination
+/// subnet. Only then may the source subnet be deleted.
+pub(crate) struct CheckRegistryVersionOnAllSubnetsStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckRegistryVersionOnAllSubnetsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until every subnet other than {} has reached the registry version the merge \
+             created, i.e. routes the canisters that used to be hosted by it to the destination \
+             subnet.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let registry_version = self
+            .layout
+            .read_merge_registry_version(self.source_subnet_id)?;
+
+        readiness::await_registry_version_on_all_subnets(
+            &self.registry_helper,
+            self.source_subnet_id,
+            registry_version,
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+        )
+    }
+}
+
+/// Waits until the registry no longer holds the source subnet, i.e. until the
+/// proposal deleting it has been executed. `ic-admin` returns once the proposal
+/// is submitted, which does not mean that it is adopted and executed.
+pub(crate) struct CheckSourceSubnetDeletedStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckSourceSubnetDeletedStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until the registry no longer holds subnet {}.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let source_subnet_id = self.source_subnet_id;
+        let registry_version = wait_for(
+            &format!("the registry no longer holds subnet {source_subnet_id}"),
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+            || {
+                let registry_version = self.registry_helper.latest_registry_version()?;
+                ensure_subnet_deleted(
+                    &*self.registry_helper.registry_client(),
+                    source_subnet_id,
+                    registry_version,
+                )?;
+                Ok(registry_version)
+            },
+        )?;
+
+        info!(
+            self.logger,
+            "Subnet {source_subnet_id} is gone from the registry as of version {registry_version}"
+        );
+        Ok(())
+    }
+}
+
+/// Fails unless the registry records `subnet_id` as deleted at
+/// `registry_version`, i.e. held its subnet record at an earlier version and
+/// holds none at this one. A subnet the registry never held is not deleted.
+fn ensure_subnet_deleted(
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+) -> RecoveryResult<()> {
+    let deleted = registry_client
+        .is_subnet_deleted(subnet_id, registry_version)
+        .map_err(|err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to check whether subnet {subnet_id} is deleted at registry version \
+                 {registry_version}: {err}"
+            ))
+        })?;
+    if !deleted {
+        return Err(RecoveryError::RegistryError(format!(
+            "The registry does not record subnet {subnet_id} as deleted at version \
+             {registry_version}"
+        )));
+    }
+    Ok(())
 }
