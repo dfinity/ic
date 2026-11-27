@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
+    "//rs/execution_environment:__pkg__",
     "//rs/http_endpoints/nns_delegation_reader:__subpackages__",
 ])
 

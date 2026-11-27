@@ -37,7 +37,9 @@ use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::NNSDelegationBuilder;
+use ic_nns_delegation_manager::{
+    DelegationValidationError, DelegationVerificationError, NNSDelegationBuilder,
+};
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
@@ -760,6 +762,56 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
 
         assert_eq!(expected_status_code, response.status());
     })
+}
+
+/// The `query` endpoints reply with `503 SERVICE_UNAVAILABLE` when the query
+/// handler reports that the delegation could not be verified against the certified
+/// state, i.e. when the
+/// [`QueryExecutionService`](ic_interfaces::execution_environment::QueryExecutionService)
+/// returns [`QueryExecutionError::DelegationInconsistentWithState`].
+#[rstest]
+#[case(
+    QueryExecutionError::DelegationInconsistentWithState(
+        DelegationVerificationError::Inconsistent
+    ),
+    "This replica's delegation is inconsistent with its state. Please try again."
+)]
+#[case(
+    QueryExecutionError::DelegationInconsistentWithState(DelegationVerificationError::Validation(
+        DelegationValidationError::UnexpectedTreeShape("missing public_key leaf".to_string())
+    )),
+    "This replica has an invalid delegation. Please try again."
+)]
+fn test_query_endpoint_returns_service_unavailable_on_delegation_mismatch(
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
+    #[case] query_execution_error: QueryExecutionError,
+    #[case] expected_message: &str,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    // The query execution service reports that the delegation is out of sync with
+    // the certified state.
+    rt.spawn(async move {
+        let (_, resp) = handlers.query_execution.next_request().await.unwrap();
+        resp.send_response(Err(query_execution_error));
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let response = query_endpoint(version, addr).await;
+
+        assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
+        assert_eq!(expected_message, response.text().await.unwrap());
+    });
 }
 
 #[rstest]
