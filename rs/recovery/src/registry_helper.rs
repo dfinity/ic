@@ -4,7 +4,9 @@ use crate::{
     util::{block_on, write_public_key_to_file},
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem_file, public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_pem, parse_threshold_sig_key_from_pem_file, public_key_to_der,
+};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
@@ -50,6 +52,7 @@ pub enum RegistryPollingStrategy {
 pub struct RegistryHelper {
     registry_replicator: Arc<RegistryReplicator>,
     polling_strategy: RegistryPollingStrategy,
+    is_mainnet: Option<bool>,
 }
 
 impl RegistryHelper {
@@ -60,9 +63,13 @@ impl RegistryHelper {
         nns_pem_path: &Path,
         polling_strategy: RegistryPollingStrategy,
     ) -> Self {
-        let nns_pub_key = get_nns_public_key(&nns_url, nns_pem_path, &logger)
-            .inspect_err(|err| error!(logger, "Failed getting the NNS public key: {}", err))
-            .ok();
+        let (nns_pub_key, is_mainnet) = match get_nns_public_key(&nns_url, nns_pem_path, &logger) {
+            Ok((nns_pub_key, is_mainnet)) => (Some(nns_pub_key), Some(is_mainnet)),
+            Err(err) => {
+                error!(logger, "Failed getting the NNS public key: {}", err);
+                (None, None)
+            }
+        };
         let registry_replicator = Arc::new(block_on(RegistryReplicator::new(
             logger.clone().into(),
             &local_store_path,
@@ -74,7 +81,15 @@ impl RegistryHelper {
         Self {
             registry_replicator,
             polling_strategy,
+            is_mainnet,
         }
+    }
+
+    /// Returns whether the registry is the mainnet registry, i.e., whether the
+    /// NNS public key it is validated against is the mainnet NNS public key,
+    /// or `None` if the NNS public key could not be obtained.
+    pub fn is_mainnet(&self) -> Option<bool> {
+        self.is_mainnet
     }
 
     /// Returns the underlying [RegistryClient].
@@ -156,11 +171,12 @@ impl RegistryHelper {
     }
 }
 
+/// Returns the NNS public key and whether it is the mainnet NNS public key.
 fn get_nns_public_key(
     nns_url: &Url,
     nns_pem_path: &Path,
     logger: &Logger,
-) -> RecoveryResult<ThresholdSigPublicKey> {
+) -> RecoveryResult<(ThresholdSigPublicKey, bool)> {
     if nns_pem_path.exists() {
         info!(
             logger,
@@ -178,9 +194,9 @@ fn get_nns_public_key(
         .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem: {e}")))?;
     info!(logger, "Continuing with public key:\n{}", downloaded_key);
 
-    let included_key = include_str!("../ic_public_key.pem");
+    let is_mainnet = key == mainnet_nns_public_key();
 
-    if downloaded_key == included_key {
+    if is_mainnet {
         info!(
             logger,
             "Downloaded key and included NNS public key are equal!"
@@ -192,7 +208,13 @@ fn get_nns_public_key(
         )
     }
 
-    Ok(key)
+    Ok((key, is_mainnet))
+}
+
+/// The mainnet NNS public key, which is included in the binary.
+fn mainnet_nns_public_key() -> ThresholdSigPublicKey {
+    parse_threshold_sig_key_from_pem(include_bytes!("../ic_public_key.pem"))
+        .expect("the included mainnet NNS public key is valid")
 }
 
 fn download_nns_pem(nns_url: &Url, nns_pem_path: &Path, logger: &Logger) -> RecoveryResult<()> {
@@ -247,4 +269,14 @@ fn get_value_from_registry_canister(
             ))
         })
         .map(|(bytes, _)| bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mainnet_nns_public_key_is_valid() {
+        let _ = mainnet_nns_public_key();
+    }
 }

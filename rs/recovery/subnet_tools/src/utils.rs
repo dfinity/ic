@@ -4,12 +4,13 @@ use ic_recovery::{
     cli::wait_for_confirmation,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::read_file,
+    registry_helper::RegistryHelper,
     util::subnet_id_from_str,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use ic_types::{Time, consensus::CatchUpPackage};
-use slog::{Logger, error, warn};
+use slog::{Logger, error, info, warn};
 use url::Url;
 
 use std::{fmt::Display, path::Path};
@@ -104,11 +105,25 @@ pub fn find_expected_state_hash_for_subnet_id(
 
 /// Prints a dashboard URL and waits until the operator confirms that what it
 /// shows allows the next step to be taken.
+///
+/// The dashboards only cover mainnet, so nothing is printed if the registry is
+/// known not to be the mainnet registry. If that is unknown, the dashboard is
+/// printed, so that it is never skipped on mainnet.
 pub fn print_url_and_ask_for_confirmation(
     logger: &Logger,
-    url: String,
+    registry_helper: &RegistryHelper,
+    url: impl FnOnce() -> String,
     text_to_display: impl std::fmt::Display,
 ) {
+    if registry_helper.is_mainnet() == Some(false) {
+        info!(
+            logger,
+            "Skipping the dashboard check, since the subnets do not belong to mainnet"
+        );
+        return;
+    }
+
+    let url = url();
     match Url::parse(&url) {
         Ok(url) => {
             warn!(logger, "{}", text_to_display);

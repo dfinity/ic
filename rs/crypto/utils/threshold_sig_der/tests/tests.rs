@@ -206,6 +206,10 @@ fn test_threshold_sig_public_key_to_pem_roundtrip() {
         let parsed_pk = parse_threshold_sig_key_from_pem_file(tmpfile.path()).unwrap();
         assert_eq!(parsed_pk, expected_pk);
         assert_eq!(parsed_pk.into_bytes(), expected_raw);
+
+        // PEM -> Key
+        let parsed_pk = parse_threshold_sig_key_from_pem(&parsed_pem).unwrap();
+        assert_eq!(parsed_pk, expected_pk);
     }
 }
 

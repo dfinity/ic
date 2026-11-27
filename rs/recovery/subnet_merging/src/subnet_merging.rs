@@ -686,15 +686,24 @@ impl SubnetMerging {
 
     /// The URL of the dashboard evaluating the merge readiness condition, for
     /// the registry version `V` recorded by `CheckRegistryForCoolingDownFlag`.
+    ///
+    /// Also prints `V`, so that the operator can check that the dashboard uses
+    /// it.
     fn dashboard_url(&self) -> String {
         let source_subnet_id = self.params.source_subnet_id;
         match self
             .layout
             .read_cooling_down_registry_version(source_subnet_id)
         {
-            Ok(registry_version) => format!(
-                "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}&var-registry_version={registry_version}",
-            ),
+            Ok(registry_version) => {
+                warn!(
+                    self.logger,
+                    "Registry version to use for the dashboard: {}", registry_version
+                );
+                format!(
+                    "https://grafana.mainnet.dfinity.network/d/subnet-merging?var-ic=mercury&var-ic_subnet={source_subnet_id}&var-registry_version={registry_version}",
+                )
+            }
             Err(err) => {
                 warn!(
                     self.logger,
@@ -736,7 +745,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::CoolDownSourceSubnet | StepType::CheckRegistryForCoolingDownFlag => {}
             StepType::CheckMergeReadiness => print_url_and_ask_for_confirmation(
                 &self.logger,
-                self.dashboard_url(),
+                &self.recovery.registry_helper,
+                || self.dashboard_url(),
                 "The tool evaluates the merge readiness condition itself, and waits until it \
                  holds. Please check the dashboard as well, to see whether it is safe to merge \
                  the subnet",

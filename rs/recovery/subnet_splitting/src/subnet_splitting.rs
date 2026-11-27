@@ -402,7 +402,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
             StepType::HaltSourceSubnetAtCupHeight => {
-                let url = match self.recovery.registry_helper.latest_registry_version() {
+                let url = || match self.recovery.registry_helper.latest_registry_version() {
                     Ok(registry_version) => {
                         format!(
                             "https://grafana.mainnet.dfinity.network/d/subnet-splitting-preflight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
@@ -423,6 +423,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
 
                 print_url_and_ask_for_confirmation(
                     &self.logger,
+                    &self.recovery.registry_helper,
                     url,
                     "Please check the dashboard to see if it is safe to begin subnet splitting",
                 );
@@ -472,7 +473,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             }
 
             StepType::UnhaltDestinationSubnet | StepType::CompleteCanisterMigration => {
-                let url = match self.recovery.registry_helper.latest_registry_version() {
+                let url = || match self.recovery.registry_helper.latest_registry_version() {
                     Ok(registry_version) => {
                         format!(
                             "https://grafana.mainnet.dfinity.network/d/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
@@ -493,6 +494,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
 
                 print_url_and_ask_for_confirmation(
                     &self.logger,
+                    &self.recovery.registry_helper,
                     url,
                     "Please check the dashboard to see if it is safe to unhalt the \
                     destination subnet and/or remove the canister migrations entry",

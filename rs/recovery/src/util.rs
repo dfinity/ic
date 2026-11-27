@@ -87,12 +87,19 @@ impl ExecutionMode {
         }
     }
 
+    /// Returns whether `path` exists.
+    ///
+    /// The command prints `<path> exists` or `<path> does not exist`, so that
+    /// its output is self-explanatory where it is logged, i.e., on remote
+    /// execution.
     pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
+        let path = path.display();
+        let exists = format!("{path} exists");
         self.execute(
-            format!("test -e {} && echo y || echo n", path.display()),
+            format!("test -e {path} && echo '{exists}' || echo '{path} does not exist'"),
             None,
         )
-        .map(|output| output.is_some_and(|s| s.trim() == "y"))
+        .map(|output| output.is_some_and(|s| s.trim() == exists))
     }
 
     /// The status of the checkpoint in the directory `checkpoint`, or `None`
