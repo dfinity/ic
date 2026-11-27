@@ -421,5 +421,13 @@ fn expected_root_certificate(
         ))
     })?;
 
-    Ok(SevCaChain::from(generation).ark)
+    // sev contains the AMD root certificates of these generations only.
+    match generation {
+        Generation::Milan | Generation::Genoa | Generation::Turin => {
+            Ok(SevCaChain::from(generation).ark)
+        }
+        Generation::Venice => Err(VerificationError::invalid_attestation_report(
+            "No AMD root certificate is known for CPU generation Venice",
+        )),
+    }
 }

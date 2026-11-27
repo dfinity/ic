@@ -1,5 +1,5 @@
 use attestation::LAUNCH_MEASUREMENT_LEN;
-use attestation::attestation_report::tcb_version_from_u64;
+use attestation::attestation_report::{tcb_version_from_u64, tcb_version_to_u64};
 use sev::error::UserApiError;
 use sev::firmware::host::TcbVersion;
 use sev::parser::Encoder;
@@ -147,7 +147,12 @@ impl MockSevGuestFirmwareBuilder {
                 let requested_tcb =
                     tcb_version_from_u64(derived_key_request.tcb_version, DEFAULT_GENERATION)
                         .expect("Failed to decode the requested TCB version");
-                if requested_tcb > this.launch_tcb {
+                // Compare the launch TCB as the firmware stores it: encoding turns missing
+                // SVNs into 0.
+                let launch_tcb = tcb_version_to_u64(this.launch_tcb, DEFAULT_GENERATION)
+                    .and_then(|tcb| tcb_version_from_u64(tcb, DEFAULT_GENERATION))
+                    .expect("Failed to encode the launch TCB version");
+                if requested_tcb > launch_tcb {
                     return Err(UserApiError::IOError(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!(

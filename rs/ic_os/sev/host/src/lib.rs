@@ -107,6 +107,9 @@ impl HostSevCertificateProviderImpl {
                 sev::certs::snp::builtin::turin::ASK,
                 sev::certs::snp::builtin::turin::ARK,
             ),
+            Generation::Venice => {
+                anyhow::bail!("SEV-SNP certificate chain is not supported on Venice")
+            }
         };
 
         let chain_pem = format!(
@@ -140,7 +143,7 @@ impl HostSevCertificateProviderImpl {
             .get_identifier()
             .context("Failed to get chip identifier")?;
 
-        let cache_filename = Self::get_cache_filename(&chip_id, &status);
+        let cache_filename = Self::get_cache_filename(&chip_id, &status)?;
         let cache_path = self.certificate_cache_dir.join(&cache_filename);
 
         // Return VCEK from file cache if available.
@@ -188,17 +191,27 @@ impl HostSevCertificateProviderImpl {
         chip_id.0.iter().map(|x| format!("{x:02x}")).collect()
     }
 
-    fn get_cache_filename(chip_id: &Identifier, status: &SnpPlatformStatus) -> String {
+    /// Returns the bootloader and microcode SVNs of the reported TCB. Both are present on
+    /// Milan, Genoa and Turin.
+    fn reported_bootloader_and_microcode(status: &SnpPlatformStatus) -> Result<(u8, u8)> {
+        let reported_tcb = status.reported_tcb_version;
+        let bootloader = reported_tcb
+            .bootloader
+            .context("Reported TCB has no bootloader SVN")?;
+        let microcode = reported_tcb
+            .microcode
+            .context("Reported TCB has no microcode SVN")?;
+        Ok((bootloader, microcode))
+    }
+
+    fn get_cache_filename(chip_id: &Identifier, status: &SnpPlatformStatus) -> Result<String> {
         let hw_id = Self::get_hw_id_string(chip_id);
         let reported_tcb = status.reported_tcb_version;
-        format!(
+        let (bootloader, microcode) = Self::reported_bootloader_and_microcode(status)?;
+        Ok(format!(
             "vcek_{}_bl{:02}_tee{:02}_snp{:02}_ucode{:02}.der",
-            hw_id,
-            reported_tcb.bootloader,
-            reported_tcb.tee,
-            reported_tcb.snp,
-            reported_tcb.microcode
-        )
+            hw_id, bootloader, reported_tcb.tee, reported_tcb.snp, microcode
+        ))
     }
 
     async fn load_vcek_from_amd_key_server_with_retry(
@@ -230,7 +243,7 @@ impl HostSevCertificateProviderImpl {
         chip_id: &Identifier,
         status: &SnpPlatformStatus,
     ) -> Result<Vec<u8>> {
-        let url = Self::get_kds_url(chip_id, status, self.generation);
+        let url = Self::get_kds_url(chip_id, status, self.generation)?;
 
         let response = match Self::load_url(&url, false).await {
             Ok(response) => Ok(response),
@@ -272,20 +285,21 @@ impl HostSevCertificateProviderImpl {
         chip_id: &Identifier,
         status: &SnpPlatformStatus,
         generation: Generation,
-    ) -> String {
+    ) -> Result<String> {
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
         const KDS_VCEK: &str = "/vcek/v1";
 
         let hw_id = Self::get_hw_id_string(chip_id);
         let reported_tcb = status.reported_tcb_version;
-        format!(
+        let (bootloader, microcode) = Self::reported_bootloader_and_microcode(status)?;
+        Ok(format!(
             "{KDS_CERT_SITE}{KDS_VCEK}/{}/{hw_id}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
             generation.titlecase(),
-            reported_tcb.bootloader,
+            bootloader,
             reported_tcb.tee,
             reported_tcb.snp,
-            reported_tcb.microcode,
-        )
+            microcode,
+        ))
     }
 }
 
@@ -304,12 +318,13 @@ mod tests {
         let status = mock_snp_platform_status();
 
         assert_eq!(
-            HostSevCertificateProviderImpl::get_cache_filename(&chip_id, &status),
+            HostSevCertificateProviderImpl::get_cache_filename(&chip_id, &status).unwrap(),
             MOCK_CACHE_FILENAME
         );
 
         assert_eq!(
-            HostSevCertificateProviderImpl::get_kds_url(&chip_id, &status, Generation::Milan),
+            HostSevCertificateProviderImpl::get_kds_url(&chip_id, &status, Generation::Milan)
+                .unwrap(),
             MOCK_AMD_KEY_SERVER_URL
         );
     }
@@ -330,7 +345,8 @@ mod tests {
         let cache_filename = HostSevCertificateProviderImpl::get_cache_filename(
             &non_existing_chip_id,
             &mock_snp_platform_status(),
-        );
+        )
+        .unwrap();
         let cache_path = cache_dir.join(cache_filename);
         fs::create_dir_all(&cache_dir).unwrap();
         fs::write(
@@ -390,6 +406,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_venice_is_rejected_before_firmware_access() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().to_path_buf();
+
+        // The mock has no expectations, so any firmware call panics. Without the firmware's chip
+        // id and TCB, the provider can't query the AMD key server either.
+        let firmware = MockSevHostFirmware::new();
+
+        assert!(
+            HostSevCertificateProvider::new_for_test(
+                cache_dir,
+                Box::new(firmware),
+                Generation::Venice,
+            )
+            .load_certificate_chain_pem()
+            .await
+            .expect_err("Expected error")
+            .to_string()
+            .contains("SEV-SNP certificate chain is not supported on Venice")
+        );
+    }
+
+    #[tokio::test]
     async fn test_invalid_cached_certificate() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
@@ -398,7 +437,8 @@ mod tests {
         let cache_filename = HostSevCertificateProviderImpl::get_cache_filename(
             &mock_chip_id(),
             &mock_snp_platform_status(),
-        );
+        )
+        .unwrap();
         let cache_path = cache_dir.join(cache_filename);
         fs::write(&cache_path, b"invalid der data").unwrap();
 

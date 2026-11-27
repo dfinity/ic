@@ -39,10 +39,10 @@ pub fn mock_snp_platform_status() -> SnpPlatformStatus {
     SnpPlatformStatus {
         reported_tcb_version: TcbVersion {
             fmc: None,
-            bootloader: 3,
+            bootloader: Some(3),
             tee: 0,
             snp: 23,
-            microcode: 213,
+            microcode: Some(213),
         },
         ..Default::default()
     }

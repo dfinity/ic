@@ -1510,7 +1510,7 @@ crate.spec(
         "snp",
     ],
     package = "sev",
-    version = "7.1",
+    version = "9.0",
 )
 crate.spec(
     package = "sha2",

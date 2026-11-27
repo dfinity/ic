@@ -78,7 +78,7 @@ const DIFFERENT_CHIP_ID: [u8; 64] = [123; 64];
 
 fn default_launch_tcb_as_u64() -> u64 {
     u64::from_le_bytes(
-        TcbVersion::new(None, 1, 0, 0, 0)
+        TcbVersion::new(None, Some(1), 0, 0, Some(0))
             .to_bytes_with(DEFAULT_GENERATION)
             .unwrap(),
     )
@@ -300,7 +300,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .server_sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
-                .with_launch_tcb(TcbVersion::new(None, 1, 0, 0, 0))
+                .with_launch_tcb(TcbVersion::new(None, Some(1), 0, 0, Some(0)))
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)

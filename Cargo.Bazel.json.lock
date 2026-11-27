@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "d0640a1df7bfa6bb00dd9218479ef8eb0232b08cbda8879773c170af1a18eaf9",
+  "checksum": "796f630c26034b71b115e86392ff8e9f3a4295df304283d73e1580e46b39b92f",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18442,7 +18442,7 @@
             "target": "serde_yaml"
           },
           {
-            "id": "sev 7.1.0",
+            "id": "sev 9.0.0",
             "target": "sev"
           },
           {
@@ -52406,7 +52406,7 @@
       ],
       "version": "0.5.0"
     },
-    "sev 7.1.0": {
+    "sev 9.0.0": {
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
@@ -52496,8 +52496,8 @@
       "package_url": "https://github.com/virtee/sev",
       "repository": {
         "Http": {
-          "sha256": "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6",
-          "url": "https://static.crates.io/crates/sev/7.1.0/download"
+          "sha256": "4d16d4e670d6cc97c9c5c3a7c7c33595a0dd1f1ef4a5b7bd71f04244d4f2a8fb",
+          "url": "https://static.crates.io/crates/sev/9.0.0/download"
         }
       },
       "targets": [
@@ -52514,7 +52514,7 @@
           }
         }
       ],
-      "version": "7.1.0"
+      "version": "9.0.0"
     },
     "sha1 0.10.7": {
       "common_attrs": {
@@ -68085,7 +68085,7 @@
     "serde_regex 1.2.0",
     "serde_with 3.24.0",
     "serde_yaml 0.9.34+deprecated",
-    "sev 7.1.0",
+    "sev 9.0.0",
     "sha2 0.10.9",
     "sha2 0.11.1",
     "sha3 0.10.9",
