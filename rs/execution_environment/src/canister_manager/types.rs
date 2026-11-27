@@ -82,9 +82,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) canister_log_resize_instructions_per_byte: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
-    pub(crate) max_environment_variables: usize,
-    pub(crate) max_environment_variable_name_length: usize,
-    pub(crate) max_environment_variable_value_length: usize,
 }
 
 impl CanisterMgrConfig {
@@ -107,9 +104,6 @@ impl CanisterMgrConfig {
         canister_log_resize_instructions_per_byte: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
-        max_environment_variables: usize,
-        max_environment_variable_name_length: usize,
-        max_environment_variable_value_length: usize,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -129,9 +123,6 @@ impl CanisterMgrConfig {
             canister_log_resize_instructions_per_byte,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
-            max_environment_variables,
-            max_environment_variable_name_length,
-            max_environment_variable_value_length,
         }
     }
 }

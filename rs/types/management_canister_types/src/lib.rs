@@ -2526,13 +2526,14 @@ impl DataSize for EnvironmentVariable {
     }
 }
 
-/// Maximum number of environment variables allowed in a request.
+/// Maximum number of environment variables of a canister.
 pub const MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT: usize = 32;
 
-/// Maximum length of the name of an environment variable allowed in a request.
+/// Maximum length of the name of an environment variable of a canister.
 pub const MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;
 
-/// Maximum length of the value of an environment variable allowed in a request.
+/// Maximum length of the value of an environment variable of a canister.
+/// Environment variables are sized to comfortably accommodate the root key.
 pub const MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
 
 /// Environment variables bounded in number and in the size of a single
@@ -5092,8 +5093,18 @@ impl ReadCanisterSnapshotDataResponse {
     }
 }
 
-/// Maximum number of globals allowed in a request to upload the metadata of a
-/// canister snapshot, which is the maximum number of globals of a Wasm module.
+/// Maximum number of globals of a Wasm module, and thus also the maximum
+/// number of globals allowed in a request to upload the metadata of a canister
+/// snapshot.
+///
+/// Defining 100000 globals in a module can result in significant overhead in
+/// each message's execution time (about 40x), so set a limit 3 orders of
+/// magnitude lower which should still allow for reasonable canisters to be
+/// written (current max number of globals on the Alpha network is 7).
+///
+/// NOTE. This constant is contained in the public Interface Specification.
+/// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+/// if you change its value.
 pub const MAX_ALLOWED_GLOBALS_COUNT: usize = 1000;
 
 /// Maximum length of the certified data allowed in a request to upload the

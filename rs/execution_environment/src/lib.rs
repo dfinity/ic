@@ -394,9 +394,6 @@ fn setup_execution_helper(
         scheduler_config.canister_log_resize_instructions_per_byte,
         config.default_wasm_memory_limit,
         config.max_number_of_snapshots_per_canister,
-        config.max_environment_variables,
-        config.max_environment_variable_name_length,
-        config.max_environment_variable_value_length,
     );
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),
