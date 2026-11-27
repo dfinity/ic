@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 pub struct TestStorageLayout {
     pub base: PathBuf,
     pub overlay_dst: PathBuf,
+    /// What `existing_overlays()` returns, so oldest first.
     pub existing_overlays: Vec<PathBuf>,
 }
 
