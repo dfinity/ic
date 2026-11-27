@@ -489,16 +489,24 @@ impl WithdrawalFlow {
 }
 
 pub trait HasWithdrawalId {
+    /// Whether the minter refreshes its gas fee estimate while accepting the request. Processing
+    /// starts as soon as the request is accepted, so it then reuses that estimate.
+    const REFRESHES_GAS_FEE_ESTIMATE: bool;
+
     fn withdrawal_id(&self) -> &Nat;
 }
 
 impl HasWithdrawalId for RetrieveEthRequest {
+    const REFRESHES_GAS_FEE_ESTIMATE: bool = false;
+
     fn withdrawal_id(&self) -> &Nat {
         &self.block_index
     }
 }
 
 impl HasWithdrawalId for RetrieveErc20Request {
+    const REFRESHES_GAS_FEE_ESTIMATE: bool = true;
+
     fn withdrawal_id(&self) -> &Nat {
         &self.cketh_block_index
     }
@@ -619,13 +627,22 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         );
     }
 
-    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal<T, Req> {
-        self.assert_retrieve_eth_status(RetrieveEthStatus::Pending);
-        self.assert_withdrawal_status(WithdrawalStatus::Pending);
+    /// Lets the gas fee estimate that the minter refreshed while accepting the request expire
+    /// before the minter starts processing the request, so that processing has to refresh it
+    /// again. Processing is scheduled with a timer, which cannot fire in the round that set it.
+    pub fn expire_gas_fee_estimate(self) -> Self {
         self.setup
             .as_ref()
             .env
-            .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
+            .advance_time(Duration::from_secs(60));
+        self
+    }
+
+    /// The minter starts processing a withdrawal request as soon as it is accepted, so there is no
+    /// need to advance time to the next periodic run.
+    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal<T, Req> {
+        self.assert_retrieve_eth_status(RetrieveEthStatus::Pending);
+        self.assert_withdrawal_status(WithdrawalStatus::Pending);
         FeeHistoryProcessWithdrawal {
             setup: self.setup,
             withdrawal_request: self.withdrawal_request,
@@ -648,7 +665,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         params: ProcessWithdrawalParams,
     ) -> TransactionReceiptProcessWithdrawal<T, Req> {
         self.start_processing_withdrawals()
-            .retrieve_fee_history(params.override_rpc_eth_fee_history)
+            .retrieve_fee_history_unless_refreshed(params.override_rpc_eth_fee_history)
             .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
             .retrieve_latest_transaction_count(params.override_rpc_latest_eth_get_transaction_count)
             .expect_status(RetrieveEthStatus::TxCreated)
@@ -671,7 +688,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             transaction_hash: format!("{:?}", hash_transaction(tx, tx_sig)),
         };
         self.start_processing_withdrawals()
-            .retrieve_fee_history(identity)
+            .retrieve_fee_history_unless_refreshed(identity)
             .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
             .retrieve_latest_transaction_count(identity)
             .expect_status(RetrieveEthStatus::TxCreated)
@@ -732,7 +749,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         };
 
         self.start_processing_withdrawals()
-            .retrieve_fee_history(identity)
+            .retrieve_fee_history_unless_refreshed(identity)
             .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
             .retrieve_latest_transaction_count(identity)
             .expect_status(RetrieveEthStatus::TxCreated)
@@ -797,6 +814,29 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> FeeHistoryProcessWithdrawal<T, 
             .build()
             .expect_rpc_calls(&self.setup);
         self
+    }
+
+    /// A run that fails to refresh the gas fee estimate stops without scheduling a retry: the
+    /// request is processed again by the next periodic run.
+    pub fn wait_for_next_periodic_run(self) -> Self {
+        self.setup
+            .as_ref()
+            .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
+        self
+    }
+
+    /// Like [`Self::retrieve_fee_history`], unless the minter refreshed its gas fee estimate
+    /// while accepting the request, in which case it does not fetch the fee history again.
+    fn retrieve_fee_history_unless_refreshed<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        override_mock: F,
+    ) -> Self {
+        if Req::REFRESHES_GAS_FEE_ESTIMATE {
+            return self;
+        }
+        self.retrieve_fee_history(override_mock)
     }
 
     pub fn expect_status(

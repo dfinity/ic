@@ -1744,6 +1744,7 @@ mod withdraw_erc20 {
                 )
                 .expect_refresh_gas_fee_estimate(identity)
                 .expect_withdrawal_request_accepted()
+                .expire_gas_fee_estimate()
                 .start_processing_withdrawals()
                 .retrieve_fee_history(|mock| mock.modify_response_for_all(tx_fee_increase))
         }
@@ -1943,6 +1944,7 @@ mod withdraw_erc20 {
             )
             .expect_refresh_gas_fee_estimate(identity)
             .expect_withdrawal_request_accepted()
+            .expire_gas_fee_estimate()
             .start_processing_withdrawals()
             .retrieve_fee_history(move |mock| {
                 mock.modify_response(
