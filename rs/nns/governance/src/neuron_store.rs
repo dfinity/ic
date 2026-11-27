@@ -701,16 +701,9 @@ impl NeuronStore {
         // get_full_neuron is only called for the neurons that the caller has access to.
         let neuron_clone = self.with_neuron(&neuron_id, |neuron| neuron.clone())?;
 
-        if neuron_clone.is_authorized_to_vote(&principal_id) {
-            return Ok(neuron_clone);
-        }
-
-        let is_managed_by_principal = self.is_managed_by_any_of(
-            &neuron_clone.neuron_managers(),
-            &self.get_neuron_ids_readable_by_caller(principal_id),
-            &OnceCell::new(),
-        );
-        if is_managed_by_principal {
+        let is_readable = neuron_clone.is_authorized_to_vote(&principal_id)
+            || self.can_principal_manage_neuron_via_proposals(principal_id, &neuron_clone);
+        if is_readable {
             Ok(neuron_clone)
         } else {
             Err(NeuronStoreError::not_authorized_to_get_full_neuron(
@@ -898,6 +891,43 @@ impl NeuronStore {
         managers
             .iter()
             .any(|manager| neurons_they_directly_manage.contains(manager))
+    }
+
+    /// Returns whether `principal_id` is the controller or a hotkey of a neuron that manages
+    /// `neuron`, directly or indirectly (see `is_managed_by_any_of`).
+    ///
+    /// Unlike `is_managed_by_any_of`, this starts from `neuron`, not from the principal's neurons,
+    /// whose number anyone can inflate by adding the principal as a hotkey. Its cost is bounded
+    /// by the number of managers: it loads the followees of at most `MAX_FOLLOWEES_PER_TOPIC`
+    /// neurons, and does at most `MAX_FOLLOWEES_PER_TOPIC * (1 + MAX_FOLLOWEES_PER_TOPIC)` point
+    /// lookups in the principal index.
+    pub fn can_principal_manage_neuron_via_proposals(
+        &self,
+        principal_id: PrincipalId,
+        neuron: &Neuron,
+    ) -> bool {
+        let is_neuron_of_principal = |neuron_id: &NeuronId| {
+            with_stable_neuron_indexes(|indexes| {
+                indexes.principal().contains_entry(neuron_id, principal_id)
+            })
+        };
+
+        let managers = neuron.neuron_managers();
+        if managers.iter().any(is_neuron_of_principal) {
+            return true;
+        }
+
+        managers.iter().any(|manager_id| {
+            self.with_neuron_sections(
+                manager_id,
+                NeuronSections {
+                    followees: true,
+                    ..NeuronSections::NONE
+                },
+                |manager| manager.neuron_managers().iter().any(is_neuron_of_principal),
+            )
+            .unwrap_or(false)
+        })
     }
 
     // Gets all neuron ids associated with the given principal id (hot-key or controller).

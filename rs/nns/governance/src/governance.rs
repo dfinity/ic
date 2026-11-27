@@ -1713,18 +1713,6 @@ impl Governance {
         let empty = Vec::new();
         let current_page = chunks.get(page_number as usize).unwrap_or(&empty);
 
-        // The caller's neurons, and the neurons they directly manage. Computed only when first
-        // needed (see NeuronStore::is_managed_by_any_of).
-        let caller_neurons = OnceCell::new();
-        let neurons_caller_neurons_directly_manage = OnceCell::new();
-        let is_managed_by_caller = |neuron: &Neuron| {
-            self.neuron_store.is_managed_by_any_of(
-                &neuron.neuron_managers(),
-                caller_neurons.get_or_init(|| self.get_neuron_ids_by_principal(&caller)),
-                &neurons_caller_neurons_directly_manage,
-            )
-        };
-
         // Populate the above two neuron collections.
         for neuron_id in current_page {
             // Ignore when a neuron is not found. It is not guaranteed that a
@@ -1747,7 +1735,9 @@ impl Governance {
                         )
                         // Caller can (directly or indirectly) make ManageNeuron proposals for
                         // the neuron. Checked last, because it might need index lookups.
-                        || is_managed_by_caller(neuron);
+                        || self
+                            .neuron_store
+                            .can_principal_manage_neuron_via_proposals(caller, neuron);
                 if let_caller_read_full_neuron {
                     full_neurons.push(neuron.clone().into_api(
                         now,
