@@ -373,6 +373,92 @@ fn cannot_insert_invalid_route() {
 }
 
 #[test]
+fn split_subnet_assigns_fresh_ranges_to_both_subnets() {
+    // Step 1: Prepare the world.
+    const SOURCE: u64 = 1;
+    const OTHER: u64 = 2;
+    const DESTINATION: u64 = 3;
+    const N: u64 = CANISTER_IDS_PER_SUBNET;
+    let mut routing_table = new_routing_table(vec![((0, N - 1), SOURCE), ((N, 2 * N - 1), OTHER)]);
+
+    // Step 2: Run the code under test.
+    routing_table_split_subnet_or_panic(
+        &mut routing_table,
+        subnet_test_id(SOURCE),
+        subnet_test_id(DESTINATION),
+        new_canister_id_ranges(vec![(N / 2, N - 1)]),
+    );
+
+    // Step 3: Verify result(s).
+    assert_eq!(
+        routing_table,
+        new_routing_table(vec![
+            ((0, N / 2 - 1), SOURCE),
+            ((N / 2, N - 1), DESTINATION),
+            ((N, 2 * N - 1), OTHER),
+            ((2 * N, 3 * N - 1), DESTINATION),
+            ((3 * N, 4 * N - 1), SOURCE),
+        ])
+    );
+    assert_eq!(routing_table.well_formed(), Ok(()));
+}
+
+/// Whichever of the two subnets hosts the last range of the routing table once the migrated ranges
+/// have been rerouted, both fresh ranges must end up as routing table entries of their own, rather
+/// than being merged with that last range.
+#[test]
+fn split_subnet_does_not_merge_fresh_ranges_with_last_range() {
+    const SOURCE: u64 = 1;
+    const DESTINATION: u64 = 3;
+    const N: u64 = CANISTER_IDS_PER_SUBNET;
+
+    // Each case consists of the migrated range and the expected routing table.
+    let cases = [
+        // The source subnet keeps the last range.
+        (
+            vec![(0, N / 2 - 1)],
+            vec![
+                ((0, N / 2 - 1), DESTINATION),
+                ((N / 2, N - 1), SOURCE),
+                ((N, 2 * N - 1), DESTINATION),
+                ((2 * N, 3 * N - 1), SOURCE),
+            ],
+        ),
+        // The last range is migrated to the destination subnet.
+        (
+            vec![(N / 2, N - 1)],
+            vec![
+                ((0, N / 2 - 1), SOURCE),
+                ((N / 2, N - 1), DESTINATION),
+                ((N, 2 * N - 1), SOURCE),
+                ((2 * N, 3 * N - 1), DESTINATION),
+            ],
+        ),
+    ];
+
+    for (migrated_ranges, expected_routing_table) in cases {
+        // Step 1: Prepare the world.
+        let mut routing_table = new_routing_table(vec![((0, N - 1), SOURCE)]);
+
+        // Step 2: Run the code under test.
+        routing_table_split_subnet_or_panic(
+            &mut routing_table,
+            subnet_test_id(SOURCE),
+            subnet_test_id(DESTINATION),
+            new_canister_id_ranges(migrated_ranges.clone()),
+        );
+
+        // Step 3: Verify result(s).
+        assert_eq!(
+            routing_table,
+            new_routing_table(expected_routing_table),
+            "migrated range: {migrated_ranges:?}"
+        );
+        assert_eq!(routing_table.well_formed(), Ok(()));
+    }
+}
+
+#[test]
 fn can_remove_subnet() {
     let mut rt = new_routing_table(vec![((1, 1000), 1), ((2000, 3000), 2)]);
     assert_eq!(rt.well_formed(), Ok(()));

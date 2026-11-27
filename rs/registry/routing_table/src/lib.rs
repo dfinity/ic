@@ -237,17 +237,48 @@ pub fn routing_table_insert_subnet(
     routing_table.insert(canister_id_range, subnet_id)
 }
 
-/// A helper function to help insert a new subnet to the routing table
-pub fn routing_table_insert_subnet_and_reroute_or_panic(
-    subnet_id: SubnetId,
+/// Updates the routing table to reflect `source_subnet_id` being split into itself and the newly
+/// created `destination_subnet_id`:
+///  * the given ranges are rerouted from the source subnet to the destination subnet
+///  * each of the two subnets is assigned a fresh range to allocate new canister IDs from
+///
+/// The source subnet gets a fresh range too, because the range that it allocated canister IDs
+/// from so far may have been migrated, partially or entirely, to the destination subnet.
+///
+/// Replicas only allocate canister IDs from a fresh range, so this function ensures that neither of
+/// them merges with the routing table's last range.
+pub fn routing_table_split_subnet_or_panic(
     routing_table: &mut RoutingTable,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
     migrated_canister_id_ranges: CanisterIdRanges,
 ) {
-    routing_table_insert_subnet(routing_table, subnet_id)
-        .expect("Failed to insert a subnet to the routing table");
     routing_table
-        .assign_ranges(migrated_canister_id_ranges, subnet_id)
+        .assign_ranges(migrated_canister_id_ranges, destination_subnet_id)
         .expect("Failed to reroute canisters in the routing table");
+
+    // The destination subnet owns the last entry iff the migrated ranges include the end of the
+    // routing table. Otherwise, the source subnet or some other subnet owns it, both of which are
+    // handled by inserting the destination subnet's fresh range first.
+    let last_entry_subnet_id = routing_table
+        .iter()
+        .next_back()
+        .map(|(_range, subnet_id)| *subnet_id);
+    let subnet_ids_in_fresh_range_order = if last_entry_subnet_id == Some(destination_subnet_id) {
+        [source_subnet_id, destination_subnet_id]
+    } else {
+        [destination_subnet_id, source_subnet_id]
+    };
+
+    for subnet_id in subnet_ids_in_fresh_range_order {
+        routing_table_insert_subnet(routing_table, subnet_id).unwrap_or_else(|err| {
+            panic!(
+                "Failed to insert a fresh range of subnet {subnet_id} into the routing table: \
+                {err:?}"
+            )
+        });
+    }
+
     routing_table.optimize();
 }
 

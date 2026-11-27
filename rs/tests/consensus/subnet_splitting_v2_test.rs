@@ -893,8 +893,10 @@ async fn check_subnet_membership(
 
 /// Reads the routing table from the registry and checks that:
 /// 1. The NNS and Third subnets' routing tables remain unchanged,
-/// 2. The source subnet no longer has the migrated canister ids assigned to it.
-/// 3. The destination subnet has the migrated canister ids assigned to it.
+/// 2. The source subnet no longer has the migrated canister ids assigned to it, and has a fresh
+///    canister id range assigned to it.
+/// 3. The destination subnet has the migrated canister ids and a fresh canister id range assigned
+///    to it.
 fn check_routing_table(
     env: &TestEnv,
     source_subnet_id: SubnetId,
@@ -938,15 +940,31 @@ fn check_routing_table(
                     "New source subnet canister ranges: {:?}", new_canister_ranges
                 );
 
-                let expected_canister_ranges = difference(
+                let mut expected_canister_ranges: Vec<CanisterIdRange> = difference(
                     original_source_canister_ranges.iter(),
                     migrated_canister_ranges.iter(),
                 )
-                .unwrap();
+                .unwrap()
+                .iter()
+                .copied()
+                .collect();
+
+                // NOTE: this assumes that the source subnet was created before the third
+                // (i.e. the verified application) subnet. The source subnet's fresh range is
+                // assigned right after the destination subnet's one.
+                expected_canister_ranges.push(CanisterIdRange {
+                    start: CanisterId::from(
+                        source_subnet_last_canister_id + 2 * CANISTER_IDS_PER_SUBNET + 1,
+                    ),
+                    end: CanisterId::from(
+                        source_subnet_last_canister_id + 3 * CANISTER_IDS_PER_SUBNET,
+                    ),
+                });
                 assert_eq!(
                     CanisterIdRanges::try_from(new_canister_ranges).unwrap(),
-                    expected_canister_ranges,
-                    "The source subnet should have some of the canister ranges removed"
+                    CanisterIdRanges::try_from(expected_canister_ranges).unwrap(),
+                    "The source subnet should have some of the canister ranges removed and a \
+                    fresh canister range added"
                 );
             }
             // Destination subnet

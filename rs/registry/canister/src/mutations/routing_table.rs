@@ -16,7 +16,7 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute_or_panic,
+    routing_table_insert_subnet, routing_table_split_subnet_or_panic,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
@@ -335,18 +335,22 @@ impl Registry {
         })
     }
 
-    /// Handle adding a subnet to the routing table.
-    pub fn add_subnet_to_routing_table_and_reroute(
+    /// Makes a registry mutation that splits `source_subnet_id` in the routing table: it reroutes
+    /// `migrated_canister_id_ranges` to the newly created `destination_subnet_id` and assigns a
+    /// fresh canister ID range to each of the two subnets.
+    pub fn split_subnet_in_routing_table(
         &self,
         version: u64,
-        canister_id_ranges: CanisterIdRanges,
-        subnet_id_to_add: SubnetId,
+        source_subnet_id: SubnetId,
+        destination_subnet_id: SubnetId,
+        migrated_canister_id_ranges: CanisterIdRanges,
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
-            routing_table_insert_subnet_and_reroute_or_panic(
-                subnet_id_to_add,
+            routing_table_split_subnet_or_panic(
                 routing_table,
-                canister_id_ranges,
+                source_subnet_id,
+                destination_subnet_id,
+                migrated_canister_id_ranges,
             )
         })
     }
