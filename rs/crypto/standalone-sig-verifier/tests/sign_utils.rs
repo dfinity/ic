@@ -7,7 +7,7 @@ use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use simple_asn1::oid;
 
 use ic_types::crypto::AlgorithmId;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 const MESSAGE: &str = "some message";
 
@@ -152,7 +152,7 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
 
 // Generates a new P256 key pair, and computes an ECDSA signature on MESSAGE.
 // Returns the generated public key and the signature, both DER-encoded.
-fn new_p256_pk_and_sig_der<R: Rng + CryptoRng>(rng: &mut R) -> (Vec<u8>, Vec<u8>) {
+fn new_p256_pk_and_sig_der<R: CryptoRng>(rng: &mut R) -> (Vec<u8>, Vec<u8>) {
     let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
     let pk_der = sk.public_key().serialize_der();
     let sig_der = sk.sign_message_with_der_encoded_sig(MESSAGE.as_bytes());

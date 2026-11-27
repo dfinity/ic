@@ -15,7 +15,6 @@ use ic_types::crypto::SignableMock;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::{Height, NodeId};
 use rand::prelude::*;
-use rand::seq::SliceRandom;
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -357,7 +356,7 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
 }
 
 fn random_bytes<R: Rng + CryptoRng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.r#gen::<u8>()).collect()
+    (0..n).map(|_| rng.random::<u8>()).collect()
 }
 
 fn random_node<R: Rng + CryptoRng>(nodes: &[NodeId], rng: &mut R) -> NodeId {
@@ -365,7 +364,7 @@ fn random_node<R: Rng + CryptoRng>(nodes: &[NodeId], rng: &mut R) -> NodeId {
 }
 
 fn random_nodes<R: Rng + CryptoRng>(nodes: &[NodeId], n: usize, rng: &mut R) -> Vec<NodeId> {
-    nodes.choose_multiple(rng, n).cloned().collect()
+    nodes.sample(rng, n).cloned().collect()
 }
 
 /// Purge data for `dkg_id` from threshold sig data store of `node` by loading

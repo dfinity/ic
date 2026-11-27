@@ -55,7 +55,6 @@ rust_binary(
         "@crate_index//:anyhow",
         "@crate_index//:chrono",
         "@crate_index//:clap",
-        "@crate_index//:rand",
         "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:serde_json",

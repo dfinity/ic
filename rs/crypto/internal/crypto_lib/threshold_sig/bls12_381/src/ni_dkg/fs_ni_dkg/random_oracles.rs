@@ -244,7 +244,7 @@ pub fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; UNIQUE_HASH_OU
 ///
 /// A distinct `domain` should be used for each purpose of the random oracle.
 pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> Scalar {
-    use rand_chacha::rand_core::SeedableRng;
+    use rand::SeedableRng;
 
     let hash = random_oracle(domain, data);
     let rng = &mut rand_chacha::ChaChaRng::from_seed(hash);

@@ -37,7 +37,7 @@ use ic_types::{
     },
     time::expiry_time_from_now,
 };
-use rand::{Rng, seq::SliceRandom};
+use rand::{RngExt, seq::IndexedRandom};
 use rustls::{
     ClientConfig,
     pki_types::{CertificateDer, ServerName, pem::PemObject},
@@ -301,9 +301,8 @@ async fn load_root_delegation(
             fetching_root_delagation_attempts
         );
 
-        let backoff = Duration::from_secs(
-            rand::thread_rng().gen_range(1..DELEGATION_RETRY_MAX_BACKOFF_SECONDS),
-        );
+        let backoff =
+            Duration::from_secs(rand::rng().random_range(1..DELEGATION_RETRY_MAX_BACKOFF_SECONDS));
 
         match try_fetch_delegation_from_nns(
             config,
@@ -738,7 +737,7 @@ fn get_random_node_record_from_ids(
     registry_client: &dyn RegistryClient,
     node_ids: &[NodeId],
 ) -> Result<(NodeId, NodeRecord), String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let node_id = node_ids.choose(&mut rng).ok_or(format!(
         "Failed to choose a random node. Node list: {node_ids:?}"
     ))?;
@@ -807,7 +806,6 @@ mod tests {
         NodeId,
         messages::{Blob, HttpReadStateResponse},
     };
-    use rand::thread_rng;
     use rcgen::{CertifiedKey, generate_simple_self_signed};
     use rstest::rstest;
     use rustls::{
@@ -955,15 +953,15 @@ mod tests {
                 .build(),
         );
 
-        let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut thread_rng());
+        let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut rand::rng());
         let (system_subnet_public_key, _system_subnet_secret_key) =
-            generate_root_of_trust(&mut thread_rng());
+            generate_root_of_trust(&mut rand::rng());
         let (app_subnet_public_key, _app_subnet_secret_key) =
-            generate_root_of_trust(&mut thread_rng());
+            generate_root_of_trust(&mut rand::rng());
         let (verified_app_subnet_public_key, _verified_app_subnet_secret_key) =
-            generate_root_of_trust(&mut thread_rng());
+            generate_root_of_trust(&mut rand::rng());
         let (cloud_engine_public_key, _cloud_engine_secret_key) =
-            generate_root_of_trust(&mut thread_rng());
+            generate_root_of_trust(&mut rand::rng());
 
         add_subnet_key_record(
             &data_provider,

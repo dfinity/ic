@@ -1,7 +1,7 @@
 use criterion::*;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngExt};
 
 fn random_scalar<R: Rng + CryptoRng>(curve_type: EccCurveType, rng: &mut R) -> EccScalar {
     EccScalar::random(curve_type, rng)
@@ -67,7 +67,7 @@ fn scalar_math(c: &mut Criterion) {
 
         group.bench_function("hash_to_scalar", |b| {
             b.iter_batched_ref(
-                || rng.r#gen::<[u8; 32]>(),
+                || rng.random::<[u8; 32]>(),
                 |s| EccScalar::hash_to_scalar(curve_type, s, b"hash-to-scalar-bench"),
                 BatchSize::SmallInput,
             )

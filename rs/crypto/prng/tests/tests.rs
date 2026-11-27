@@ -12,7 +12,7 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
 };
 use ic_types_test_utils::ids::subnet_test_id;
-use rand::RngCore;
+use rand::Rng;
 use std::collections::BTreeSet;
 use std::str::FromStr;
 use strum::EnumCount;
@@ -37,12 +37,12 @@ fn should_produce_deterministic_randomness_from_seed_and_purpose() {
 
 #[test]
 fn should_offer_methods_of_rng_trait() {
-    use rand::Rng;
+    use rand::RngExt;
     let seed = seed();
 
     let mut rng = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
 
-    assert_eq!(rng.r#gen::<u32>(), 2_206_231_697);
+    assert_eq!(rng.random::<u32>(), 2_206_231_697);
 }
 
 #[test]

@@ -7,7 +7,7 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::RngExt;
 
 #[test]
 fn potpourri() {
@@ -27,7 +27,7 @@ fn potpourri() {
     }
     let epoch10 = Epoch::from(10);
 
-    let associated_data = rng.r#gen::<[u8; 32]>();
+    let associated_data = rng.random::<[u8; 32]>();
 
     let mut keys = Vec::new();
     for i in 0..=3 {
@@ -146,7 +146,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .collect::<Vec<_>>();
 
     // Encrypt
-    let associated_data = rng.r#gen::<[u8; 10]>();
+    let associated_data = rng.random::<[u8; 10]>();
     let (crsz, encryption_witness) =
         enc_chunks(&keys_and_chunks, epoch, &associated_data, sys, rng);
 

@@ -58,7 +58,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_types_cycles::Cycles;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use std::collections::{BTreeMap, BTreeSet};
 use strum::{EnumCount, IntoEnumIterator};
 
@@ -86,7 +86,7 @@ use strum::{EnumCount, IntoEnumIterator};
 /// }
 ///
 /// impl ExhaustiveSet for InnerType {
-///     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+///     fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
 ///         /* your implementation */
 ///     }
 /// }
@@ -95,11 +95,11 @@ use strum::{EnumCount, IntoEnumIterator};
 /// This ensures that the exhaustive set of enums always contains every variant
 /// (this logic is contained in the derive macro).
 pub trait ExhaustiveSet: Clone + Sized {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self>;
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self>;
 }
 
 impl<A: ExhaustiveSet, B: ExhaustiveSet, C: ExhaustiveSet> ExhaustiveSet for (A, B, C) {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let a_set = A::exhaustive_set(rng);
         let b_set = B::exhaustive_set(rng);
         let c_set = C::exhaustive_set(rng);
@@ -125,7 +125,7 @@ impl<A: ExhaustiveSet, B: ExhaustiveSet, C: ExhaustiveSet> ExhaustiveSet for (A,
 }
 
 impl<A: ExhaustiveSet, B: ExhaustiveSet> ExhaustiveSet for (A, B) {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let a_set = A::exhaustive_set(rng);
         let b_set = B::exhaustive_set(rng);
         let max = std::cmp::max(a_set.len(), b_set.len());
@@ -142,7 +142,7 @@ impl<A: ExhaustiveSet, B: ExhaustiveSet> ExhaustiveSet for (A, B) {
 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Option<T> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         T::exhaustive_set(rng)
             .into_iter()
             .map(|elem| Some(elem))
@@ -152,7 +152,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Option<T> {
 }
 
 impl<T: ExhaustiveSet, E: ExhaustiveSet> ExhaustiveSet for Result<T, E> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         // join exhaustive sets of T and E
         let ok_set = T::exhaustive_set(rng).into_iter().map(|v| Ok(v));
         let err_set = E::exhaustive_set(rng).into_iter().map(|e| Err(e));
@@ -161,7 +161,7 @@ impl<T: ExhaustiveSet, E: ExhaustiveSet> ExhaustiveSet for Result<T, E> {
 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Vec<T> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut set = Vec::new();
         // add a couple of random variations
         for _ in 0..8 {
@@ -172,7 +172,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Vec<T> {
 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Box<T> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         T::exhaustive_set(rng)
             .into_iter()
             .map(|elem| Box::new(elem))
@@ -181,7 +181,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Box<T> {
 }
 
 impl<T: ExhaustiveSet, const N: usize> ExhaustiveSet for [T; N] {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let exhaust_t = T::exhaustive_set(rng);
         let mut exhaust_iter = exhaust_t.iter().cycle();
         assert!(!exhaust_t.is_empty(), "exhaustive set must not be zero");
@@ -214,37 +214,37 @@ impl<T: ExhaustiveSet, const N: usize> ExhaustiveSet for [T; N] {
 }
 
 impl<T> ExhaustiveSet for std::marker::PhantomData<T> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         vec![std::marker::PhantomData]
     }
 }
 
 impl ExhaustiveSet for () {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         vec![()]
     }
 }
 
 impl ExhaustiveSet for bool {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         vec![true, false]
     }
 }
 
 impl ExhaustiveSet for String {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
     }
 }
 
 impl<T: Clone + Default> ExhaustiveSet for BackwardsCompatible<T, false> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_rng: &mut R) -> Vec<Self> {
         vec![Self::empty()]
     }
 }
 
 impl<T: Clone + ExhaustiveSet> ExhaustiveSet for BackwardsCompatible<T, true> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         T::exhaustive_set(rng).into_iter().map(Self::new).collect()
     }
 }
@@ -252,7 +252,7 @@ impl<T: Clone + ExhaustiveSet> ExhaustiveSet for BackwardsCompatible<T, true> {
 macro_rules! impl_for_integer {
     ($t: ty) => {
         impl ExhaustiveSet for $t {
-            fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+            fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
                 let val = rng.next_u64();
                 vec![<$t>::MAX, val as $t, 0]
             }
@@ -267,7 +267,7 @@ macro_rules! impl_for_integer {
 impl_for_integer! { u8, u16, u32, u64, u128 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for std::sync::Arc<T> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         T::exhaustive_set(rng)
             .into_iter()
             .map(std::sync::Arc::new)
@@ -278,7 +278,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for std::sync::Arc<T> {
 impl<K: ExhaustiveSet + std::cmp::Ord, V: ExhaustiveSet + HasId<K>> ExhaustiveSet
     for BTreeMap<K, V>
 {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let (k_set, v_set): (Vec<_>, Vec<_>) = <(K, V)>::exhaustive_set(rng).into_iter().unzip();
         let mut k_set = k_set.into_iter();
 
@@ -303,7 +303,7 @@ impl<K: ExhaustiveSet + std::cmp::Ord, V: ExhaustiveSet + HasId<K>> ExhaustiveSe
 }
 
 impl<K: ExhaustiveSet + std::cmp::Ord> ExhaustiveSet for BTreeSet<K> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         Vec::<K>::exhaustive_set(rng)
             .into_iter()
             .map(BTreeSet::from_iter)
@@ -312,13 +312,13 @@ impl<K: ExhaustiveSet + std::cmp::Ord> ExhaustiveSet for BTreeSet<K> {
 }
 
 impl ExhaustiveSet for RejectCode {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         RejectCode::iter().collect()
     }
 }
 
 impl ExhaustiveSet for PrincipalId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut data = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         rng.fill_bytes(&mut data);
         vec![Self::new(data.len(), data)]
@@ -326,7 +326,7 @@ impl ExhaustiveSet for PrincipalId {
 }
 
 impl ExhaustiveSet for CanisterId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         PrincipalId::exhaustive_set(rng)
             .into_iter()
             .map(CanisterId::unchecked_from_principal)
@@ -335,7 +335,7 @@ impl ExhaustiveSet for CanisterId {
 }
 
 impl<Unit, Repr: ExhaustiveSet> ExhaustiveSet for AmountOf<Unit, Repr> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         Repr::exhaustive_set(rng)
             .into_iter()
             .map(AmountOf::new)
@@ -344,13 +344,13 @@ impl<Unit, Repr: ExhaustiveSet> ExhaustiveSet for AmountOf<Unit, Repr> {
 }
 
 impl<Entity, Repr: ExhaustiveSet> ExhaustiveSet for Id<Entity, Repr> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         Repr::exhaustive_set(rng).into_iter().map(Id::new).collect()
     }
 }
 
 impl ExhaustiveSet for crate::consensus::Payload {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         BlockPayload::exhaustive_set(rng)
             .into_iter()
             .map(|elem| Self::new(crypto_hash, elem))
@@ -359,7 +359,7 @@ impl ExhaustiveSet for crate::consensus::Payload {
 }
 
 impl ExhaustiveSet for ReplicaVersion {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         vec![
             ReplicaVersion::try_from(format!("2020-09.{}.{}", rng.next_u32(), rng.next_u32()))
                 .unwrap(),
@@ -368,13 +368,13 @@ impl ExhaustiveSet for ReplicaVersion {
 }
 
 impl ExhaustiveSet for EcdsaCurve {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         EcdsaCurve::iter().collect()
     }
 }
 
 impl ExhaustiveSet for EcdsaKeyId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(EcdsaCurve, String)>::exhaustive_set(rng)
             .into_iter()
             .map(|elem| Self {
@@ -386,13 +386,13 @@ impl ExhaustiveSet for EcdsaKeyId {
 }
 
 impl ExhaustiveSet for SchnorrAlgorithm {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         SchnorrAlgorithm::iter().collect()
     }
 }
 
 impl ExhaustiveSet for SchnorrKeyId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(SchnorrAlgorithm, String)>::exhaustive_set(rng)
             .into_iter()
             .map(|elem| Self {
@@ -404,13 +404,13 @@ impl ExhaustiveSet for SchnorrKeyId {
 }
 
 impl ExhaustiveSet for VetKdCurve {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_: &mut R) -> Vec<Self> {
         VetKdCurve::iter().collect()
     }
 }
 
 impl ExhaustiveSet for VetKdKeyId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(VetKdCurve, String)>::exhaustive_set(rng)
             .into_iter()
             .map(|elem| Self {
@@ -422,7 +422,7 @@ impl ExhaustiveSet for VetKdKeyId {
 }
 
 impl ExhaustiveSet for MasterPublicKeyId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         assert_eq!(MasterPublicKeyId::COUNT, 3);
         let ecdsa_key_ids = EcdsaKeyId::exhaustive_set(rng);
         let schnorr_key_ids = SchnorrKeyId::exhaustive_set(rng);
@@ -438,7 +438,7 @@ impl ExhaustiveSet for MasterPublicKeyId {
 }
 
 impl ExhaustiveSet for IDkgMasterPublicKeyId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         MasterPublicKeyId::exhaustive_set(rng)
             .into_iter()
             .filter_map(|key_id| IDkgMasterPublicKeyId::try_from(key_id).ok())
@@ -447,7 +447,7 @@ impl ExhaustiveSet for IDkgMasterPublicKeyId {
 }
 
 impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>, V> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut res = Vec::new();
         for v in V::exhaustive_set(rng) {
             res.push(Hashed::new(crypto_hash, v));
@@ -462,7 +462,7 @@ struct HashedSummaryBlock {
 }
 
 impl ExhaustiveSet for HashedSummaryBlock {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let summary_payloads = SummaryPayload::exhaustive_set(rng);
         let mut index = 0;
 
@@ -488,7 +488,7 @@ impl ExhaustiveSet for HashedSummaryBlock {
 }
 
 impl ExhaustiveSet for CatchUpContent {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let registry_versions = Option::<RegistryVersion>::exhaustive_set(rng);
         <(HashedSummaryBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
             .into_iter()
@@ -506,7 +506,7 @@ impl ExhaustiveSet for CatchUpContent {
 }
 
 impl ExhaustiveSet for CatchUpShareContent {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <CatchUpContent>::exhaustive_set(rng)
             .iter()
             .map(|cup| cup.into())
@@ -515,7 +515,7 @@ impl ExhaustiveSet for CatchUpShareContent {
 }
 
 impl ExhaustiveSet for Cycles {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <u128>::exhaustive_set(rng)
             .into_iter()
             .map(Cycles::from)
@@ -530,7 +530,7 @@ impl ExhaustiveSet for Cycles {
  */
 
 impl ExhaustiveSet for BitcoinReject {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(RejectCode, String)>::exhaustive_set(rng)
             .into_iter()
             .map(|(reject_code, message)| BitcoinReject {
@@ -542,7 +542,7 @@ impl ExhaustiveSet for BitcoinReject {
 }
 
 impl ExhaustiveSet for BitcoinAdapterResponseWrapper {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let blobs = <Vec<Vec<u8>>>::exhaustive_set(rng);
         let successors = blobs.into_iter().map(|blob| {
             BitcoinAdapterResponseWrapper::GetSuccessorsResponse(GetSuccessorsResponseComplete {
@@ -576,7 +576,7 @@ impl ExhaustiveSet for BitcoinAdapterResponseWrapper {
 }
 
 impl ExhaustiveSet for BitcoinAdapterResponse {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(BitcoinAdapterResponseWrapper, u64)>::exhaustive_set(rng)
             .into_iter()
             .map(|(response, callback_id)| BitcoinAdapterResponse {
@@ -588,7 +588,7 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
 }
 
 impl ExhaustiveSet for CryptoHash {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut random = vec![0; 32];
         rng.fill_bytes(&mut random);
 
@@ -602,13 +602,13 @@ impl ExhaustiveSet for CryptoHash {
 }
 
 impl<T> ExhaustiveSet for BasicSigOf<T> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(_rng: &mut R) -> Vec<Self> {
         vec![BasicSigOf::new(BasicSig(vec![1, 2, 3]))]
     }
 }
 
 impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<U>> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, NodeId)>::exhaustive_set(rng)
             .into_iter()
             .map(|(content, signer)| Self {
@@ -623,7 +623,7 @@ impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignat
 }
 
 impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<U>> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let signatures_map: BTreeMap<_, _> = NodeId::exhaustive_set(rng)
             .into_iter()
             .map(|id| (id, BasicSigOf::new(BasicSig(vec![1, 2, 3, 4, 5, 6]))))
@@ -642,7 +642,7 @@ impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignat
 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignature<T>> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, NiDkgId)>::exhaustive_set(rng)
             .into_iter()
             .map(|(content, signer)| Self {
@@ -659,7 +659,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignature<T>> {
 }
 
 impl ExhaustiveSet for CertifiedStreamSlice {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(Vec<u8>, Vec<u8>, SignedCertificationContent)>::exhaustive_set(rng)
             .into_iter()
             .map(|(payload, merkle_proof, mut certification)| {
@@ -676,7 +676,7 @@ impl ExhaustiveSet for CertifiedStreamSlice {
 }
 
 impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignatureShare<U>> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, NodeId)>::exhaustive_set(rng)
             .into_iter()
             .map(|(content, signer)| Self {
@@ -691,7 +691,7 @@ impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSi
 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignatureShare<T>> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, NodeId)>::exhaustive_set(rng)
             .into_iter()
             .map(|(content, signer)| Self {
@@ -708,7 +708,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignatureShare<T>> {
 }
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, Vec<NodeId>)>::exhaustive_set(rng)
             .into_iter()
             .map(|(content, signers)| Self {
@@ -723,7 +723,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
 }
 
 impl ExhaustiveSet for Witness {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut digest = [0_u8; 32];
         rng.fill_bytes(&mut digest);
         vec![Witness::new_for_testing(Digest(digest))]
@@ -731,7 +731,7 @@ impl ExhaustiveSet for Witness {
 }
 
 impl ExhaustiveSet for NiDkgConfig {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let nidkg_ids = <(NiDkgId, bool)>::exhaustive_set(rng);
         nidkg_ids
             .into_iter()
@@ -747,7 +747,7 @@ impl ExhaustiveSet for NiDkgConfig {
 }
 
 impl ExhaustiveSet for NiDkgTranscript {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let nodes = NodeId::exhaustive_set(rng);
         NiDkgTag::exhaustive_set(rng)
             .into_iter()
@@ -764,13 +764,13 @@ impl ExhaustiveSet for NiDkgTranscript {
 }
 
 impl ExhaustiveSet for NiDkgDealing {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         vec![NiDkgDealing::dummy_dealing_for_tests(rng.next_u32() as u8)]
     }
 }
 
 impl ExhaustiveSet for InitialIDkgDealings {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let dealers = BTreeSet::<NodeId>::exhaustive_set(rng);
         let mut receivers = BTreeSet::<NodeId>::exhaustive_set(rng)
             .into_iter()
@@ -805,7 +805,7 @@ impl ExhaustiveSet for InitialIDkgDealings {
 }
 
 impl ExhaustiveSet for IDkgTranscriptParams {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let all_threshold_algs = AlgorithmId::all_threshold_ecdsa_algorithms()
             .into_iter()
             .chain(AlgorithmId::all_threshold_schnorr_algorithms())
@@ -839,21 +839,21 @@ impl ExhaustiveSet for IDkgTranscriptParams {
 }
 
 impl ExhaustiveSet for IDkgDealers {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let node_ids = BTreeSet::from(<[NodeId; 8]>::exhaustive_set(rng)[0]);
         vec![IDkgDealers::new(node_ids).unwrap()]
     }
 }
 
 impl ExhaustiveSet for IDkgReceivers {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let node_ids = BTreeSet::from(<[NodeId; 8]>::exhaustive_set(rng)[0]);
         vec![IDkgReceivers::new(node_ids).unwrap()]
     }
 }
 
 impl ExhaustiveSet for IDkgTranscriptOperation {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let transcripts = IDkgTranscript::exhaustive_set(rng);
 
         let mut masked = transcripts
@@ -908,7 +908,7 @@ pub struct DerivedQuadrupleInCreation {
 }
 
 impl ExhaustiveSet for QuadrupleInCreation {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut result = DerivedQuadrupleInCreation::exhaustive_set(rng)
             .into_iter()
             .map(|q| QuadrupleInCreation {
@@ -952,7 +952,7 @@ pub struct DerivedIDkgPayload {
 }
 
 impl ExhaustiveSet for IDkgPayload {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+    fn exhaustive_set<R: CryptoRng>(rng: &mut R) -> Vec<Self> {
         DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
             .map(|payload| IDkgPayload {
@@ -995,7 +995,7 @@ fn dummy_dealings(
 fn replace_by_singleton_if_empty<
     K: ExhaustiveSet + std::cmp::Ord,
     V: ExhaustiveSet + HasId<K>,
-    R: RngCore + CryptoRng,
+    R: CryptoRng,
 >(
     collection: BTreeMap<K, V>,
     rng: &mut R,
@@ -1219,14 +1219,14 @@ mod tests {
         }
         impl HasId<Small> for Big {}
         impl HasId<Big> for Small {}
-        let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::thread_rng());
+        let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::rng());
         assert_eq!(set.len(), 3);
         assert_eq!(set[0][&Small::A], Big::X);
         assert_eq!(set[0][&Small::B], Big::Y);
         assert_eq!(set[1][&Small::A], Big::Z);
         assert!(set[2].is_empty());
 
-        let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::thread_rng());
+        let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::rng());
         assert_eq!(set.len(), 2);
         assert_eq!(set[0][&Big::X], Small::A);
         assert_eq!(set[0][&Big::Y], Small::B);
@@ -1247,7 +1247,7 @@ mod tests {
             A1,
             A2,
         }
-        let set = Enum1::exhaustive_set(&mut rand::thread_rng());
+        let set = Enum1::exhaustive_set(&mut rand::rng());
         assert_eq!(set.len(), 3);
         assert_eq!(set[0], Enum1::V2);
         assert_eq!(

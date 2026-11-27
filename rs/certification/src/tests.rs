@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_certification_test_utils::{
@@ -647,7 +647,7 @@ fn should_fail_on_invalid_cbor() {
     let pk = CertificateBuilder::new_with_rng(CustomTree(LabeledTree::Leaf(b"".to_vec())), rng)
         .get_root_public_key();
     let mut garbled_data: [u8; 128] = [0; 128];
-    thread_rng().fill(&mut garbled_data);
+    rand::rng().fill(&mut garbled_data);
 
     let verification_result = verify_certified_data_with_and_without_cache(
         &garbled_data,
@@ -1244,7 +1244,7 @@ fn should_accept_delegation_with_non_cloud_engine_type() {
 
 fn random_certified_data() -> Digest {
     let mut random_certified_data: [u8; 32] = [0; 32];
-    thread_rng().fill(&mut random_certified_data);
+    rand::rng().fill(&mut random_certified_data);
     Digest(random_certified_data)
 }
 

@@ -17,7 +17,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
     InitialIDkgDealings, SignedIDkgDealing,
 };
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 use std::cell::OnceCell;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
@@ -89,7 +89,7 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
     }
 }
 
-fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_create_dealing<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -120,7 +120,7 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_dealing_public<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -154,7 +154,7 @@ fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_dealing_private<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -188,7 +188,7 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_initial_dealings<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -274,7 +274,7 @@ fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_create_transcript<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -310,7 +310,7 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_transcript<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -354,7 +354,7 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_load_transcript<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -395,7 +395,7 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_retain_active_transcripts<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     num_pre_sig_quadruples: i32,
@@ -461,7 +461,7 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
     );
 }
 
-fn bench_verify_complaint<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_complaint<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -496,7 +496,7 @@ fn bench_verify_complaint<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_open_transcript<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -540,7 +540,7 @@ fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_opening<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -585,7 +585,7 @@ fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_load_transcript_with_openings<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_load_transcript_with_openings<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: IDkgMode,
@@ -745,7 +745,7 @@ fn retain_active_transcripts(receiver: &Node, active_transcripts: &HashSet<IDkgT
         })
 }
 
-fn generate_key_transcript<R: RngCore + CryptoRng>(
+fn generate_key_transcript<R: Rng + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     alg: AlgorithmId,
     dealers: &IDkgDealers,
@@ -756,7 +756,7 @@ fn generate_key_transcript<R: RngCore + CryptoRng>(
     run_idkg_without_complaint(&unmasked_key_params, &env.nodes, rng)
 }
 
-fn other_receiver_or_same_if_only_one<'a, R: RngCore + CryptoRng>(
+fn other_receiver_or_same_if_only_one<'a, R: Rng + CryptoRng>(
     receivers: &'a IDkgReceivers,
     exclusion: &Node,
     nodes: &'a Nodes,
@@ -788,7 +788,7 @@ impl Default for TestCase {
 }
 
 impl TestCase {
-    fn new_test_environment<R: RngCore + CryptoRng>(
+    fn new_test_environment<R: Rng + CryptoRng>(
         &self,
         vault_type: VaultType,
         rng: &mut R,

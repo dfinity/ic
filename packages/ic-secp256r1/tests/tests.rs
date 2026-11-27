@@ -1,6 +1,6 @@
 use hex_literal::hex;
 use ic_secp256r1::*;
-use rand::Rng;
+use rand::RngExt;
 use rand_chacha::ChaCha20Rng;
 use sha2::Digest;
 
@@ -10,7 +10,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
+    let seed = rand::rng().random::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));
@@ -43,28 +43,27 @@ impl ScriptedRng {
     }
 }
 
-impl rand::RngCore for ScriptedRng {
-    fn next_u32(&mut self) -> u32 {
+impl rand::TryRng for ScriptedRng {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
         panic!("ScriptedRng hands out bytes only through fill_bytes")
     }
 
-    fn next_u64(&mut self) -> u64 {
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
         panic!("ScriptedRng hands out bytes only through fill_bytes")
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         let end = self.consumed + dest.len();
         assert!(end <= self.bytes.len(), "ScriptedRng ran out of bytes");
         dest.copy_from_slice(&self.bytes[self.consumed..end]);
         self.consumed = end;
-    }
-
-    fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
-        panic!("ScriptedRng hands out bytes only through fill_bytes")
+        Ok(())
     }
 }
 
-impl rand::CryptoRng for ScriptedRng {}
+impl rand::TryCryptoRng for ScriptedRng {}
 
 #[test]
 fn should_pass_wycheproof_ecdsa_secp256r1_verification_tests() -> Result<(), KeyDecodingError> {
@@ -162,7 +161,7 @@ fn should_reject_long_x_when_deserializing_private_key() {
 
 #[test]
 fn should_accept_signatures_that_we_generate() {
-    use rand::RngCore;
+    use rand::Rng;
 
     let rng = &mut test_rng();
 
@@ -186,7 +185,7 @@ fn should_accept_signatures_that_we_generate() {
 
 #[test]
 fn should_accept_der_encoded_signatures_that_we_generate() {
-    use rand::RngCore;
+    use rand::Rng;
 
     let rng = &mut test_rng();
 
@@ -261,7 +260,7 @@ fn should_reject_digests_shorter_than_16_bytes() {
     let pk = sk.public_key();
 
     for len in (0..=17).chain([32]) {
-        let bytes = rng.r#gen::<[u8; 32]>();
+        let bytes = rng.random::<[u8; 32]>();
         let digest = &bytes[..len];
         let mut zero_prefixed = [0_u8; 32];
         zero_prefixed[32 - len..].copy_from_slice(digest);
@@ -470,8 +469,8 @@ fn private_derivation_is_compatible_with_public_derivation() {
     let rng = &mut test_rng();
 
     fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
-        let l = 1 + rng.r#gen::<usize>() % 9;
-        let path = (0..l).map(|_| rng.r#gen::<u32>()).collect::<Vec<u32>>();
+        let l = 1 + rng.random::<u64>() as usize % 9;
+        let path = (0..l).map(|_| rng.random::<u32>()).collect::<Vec<u32>>();
         DerivationPath::new_bip32(&path)
     }
 
@@ -481,7 +480,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
 
         let path = random_path(rng);
 
-        let chain_code = rng.r#gen::<[u8; 32]>();
+        let chain_code = rng.random::<[u8; 32]>();
 
         let (derived_pk, cc_pk) = master_pk.derive_subkey_with_chain_code(&path, &chain_code);
 
@@ -494,7 +493,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
 
         assert_eq!(hex::encode(cc_pk), hex::encode(cc_sk));
 
-        let msg = rng.r#gen::<[u8; 32]>();
+        let msg = rng.random::<[u8; 32]>();
         let derived_sig = derived_sk.sign_message(&msg);
 
         assert!(derived_pk.verify_signature(&msg, &derived_sig));
@@ -605,15 +604,15 @@ fn should_match_slip10_derivation_retry_test_data() {
 #[test]
 fn private_derivation_also_works_for_derived_keys() {
     let rng = &mut test_rng();
-    use rand::Rng;
+    use rand::RngExt;
 
     for _ in 0..100 {
         let master_sk = PrivateKey::generate_using_rng(rng);
 
-        let chain_code = rng.r#gen::<[u8; 32]>();
-        let path_len = 2 + rng.r#gen::<usize>() % 32;
+        let chain_code = rng.random::<[u8; 32]>();
+        let path_len = 2 + rng.random::<u64>() as usize % 32;
         let path = (0..path_len)
-            .map(|_| rng.r#gen::<u32>())
+            .map(|_| rng.random::<u32>())
             .collect::<Vec<u32>>();
 
         // First derive directly from a normal key
@@ -622,7 +621,7 @@ fn private_derivation_also_works_for_derived_keys() {
 
         // Now derive with the path split in half
 
-        let split = rng.r#gen::<usize>() % (path_len - 1);
+        let split = rng.random::<u64>() as usize % (path_len - 1);
         let path1 = DerivationPath::new_bip32(&path[..split]);
         let path2 = DerivationPath::new_bip32(&path[split..]);
 

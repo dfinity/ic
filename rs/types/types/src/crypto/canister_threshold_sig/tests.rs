@@ -12,7 +12,7 @@ use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngExt};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -674,15 +674,15 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
 }
 
 // A randomized way to get non-repeating IDs.
-fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.r#gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
-    let height = Height::from(rng.r#gen::<u64>());
+fn random_transcript_id<R: CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
+    let id = rng.random();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.random::<u64>()));
+    let height = Height::from(rng.random::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-fn transcript<R: Rng + CryptoRng>(
+fn transcript<R: CryptoRng>(
     receivers: BTreeSet<NodeId>,
     transcript_type: IDkgTranscriptType,
     rng: &mut R,
@@ -698,7 +698,7 @@ fn transcript<R: Rng + CryptoRng>(
     }
 }
 
-fn schnorr_transcript<R: Rng + CryptoRng>(
+fn schnorr_transcript<R: CryptoRng>(
     receivers: BTreeSet<NodeId>,
     transcript_type: IDkgTranscriptType,
     rng: &mut R,
@@ -714,7 +714,7 @@ fn schnorr_transcript<R: Rng + CryptoRng>(
     }
 }
 
-fn transcripts_for_quadruple<R: Rng + CryptoRng>(
+fn transcripts_for_quadruple<R: CryptoRng>(
     receivers: BTreeSet<NodeId>,
     rng: &mut R,
 ) -> (
@@ -753,7 +753,7 @@ fn transcripts_for_quadruple<R: Rng + CryptoRng>(
     )
 }
 
-fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
+fn transcripts_for_ecdsa_inputs<R: CryptoRng>(
     receivers: BTreeSet<NodeId>,
     rng: &mut R,
 ) -> (
@@ -814,11 +814,8 @@ fn hashed_message() -> Vec<u8> {
     vec![123; 32]
 }
 
-fn message_in_size_range<R: Rng + CryptoRng>(
-    range: core::ops::Range<usize>,
-    rng: &mut R,
-) -> Vec<u8> {
-    let size = rng.gen_range(range);
+fn message_in_size_range<R: CryptoRng>(range: core::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
+    let size = rng.random_range(range);
     vec![123; size]
 }
 

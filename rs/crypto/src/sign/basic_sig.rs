@@ -5,6 +5,7 @@ use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::types::SigConverter;
 use ic_crypto_internal_csp::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
+use rand::RngExt;
 
 #[cfg(test)]
 mod tests;
@@ -166,7 +167,7 @@ impl BasicSigVerifierInternal {
             keys.push(pk);
         }
 
-        let seed: [u8; 32] = csprng.write().r#gen();
+        let seed: [u8; 32] = csprng.write().random();
 
         ic_ed25519::PublicKey::batch_verify_with_seed(&msgs, &sigs, &keys, &seed).map_err(|e| {
             CryptoError::SignatureVerification {

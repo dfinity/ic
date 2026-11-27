@@ -5,13 +5,19 @@ use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::replica_logger::no_op_logger;
 use proptest::prelude::ProptestConfig;
-use rand::rngs::OsRng;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
 use std::sync::Arc;
 use tempfile::TempDir;
 
 #[allow(unused)]
 pub fn local_vault_in_temp_dir() -> (
-    LocalCspVault<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>,
+    LocalCspVault<
+        UnwrapErr<SysRng>,
+        ProtoSecretKeyStore,
+        InMemorySecretKeyStore,
+        ProtoPublicKeyStore,
+    >,
     TempDir,
 ) {
     use ic_config::crypto::CryptoConfig;

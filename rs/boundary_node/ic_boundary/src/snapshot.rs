@@ -24,7 +24,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
@@ -196,7 +196,7 @@ impl Subnet {
     pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
         let nodes = self
             .nodes
-            .choose_multiple(&mut rand::thread_rng(), n)
+            .sample(&mut rand::rng(), n)
             .cloned()
             .collect::<Vec<_>>();
 
@@ -223,7 +223,7 @@ impl Subnet {
         let nodes = &self.nodes[0..m];
 
         let picked_nodes = nodes
-            .choose_multiple(&mut rand::thread_rng(), n)
+            .sample(&mut rand::rng(), n)
             .cloned()
             .collect::<Vec<_>>();
 

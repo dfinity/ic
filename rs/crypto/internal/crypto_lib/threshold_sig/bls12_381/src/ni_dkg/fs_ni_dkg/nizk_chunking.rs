@@ -8,7 +8,7 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::{
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 /// Domain separators for the zk proof of chunking
@@ -195,7 +195,7 @@ impl UniqueHash for SecondMoveChunking {
 }
 
 /// Create a proof of correct chunking
-pub fn prove_chunking<R: RngCore + CryptoRng>(
+pub fn prove_chunking<R: CryptoRng>(
     instance: &ChunkingInstance,
     witness: &ChunkingWitness,
     rng: &mut R,
@@ -214,7 +214,10 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
-    let y0 = G1Affine::hash("ic-crypto-nizk-chunking-proof-y0", &rng.r#gen::<[u8; 32]>());
+    let y0 = G1Affine::hash(
+        "ic-crypto-nizk-chunking-proof-y0",
+        &rng.random::<[u8; 32]>(),
+    );
 
     let g1 = &instance.g1_gen;
 

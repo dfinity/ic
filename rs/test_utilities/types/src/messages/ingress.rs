@@ -9,7 +9,6 @@ use ic_types::{
     },
     time::expiry_time_from_now,
 };
-use rand::thread_rng;
 use std::convert::TryFrom;
 
 /// A simple ingress message builder.
@@ -187,7 +186,7 @@ impl SignedIngressBuilder {
 
     /// Create keypair, set sender and signature accordingly
     pub fn sign_for_randomly_generated_sender(mut self) -> Self {
-        let private_key = ic_ed25519::PrivateKey::generate_using_rng(&mut thread_rng());
+        let private_key = ic_ed25519::PrivateKey::generate_using_rng(&mut rand::rng());
         let sender_pubkey =
             ed25519_public_key_to_der(private_key.public_key().serialize_raw().to_vec());
         self.sender_pubkey = Some(sender_pubkey.clone());

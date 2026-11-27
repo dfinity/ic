@@ -13,7 +13,6 @@ rust_binary(
         "//rs/ic_os/sev/attestation",
         "//rs/ic_os/sev/guest",
         "@crate_index//:anyhow",
-        "@crate_index//:rand",
         "@crate_index//:sev",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
@@ -25,5 +24,6 @@ rust_test(
     crate = ":server",
     deps = [
         "//rs/ic_os/sev/guest/testing",
+        "@crate_index//:rand",
     ],
 )

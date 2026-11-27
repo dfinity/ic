@@ -11,7 +11,7 @@ use ic_system_test_driver::{
     canister_api::{CallMode, NnsRequestProvider},
 };
 use icp_ledger::Subaccount;
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rosetta_core::models::RosettaSupportedKeyPair;
 

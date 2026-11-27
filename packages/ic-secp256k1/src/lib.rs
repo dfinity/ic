@@ -13,7 +13,7 @@ use k256::{
         array::{Array, typenum::Unsigned},
     },
 };
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, RngExt, SeedableRng};
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
@@ -341,13 +341,14 @@ pub struct PrivateKey {
 
 impl PrivateKey {
     /// Generate a new random private key
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 
     /// Generate a new random private key using some provided RNG
-    pub fn generate_using_rng<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+    pub fn generate_using_rng<R: CryptoRng>(rng: &mut R) -> Self {
         // Rejection sampling: draw 32 bytes until they encode a scalar in [1, n)
         let mut bytes = zeroize::Zeroizing::new(k256::FieldBytes::default());
         loop {
@@ -522,18 +523,14 @@ impl PrivateKey {
     }
 
     /// Sign a message with BIP340 Schnorr
-    pub fn sign_message_with_bip340<R: Rng + CryptoRng>(
-        &self,
-        message: &[u8],
-        rng: &mut R,
-    ) -> [u8; 64] {
+    pub fn sign_message_with_bip340<R: CryptoRng>(&self, message: &[u8], rng: &mut R) -> [u8; 64] {
         loop {
             /*
              * The only way this function can fail is the (cryptographically unlikely)
              * situation where k or s of zero is generated. If this occurs, simply retry
              * with a new aux_rand
              */
-            let aux_rand = rng.r#gen::<[u8; 32]>();
+            let aux_rand = rng.random::<[u8; 32]>();
             if let Some(sig) = self.sign_bip340_with_aux_rand(message, &aux_rand) {
                 return sig;
             }
@@ -574,7 +571,7 @@ impl PrivateKey {
     }
 
     /// Sign a message with BIP340 Schnorr with Taproot derivation
-    pub fn sign_message_with_bip341<R: Rng + CryptoRng>(
+    pub fn sign_message_with_bip341<R: CryptoRng>(
         &self,
         message: &[u8],
         rng: &mut R,

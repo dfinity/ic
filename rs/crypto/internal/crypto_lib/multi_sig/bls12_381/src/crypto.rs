@@ -11,7 +11,7 @@ use ic_crypto_internal_bls12_381_type::{
 };
 
 use ic_crypto_sha2::DomainSeparationContext;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 /// Domain separator for Hash-to-G1 to be used for signature generation in a
 /// scheme supporting proof of possession, as specified for the Proof of
@@ -35,7 +35,7 @@ pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
     G1Projective::hash(DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP, public_key)
 }
 
-pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
+pub fn keypair_from_rng<R: CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
     let secret_key = Scalar::random(rng);
     let public_key = (G2Affine::generator() * &secret_key).to_affine();
     (secret_key, public_key)

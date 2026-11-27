@@ -49,7 +49,7 @@ use ic_types::{
     },
     signature::*,
 };
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
@@ -717,7 +717,7 @@ pub(crate) fn create_reshare_unmasked_transcript_param(
 }
 
 /// Return a valid transcript for random sharing created by the first node of the environment
-pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
+pub(crate) fn create_valid_transcript<R: CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     rng: &mut R,
     algorithm: AlgorithmId,
@@ -740,7 +740,7 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
 
 /// Return a corrupt transcript for random sharing by changing ciphertexts intended
 /// for the first node of the environment
-pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
+pub(crate) fn create_corrupted_transcript<R: CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     rng: &mut R,
     algorithm: AlgorithmId,
@@ -752,7 +752,7 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
         .unwrap()
         .get_mut(&to_corrupt)
         .unwrap();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let builder = signed_dealing.content.clone().into_builder();
     signed_dealing.content = builder
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[complainer_index], &mut rng)
@@ -806,7 +806,7 @@ pub(crate) fn create_dealing(
 }
 
 // Creates a test signed dealing with internal payload
-pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
+pub(crate) fn create_dealing_with_payload<R: CryptoRng>(
     key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,

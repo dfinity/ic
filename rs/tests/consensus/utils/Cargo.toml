@@ -31,8 +31,7 @@ ic-types = { path = "../../../types/types" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 leb128 = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
-rand_0_10 = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 rsa = { workspace = true }

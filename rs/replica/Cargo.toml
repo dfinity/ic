@@ -49,7 +49,7 @@ libc = { workspace = true }
 nix = { workspace = true }
 pprof = { workspace = true, optional = true }
 prometheus = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 regex = { workspace = true }
 tempfile = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }

@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "796f630c26034b71b115e86392ff8e9f3a4295df304283d73e1580e46b39b92f",
+  "checksum": "9dc58686cbb64311cda237210236ae8d6337a4a47e03cc2239db0e210cf1683f",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18268,25 +18268,15 @@
             "target": "quote"
           },
           {
-            "id": "rand 0.8.8",
-            "target": "rand"
-          },
-          {
-            "alias": "rand_0_10",
             "id": "rand 0.10.4",
             "target": "rand"
           },
           {
-            "id": "rand_chacha 0.3.1",
-            "target": "rand_chacha"
-          },
-          {
-            "alias": "rand_chacha_0_10",
             "id": "rand_chacha 0.10.0",
             "target": "rand_chacha"
           },
           {
-            "id": "rand_distr 0.4.3",
+            "id": "rand_distr 0.6.0",
             "target": "rand_distr"
           },
           {
@@ -45537,6 +45527,10 @@
     },
     "rand_chacha 0.10.0": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
         "deps": [
           {
             "id": "ppv-lite86 0.2.21",
@@ -45767,50 +45761,6 @@
       ],
       "version": "0.9.5"
     },
-    "rand_distr 0.4.3": {
-      "common_attrs": {
-        "crate_features": [
-          "alloc",
-          "default",
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "num-traits 0.2.19",
-            "target": "num_traits"
-          },
-          {
-            "id": "rand 0.8.8",
-            "target": "rand"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "rand_distr",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "rand_distr",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "sha256": "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31",
-          "url": "https://static.crates.io/crates/rand_distr/0.4.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_distr",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.4.3"
-    },
     "rand_distr 0.5.1": {
       "common_attrs": {
         "crate_features": [
@@ -45854,6 +45804,50 @@
         }
       ],
       "version": "0.5.1"
+    },
+    "rand_distr 0.6.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "num-traits 0.2.19",
+            "target": "num_traits"
+          },
+          {
+            "id": "rand 0.10.4",
+            "target": "rand"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "rand_distr",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rand_distr",
+      "package_url": "https://github.com/rust-random/rand_distr",
+      "repository": {
+        "Http": {
+          "sha256": "4d431c2703ccf129de4d45253c03f49ebb22b97d6ad79ee3ecfc7e3f4862c1d8",
+          "url": "https://static.crates.io/crates/rand_distr/0.6.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_distr",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.6.0"
     },
     "rand_pcg 0.10.3": {
       "common_attrs": {
@@ -68041,11 +68035,9 @@
     "quickcheck 1.1.0",
     "quinn 0.11.12",
     "quote 1.0.47",
-    "rand 0.8.8",
     "rand 0.10.4",
-    "rand_chacha 0.3.1",
     "rand_chacha 0.10.0",
-    "rand_distr 0.4.3",
+    "rand_distr 0.6.0",
     "ratatui 0.30.2",
     "ratatui-textarea 0.9.4",
     "ratelimit 0.10.1",

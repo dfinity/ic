@@ -25,7 +25,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptType,
 };
 use ic_types::registry::RegistryClientError;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngExt};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::{BTreeSet, HashSet};
@@ -553,9 +553,9 @@ fn idkg_transcript_with_registry_version<R: Rng + CryptoRng>(
 }
 
 fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.r#gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
-    let height = Height::from(rng.r#gen::<u64>());
+    let id = rng.random();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.random::<u64>()));
+    let height = Height::from(rng.random::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }

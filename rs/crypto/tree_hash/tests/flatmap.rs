@@ -1,7 +1,7 @@
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{FlatMap, flatmap};
 use maplit::*;
-use rand::Rng;
+use rand::RngExt;
 use std::collections::BTreeMap;
 
 #[test]
@@ -79,11 +79,11 @@ fn from_key_values_randomized() {
 
     let rng = &mut reproducible_rng();
 
-    let mut input_sizes: Vec<_> = (0..100).map(|_| rng.gen_range(5..=100)).collect();
+    let mut input_sizes: Vec<_> = (0..100).map(|_| rng.random_range(5..=100)).collect();
     input_sizes.extend([1, 2, 3, 4]);
 
     for size in input_sizes {
-        let key_values: Vec<_> = (0..size).map(|_| (rng.r#gen(), rng.r#gen())).collect();
+        let key_values: Vec<_> = (0..size).map(|_| (rng.random(), rng.random())).collect();
 
         // random key values
         test_impl(key_values.clone());

@@ -111,15 +111,18 @@ impl PrivateKey {
     pub const BYTES: usize = 32;
 
     /// Create a new random secret Ed25519 key
-    #[cfg(feature = "rand")]
+    #[cfg(all(
+        feature = "rand",
+        not(all(target_arch = "wasm32", target_os = "unknown"))
+    ))]
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 
     /// Create a new random secret Ed25519 key using specified RNG
     #[cfg(feature = "rand")]
-    pub fn generate_using_rng<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
+    pub fn generate_using_rng<R: rand::CryptoRng>(rng: &mut R) -> Self {
         let mut seed = zeroize::Zeroizing::new([0_u8; Self::BYTES]);
         rng.fill_bytes(seed.as_mut_slice());
         Self::deserialize_raw_32(&seed)
@@ -775,7 +778,7 @@ impl PublicKey {
     ///
     /// This verification follows ZIP215 validation rules
     #[cfg(feature = "rand")]
-    pub fn batch_verify<R: rand::CryptoRng + rand::Rng>(
+    pub fn batch_verify<R: rand::CryptoRng>(
         messages: &[&[u8]],
         signatures: &[&[u8]],
         keys: &[Self],
@@ -788,6 +791,7 @@ impl PublicKey {
         use curve25519_dalek::{
             constants::ED25519_BASEPOINT_POINT, traits::IsIdentity, traits::VartimeMultiscalarMul,
         };
+        use rand::RngExt;
         use std::iter::once;
 
         let signatures = signatures
@@ -802,7 +806,7 @@ impl PublicKey {
             .collect::<Vec<_>>();
 
         // Select a random Scalar for each signature.
-        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.r#gen::<u128>())).collect();
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.random::<u128>())).collect();
 
         let b_coefficient: Scalar = signatures
             .iter()

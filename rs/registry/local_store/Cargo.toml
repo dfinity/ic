@@ -15,5 +15,5 @@ prost = { workspace = true }
 
 [dev-dependencies]
 ic-registry-local-store-artifacts = { path = "./artifacts" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 tempfile = { workspace = true }

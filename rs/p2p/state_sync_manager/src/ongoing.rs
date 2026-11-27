@@ -26,8 +26,7 @@ use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_quic_transport::{Shutdown, Transport};
 use rand::{
-    SeedableRng,
-    distributions::{Distribution, WeightedIndex},
+    distr::{Distribution, weighted::WeightedIndex},
     rngs::SmallRng,
 };
 use thiserror::Error;
@@ -240,7 +239,7 @@ impl OngoingStateSync {
             .allowed_downloads
             .saturating_sub(self.downloading_chunks.len());
 
-        let mut small_rng = SmallRng::from_entropy();
+        let mut small_rng = rand::make_rng::<SmallRng>();
         let max_active_downloads = self
             .active_downloads
             .values()

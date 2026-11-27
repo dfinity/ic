@@ -1,5 +1,5 @@
 use ic_crypto_internal_seed::Seed;
-use rand::{CryptoRng, Rng, RngCore, thread_rng};
+use rand::{CryptoRng, RngExt};
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
@@ -266,10 +266,10 @@ pub struct CertificateBuilder {
 
 impl CertificateBuilder {
     pub fn new(data: CertificateData) -> Self {
-        Self::new_with_rng(data, &mut thread_rng())
+        Self::new_with_rng(data, &mut rand::rng())
     }
 
-    pub fn new_with_rng<R: Rng + RngCore + CryptoRng>(data: CertificateData, rng: &mut R) -> Self {
+    pub fn new_with_rng<R: CryptoRng>(data: CertificateData, rng: &mut R) -> Self {
         let (public_key, secret_key) = generate_root_of_trust(rng);
 
         CertificateBuilder {
@@ -406,7 +406,7 @@ impl CertificateBuilder {
     }
 }
 
-pub fn generate_root_of_trust<R: Rng + CryptoRng>(
+pub fn generate_root_of_trust<R: CryptoRng>(
     rng: &mut R,
 ) -> (ThresholdSigPublicKey, SecretKeyBytes) {
     let mut seed: [u8; 32] = [0; 32];

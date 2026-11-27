@@ -25,7 +25,7 @@ mod keygen {
     use mockall::Sequence;
     use proptest::proptest;
     use rand::SeedableRng;
-    use rand::{CryptoRng, Rng};
+    use rand::{CryptoRng, RngExt};
     use std::collections::BTreeSet;
     use std::sync::Arc;
     use std::time::Duration;
@@ -142,7 +142,7 @@ mod keygen {
     #[test]
     fn should_set_random_cert_serial_number() {
         use ic_crypto_internal_seed::Seed;
-        use rand::Rng;
+        use rand::RngExt;
 
         pub const FIXED_SEED: u64 = 42;
         let csp_vault = LocalCspVault::builder_for_test()
@@ -154,9 +154,9 @@ mod keygen {
 
         let cert_serial = &x509(&cert).serial;
 
-        let intermediate_seed: [u8; 32] = csprng_seeded_with(FIXED_SEED).r#gen();
+        let intermediate_seed: [u8; 32] = csprng_seeded_with(FIXED_SEED).random();
         let seed = Seed::from_bytes(&intermediate_seed);
-        let expected_randomness: [u8; 19] = seed.into_rng().r#gen();
+        let expected_randomness: [u8; 19] = seed.into_rng().random();
         let expected_serial = &num_bigint::BigUint::from_bytes_be(&expected_randomness);
         assert_eq!(expected_serial, cert_serial);
     }
@@ -187,7 +187,9 @@ mod keygen {
         let mut rng = reproducible_rng();
 
         // generate random values
-        let mut inputs: Vec<_> = (0..100).map(|_| rng.gen_range(0..MAX_TIME_SECS)).collect();
+        let mut inputs: Vec<_> = (0..100)
+            .map(|_| rng.random_range(0..MAX_TIME_SECS))
+            .collect();
 
         // append edge cases (when time is below `GRACE_PERIOD_SECS`)
         inputs.push(0);
@@ -400,7 +402,7 @@ mod keygen {
         );
     }
 
-    pub fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
+    pub fn csprng_seeded_with(seed: u64) -> impl CryptoRng {
         rand_chacha::ChaCha20Rng::seed_from_u64(seed)
     }
 
@@ -439,14 +441,14 @@ mod sign {
     use crate::vault::test_utils::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::AlgorithmId;
-    use rand::{CryptoRng, Rng, SeedableRng};
+    use rand::{CryptoRng, Rng, RngExt, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     #[test]
     fn should_sign_with_valid_key() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let public_key_cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
@@ -463,7 +465,7 @@ mod sign {
     fn should_sign_verifiably() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let verifier = Csp::builder_for_test().build();
         let public_key_cert = csp_vault
@@ -502,7 +504,7 @@ mod sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let wrong_csp_pub_key = csp_vault
             .gen_node_signing_key_pair()
@@ -527,7 +529,7 @@ mod sign {
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
-            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
 
         assert!(csp_vault.sks_contains(key_id).expect("SKS call failed"));
@@ -546,7 +548,7 @@ mod sign {
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
-            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
 
         let result = csp_vault.tls_sign(random_message(rng), key_id);
@@ -556,7 +558,7 @@ mod sign {
     }
 
     fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-        let msg_len: usize = rng.gen_range(0..1024);
-        (0..msg_len).map(|_| rng.r#gen::<u8>()).collect()
+        let msg_len: usize = rng.random_range(0..1024);
+        (0..msg_len).map(|_| rng.random::<u8>()).collect()
     }
 }

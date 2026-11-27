@@ -22,7 +22,7 @@ ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sev = { workspace = true }

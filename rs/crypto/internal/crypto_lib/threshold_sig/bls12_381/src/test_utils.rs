@@ -13,11 +13,7 @@ pub fn select_n<T: Clone>(seed: Seed, n: NumberOfNodes, list: &[T]) -> Vec<Optio
     assert!(n.get() as usize <= list.len());
     let rng = &mut seed.into_rng();
     let mut ans: Vec<Option<T>> = vec![None; list.len()];
-    for (index, element) in list
-        .iter()
-        .enumerate()
-        .choose_multiple(rng, n.get() as usize)
-    {
+    for (index, element) in list.iter().enumerate().sample(rng, n.get() as usize) {
         ans[index] = Some(element.clone());
     }
     ans

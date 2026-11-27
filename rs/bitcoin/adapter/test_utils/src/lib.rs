@@ -8,7 +8,7 @@ use bitcoin::{
     hashes::Hash,
 };
 use hex::FromHex;
-use rand::{Rng, SeedableRng, prelude::StdRng};
+use rand::{RngExt, prelude::StdRng};
 
 pub mod bitcoind;
 pub mod rpc_client;
@@ -188,8 +188,8 @@ pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) ->
 
 /// Generates a number of seconds used for adding to the previous time (1 to 10 minutes).
 fn gen_time_delta() -> u32 {
-    let mut rng = StdRng::from_entropy();
-    rng.gen_range(60..600)
+    let mut rng = rand::make_rng::<StdRng>();
+    rng.random_range(60..600)
 }
 
 /// This method is used to solve a header's proof of work puzzle.

@@ -13,7 +13,7 @@ axum = { workspace = true }
 clap = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rustls = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

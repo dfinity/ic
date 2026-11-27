@@ -47,7 +47,7 @@ use ic_types::{
     signature::BasicSignature,
 };
 use prost::Message;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, RngExt};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
@@ -842,7 +842,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
 // Code duplicated from rs/crypto/test_utils/canister_threshold_sigs/src/dummy_values.rs
 // This is used only in test_recover_subnet_resets_cup_contents; it makes sense to avoid adding
 // a dev crate dependency just for that.
-fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
+fn dummy_initial_idkg_dealing_for_tests<R: CryptoRng>(
     alg: AlgorithmId,
     rng: &mut R,
 ) -> InitialIDkgDealings {
@@ -853,10 +853,10 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
         }
         nodes
     }
-    fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-        let id = rng.r#gen::<u64>();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
-        let height = Height::from(rng.r#gen::<u64>());
+    fn random_transcript_id<R: CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
+        let id = rng.random::<u64>();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.random::<u64>()));
+        let height = Height::from(rng.random::<u64>());
 
         IDkgTranscriptId::new(subnet, id, height)
     }

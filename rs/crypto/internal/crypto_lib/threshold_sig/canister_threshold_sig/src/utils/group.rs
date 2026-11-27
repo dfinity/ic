@@ -1,7 +1,7 @@
 use crate::*;
 use ic_crypto_sha2::Sha256;
 use ic_types::NodeIndex;
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -415,7 +415,7 @@ impl EccScalar {
     }
 
     /// Generate a random scalar in [0,p)
-    pub fn random<R: CryptoRng + RngCore>(curve: EccCurveType, rng: &mut R) -> Self {
+    pub fn random<R: CryptoRng + Rng>(curve: EccCurveType, rng: &mut R) -> Self {
         // Use rejection sampling to avoid biasing the output
 
         let mut buf = vec![0_u8; curve.scalar_bytes()];

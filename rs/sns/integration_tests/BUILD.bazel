@@ -39,7 +39,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:proptest",
     "@crate_index//:prost",
-    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_yaml",
 ]

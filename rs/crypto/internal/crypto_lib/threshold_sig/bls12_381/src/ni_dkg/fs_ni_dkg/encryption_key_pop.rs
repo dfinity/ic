@@ -5,7 +5,7 @@ use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FrBytes, FsEncryptionPop, G1Bytes,
 };
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
 // DOMAIN_POP_ENCRYPTION_KEY with a prefix of the length (17 == 0x11)
@@ -94,7 +94,7 @@ fn compute_pop_base(data: &dyn UniqueHash) -> G1Affine {
 }
 
 /// Prove the Possession of an EncryptionKey.
-pub fn prove_pop<R: RngCore + CryptoRng>(
+pub fn prove_pop<R: CryptoRng>(
     instance: &EncryptionKeyInstance,
     witness: &Scalar,
     rng: &mut R,

@@ -112,8 +112,6 @@ rust_test(
         "@crate_index//:hyper-util",
         "@crate_index//:itertools",
         "@crate_index//:prost",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
         "@crate_index//:rustls",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",

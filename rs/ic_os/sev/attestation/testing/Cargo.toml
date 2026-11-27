@@ -6,7 +6,6 @@ edition.workspace = true
 attestation = { path = "../../attestation" }
 p384 = { workspace = true }
 rand = { workspace = true }
-rand_0_10 = { workspace = true }
 rsa = { workspace = true }
 sev = { workspace = true }
 x509-cert = { workspace = true }

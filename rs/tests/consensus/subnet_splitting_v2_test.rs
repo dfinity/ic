@@ -294,7 +294,7 @@ async fn call_counter_canisters_until_stopped(
                             })
                             .expect("The counter canister is not hosted by any subnet")
                             .nodes()
-                            .choose(&mut rand::thread_rng())
+                            .choose(&mut rand::rng())
                             .expect("The subnet has no nodes");
 
                         let agent = create_agent(node.get_public_url().as_str()).await?;

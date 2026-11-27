@@ -54,7 +54,7 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-cycles = { path = "../types/cycles" }
 mockall = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rstest = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }

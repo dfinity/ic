@@ -2,17 +2,17 @@ use criterion::*;
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use paste::paste;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngExt};
 use std::hint::black_box;
 use std::sync::Arc;
 
 const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
 
-fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
+fn random_g1<R: CryptoRng>(rng: &mut R) -> G1Projective {
+    G1Projective::hash("domain_sep", &rng.random::<[u8; 32]>())
 }
 
-fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
+fn n_random_g1<R: CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
     let mut output = Vec::with_capacity(n);
     for _ in 0..n {
         output.push(random_g1(rng));
@@ -20,11 +20,11 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
     output
 }
 
-fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
+fn random_g2<R: CryptoRng>(rng: &mut R) -> G2Projective {
+    G2Projective::hash("domain_sep", &rng.random::<[u8; 32]>())
 }
 
-fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
+fn n_random_g2<R: CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
     let mut output = Vec::with_capacity(n);
     for _ in 0..n {
         output.push(random_g2(rng));
@@ -32,23 +32,23 @@ fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
     output
 }
 
-fn random_g2_prepared<R: Rng + CryptoRng>(rng: &mut R) -> G2Prepared {
+fn random_g2_prepared<R: CryptoRng>(rng: &mut R) -> G2Prepared {
     G2Prepared::from(random_g2(rng))
 }
 
-fn random_gt<R: Rng + CryptoRng>(rng: &mut R) -> Gt {
+fn random_gt<R: CryptoRng>(rng: &mut R) -> Gt {
     Gt::pairing(&random_g1(rng).into(), &random_g2(rng).into())
 }
 
-fn random_scalar<R: Rng + CryptoRng>(rng: &mut R) -> Scalar {
+fn random_scalar<R: CryptoRng>(rng: &mut R) -> Scalar {
     Scalar::random(rng)
 }
 
-fn random_sparse_scalar<R: Rng + CryptoRng>(num_bits: u8, rng: &mut R) -> Scalar {
+fn random_sparse_scalar<R: CryptoRng>(num_bits: u8, rng: &mut R) -> Scalar {
     Scalar::random_sparse(rng, num_bits)
 }
 
-fn random_nodes<R: Rng + CryptoRng>(count: usize, rng: &mut R) -> Vec<NodeIndex> {
+fn random_nodes<R: CryptoRng>(count: usize, rng: &mut R) -> Vec<NodeIndex> {
     let mut r = vec![];
 
     let mut idx = 1;
@@ -58,13 +58,13 @@ fn random_nodes<R: Rng + CryptoRng>(count: usize, rng: &mut R) -> Vec<NodeIndex>
     }
 
     while r.len() != count {
-        r.remove(rng.r#gen::<usize>() % r.len());
+        r.remove(rng.random::<u64>() as usize % r.len());
     }
 
     r
 }
 
-fn n_random_scalar<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Vec<Scalar> {
+fn n_random_scalar<R: CryptoRng>(size: usize, rng: &mut R) -> Vec<Scalar> {
     let mut r = Vec::with_capacity(size);
     for _ in 0..size {
         r.push(random_scalar(rng))
@@ -72,17 +72,11 @@ fn n_random_scalar<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Vec<Scalar> 
     r
 }
 
-fn scalar_muln_instance<R: Rng + CryptoRng>(
-    terms: usize,
-    rng: &mut R,
-) -> (Vec<Scalar>, Vec<Scalar>) {
+fn scalar_muln_instance<R: CryptoRng>(terms: usize, rng: &mut R) -> (Vec<Scalar>, Vec<Scalar>) {
     (n_random_scalar(terms, rng), n_random_scalar(terms, rng))
 }
 
-fn g1_muln_instance<R: Rng + CryptoRng>(
-    terms: usize,
-    rng: &mut R,
-) -> (Vec<G1Projective>, Vec<Scalar>) {
+fn g1_muln_instance<R: CryptoRng>(terms: usize, rng: &mut R) -> (Vec<G1Projective>, Vec<Scalar>) {
     let mut points = Vec::with_capacity(terms);
     let mut scalars = Vec::with_capacity(terms);
     for _ in 0..terms {
@@ -92,7 +86,7 @@ fn g1_muln_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
-fn g1_muln_affine_instance<R: Rng + CryptoRng>(
+fn g1_muln_affine_instance<R: CryptoRng>(
     terms: usize,
     rng: &mut R,
 ) -> (Vec<G1Affine>, Vec<Scalar>) {
@@ -101,7 +95,7 @@ fn g1_muln_affine_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
-fn g1_sparse_muln_instance<R: Rng + CryptoRng>(
+fn g1_sparse_muln_instance<R: CryptoRng>(
     terms: usize,
     num_bits: u8,
     rng: &mut R,
@@ -116,10 +110,7 @@ fn g1_sparse_muln_instance<R: Rng + CryptoRng>(
         .collect()
 }
 
-fn g2_muln_instance<R: Rng + CryptoRng>(
-    terms: usize,
-    rng: &mut R,
-) -> (Vec<G2Projective>, Vec<Scalar>) {
+fn g2_muln_instance<R: CryptoRng>(terms: usize, rng: &mut R) -> (Vec<G2Projective>, Vec<Scalar>) {
     let mut points = Vec::with_capacity(terms);
     let mut scalars = Vec::with_capacity(terms);
     for _ in 0..terms {
@@ -129,7 +120,7 @@ fn g2_muln_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
-fn g2_muln_affine_instance<R: Rng + CryptoRng>(
+fn g2_muln_affine_instance<R: CryptoRng>(
     terms: usize,
     rng: &mut R,
 ) -> (Vec<G2Affine>, Vec<Scalar>) {
@@ -138,7 +129,7 @@ fn g2_muln_affine_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
-fn g2_sparse_muln_instance<R: Rng + CryptoRng>(
+fn g2_sparse_muln_instance<R: CryptoRng>(
     terms: usize,
     num_bits: u8,
     rng: &mut R,
@@ -153,7 +144,7 @@ fn g2_sparse_muln_instance<R: Rng + CryptoRng>(
         .collect()
 }
 
-fn n_pairing_instance<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<(G1Affine, G2Prepared)> {
+fn n_pairing_instance<R: CryptoRng>(n: usize, rng: &mut R) -> Vec<(G1Affine, G2Prepared)> {
     let mut v = Vec::with_capacity(n);
     for _ in 0..n {
         v.push((random_g1(rng).into(), random_g2_prepared(rng)));
@@ -161,7 +152,7 @@ fn n_pairing_instance<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<(G1Affin
     v
 }
 
-fn n_batch_sig_verification_instances<R: Rng + CryptoRng>(
+fn n_batch_sig_verification_instances<R: CryptoRng>(
     n: usize,
     rng: &mut R,
 ) -> Vec<(G1Affine, G2Affine, G1Affine)> {
@@ -300,7 +291,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.r#gen::<[u8; 32]>(),
+            || rng.random::<[u8; 32]>(),
             |bytes| G1Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
@@ -501,7 +492,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("deserialize_cached", |b| {
         b.iter_batched_ref(
             || {
-                (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100))
+                (G2Affine::generator() * Scalar::from_u32(rng.random::<u32>() % 100))
                     .to_affine()
                     .serialize()
             },
@@ -520,7 +511,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.r#gen::<[u8; 32]>(),
+            || rng.random::<[u8; 32]>(),
             |bytes| G2Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
@@ -725,7 +716,7 @@ fn pairing_ops(c: &mut Criterion) {
 
     group.bench_function("multiply_u16", |b| {
         b.iter_batched_ref(
-            || rng.r#gen::<u16>(),
+            || rng.random::<u16>(),
             |s| Gt::g_mul_u16(*s),
             BatchSize::SmallInput,
         )

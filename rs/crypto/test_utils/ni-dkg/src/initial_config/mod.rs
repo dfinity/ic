@@ -22,7 +22,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 use ic_types::{Height, NodeId, SubnetId};
 use ic_types::{NumberOfNodes, RegistryVersion};
-use rand::SeedableRng;
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -119,7 +119,7 @@ pub fn initial_dkg_transcript<R: rand::Rng + rand::CryptoRng>(
     let dealer_crypto = TempCryptoComponent::builder()
         .with_registry(Arc::new(registry))
         .with_node_id(dealer_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
 
     transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)

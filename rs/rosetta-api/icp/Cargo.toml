@@ -73,7 +73,7 @@ icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 num-traits = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
-rand_chacha = { workspace = true }
+rand = { workspace = true, features = ["sys_rng"] }
 tempfile = { workspace = true }
 test-strategy = "0.4.0"
 

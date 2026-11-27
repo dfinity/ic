@@ -1178,7 +1178,7 @@ mod tests {
     };
     use mockall::mock;
     use prost::Message;
-    use rand::RngCore;
+    use rand::Rng;
     use rstest::rstest;
     use slog::Level;
     use std::str::FromStr;

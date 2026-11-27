@@ -135,7 +135,7 @@ pub fn bytes_to_chain_key_payload(data: &[u8]) -> Result<ChainKeyPayload, ProxyD
 mod tests {
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use rand::RngCore;
+    use rand::Rng;
 
     use crate::exhaustive::ExhaustiveSet;
 

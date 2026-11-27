@@ -17,7 +17,7 @@ ic-registry-routing-table = { path = "../../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 prost = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 reqwest = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

@@ -13,7 +13,7 @@ use p256::{
         array::{Array, typenum::Unsigned},
     },
 };
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
@@ -370,8 +370,9 @@ pub struct PrivateKey {
 
 impl PrivateKey {
     /// Generate a new random private key
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 
@@ -383,7 +384,7 @@ impl PrivateKey {
     }
 
     /// Generate a new random private key using some provided RNG
-    pub fn generate_using_rng<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+    pub fn generate_using_rng<R: CryptoRng>(rng: &mut R) -> Self {
         // Rejection sampling: draw 32 bytes until they encode a scalar in [1, n)
         let mut bytes = zeroize::Zeroizing::new(p256::FieldBytes::default());
         loop {

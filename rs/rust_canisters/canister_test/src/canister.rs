@@ -442,9 +442,9 @@ impl RemoteTestRuntime {
     /// This will provide you with a random 8 byte nonce each time you call
     /// it
     fn get_nonce_vec(&self) -> Vec<u8> {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        (0..8).map(move |_| rng.r#gen::<u8>()).collect()
+        use rand::RngExt;
+        let mut rng = rand::rng();
+        (0..8).map(move |_| rng.random::<u8>()).collect()
     }
 }
 

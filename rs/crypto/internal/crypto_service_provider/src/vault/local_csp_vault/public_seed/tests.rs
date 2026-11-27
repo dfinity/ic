@@ -2,18 +2,18 @@ use crate::LocalCspVault;
 use crate::vault::api::PublicRandomSeedGenerator;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 #[test]
 fn should_generate_correct_public_seeds() {
-    let mut csprng = ChaCha20Rng::from_seed(reproducible_rng().r#gen::<[u8; 32]>());
+    let mut csprng = ChaCha20Rng::from_seed(reproducible_rng().random::<[u8; 32]>());
     let vault = LocalCspVault::builder_for_test()
         .with_rng(csprng.clone())
         .build_into_arc();
     let expected_seeds: Vec<_> = (0..10)
         .map(|_| {
-            let intermediate_seed: [u8; 32] = csprng.r#gen();
+            let intermediate_seed: [u8; 32] = csprng.random();
             Seed::from_bytes(&intermediate_seed)
         })
         .collect();

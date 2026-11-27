@@ -36,7 +36,7 @@ use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use itertools::multiunzip;
 use pairing::group::{Group, ff::Field};
 use paste::paste;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, RngExt};
 use std::sync::{Arc, LazyLock};
 use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -176,7 +176,7 @@ impl Scalar {
     ///
     /// This should not be used for new code but only for compatibility in
     /// situations where MIRACL's BIG::randomnum was previously used
-    pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+    pub fn miracl_random<R: CryptoRng>(rng: &mut R) -> Self {
         /*
         MIRACL's BIG::randomnum implementation uses an unusually inefficient
         approach to generating a random integer in a prime field. Effectively it
@@ -199,7 +199,7 @@ impl Scalar {
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
-            bytes[i] = rng.r#gen::<u8>();
+            bytes[i] = rng.random::<u8>();
         }
 
         let mut rbuf = [0_u8; 64];
@@ -319,7 +319,7 @@ impl Scalar {
     }
 
     /// Return a random scalar
-    pub fn random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+    pub fn random<R: CryptoRng>(rng: &mut R) -> Self {
         loop {
             /*
             A BLS12-381 scalar is 255 bits long. Generate the scalar using
@@ -350,14 +350,14 @@ impl Scalar {
     /// It then truncates to `amount` and returns.
     fn random_bit_indices<R>(rng: &mut R, amount: u8, range: u8) -> Vec<u8>
     where
-        R: Rng + RngCore + CryptoRng + ?Sized,
+        R: CryptoRng + ?Sized,
     {
         let amount = std::cmp::min(amount, range);
 
         let mut indices: Vec<u8> = Vec::with_capacity(range as usize);
         indices.extend(0..range);
         for i in 0..amount {
-            let j: u8 = rng.gen_range(i..range);
+            let j: u8 = rng.random_range(i..range);
             indices.swap(i as usize, j as usize);
         }
         indices.truncate(amount as usize);
@@ -375,7 +375,7 @@ impl Scalar {
     /// * If `num_bits` overflows 254 (the floored [`Scalar`] bit length), then
     ///   internally the `num_bits` is set to 254.
     /// * The MSB of the returned [`Scalar`] is always 0.
-    pub fn random_sparse(rng: &mut (impl Rng + CryptoRng), num_bits: u8) -> Scalar {
+    pub fn random_sparse(rng: &mut impl CryptoRng, num_bits: u8) -> Scalar {
         let set_bit = |bytes: &mut [u8], i: u8| {
             bytes[Scalar::BYTES - (i as usize / 8) - 1] |= 1 << (i % 8);
         };
@@ -392,7 +392,7 @@ impl Scalar {
     }
 
     /// Return several random scalars
-    pub fn batch_random<R: RngCore + CryptoRng>(rng: &mut R, count: usize) -> Vec<Self> {
+    pub fn batch_random<R: CryptoRng>(rng: &mut R, count: usize) -> Vec<Self> {
         let mut result = Vec::with_capacity(count);
 
         for _ in 0..count {
@@ -403,7 +403,7 @@ impl Scalar {
     }
 
     /// Return several random scalars
-    pub fn batch_random_array<const N: usize, R: RngCore + CryptoRng>(rng: &mut R) -> [Self; N] {
+    pub fn batch_random_array<const N: usize, R: CryptoRng>(rng: &mut R) -> [Self; N] {
         [(); N].map(|_| Self::random(rng))
     }
 
@@ -413,11 +413,7 @@ impl Scalar {
     /// * `rng` - RNG object
     /// * `count` - number of generated scalars
     /// * `num_bits` - number of 1-bits that each scalar will have at random positions
-    pub fn batch_sparse_random<R: RngCore + CryptoRng>(
-        rng: &mut R,
-        count: usize,
-        num_bits: u8,
-    ) -> Vec<Self> {
+    pub fn batch_sparse_random<R: CryptoRng>(rng: &mut R, count: usize, num_bits: u8) -> Vec<Self> {
         (0..count)
             .map(|_| Self::random_sparse(rng, num_bits))
             .collect()
@@ -426,7 +422,7 @@ impl Scalar {
     /// Return a random scalar within a small range
     ///
     /// Returns a scalar in range [0,n) using rejection sampling.
-    pub fn random_within_range<R: RngCore + CryptoRng>(rng: &mut R, n: u64) -> Self {
+    pub fn random_within_range<R: CryptoRng>(rng: &mut R, n: u64) -> Self {
         if n <= 1 {
             return Self::zero();
         }
@@ -2685,7 +2681,7 @@ const NUM_BITS_BATCH_VERIFICATION: u8 = 30;
 /// pairwise verification. For efficiency, the provided batch is automatically
 /// dispatched into subcases: same message, same public key, distinct keys and
 /// messages batches.
-pub fn verify_bls_signature_batch<R: RngCore + CryptoRng>(
+pub fn verify_bls_signature_batch<R: CryptoRng>(
     sigs_pks_msgs: &[(&G1Affine, &G2Affine, &G1Affine)],
     rng: &mut R,
 ) -> bool {
@@ -2755,7 +2751,7 @@ pub fn verify_bls_signature_batch<R: RngCore + CryptoRng>(
 /// For details, see Section 5.1 in "Batch Verification of Short Signatures"
 /// by J. Camenisch, S. Hohenberger, M. Ø. Pedersen. In Eurocrypt'07.
 /// https://eprint.iacr.org/2007/172.pdf.
-pub fn verify_bls_signature_batch_distinct<R: RngCore + CryptoRng>(
+pub fn verify_bls_signature_batch_distinct<R: CryptoRng>(
     sigs_pks_msgs: &[(&G1Affine, &G2Affine, &G1Affine)],
     rng: &mut R,
 ) -> bool {
@@ -2793,7 +2789,7 @@ pub fn verify_bls_signature_batch_distinct<R: RngCore + CryptoRng>(
 /// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
 /// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Journal of Cryptology'04.
 /// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
-pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
+pub fn verify_bls_signature_batch_same_pk<R: CryptoRng>(
     sigs_msgs: &[(&G1Affine, &G1Affine)],
     public_key: &G2Affine,
     rng: &mut R,
@@ -2825,7 +2821,7 @@ pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
 /// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
 /// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Journal of Cryptology'04.
 /// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
-pub fn verify_bls_signature_batch_same_msg<R: RngCore + CryptoRng>(
+pub fn verify_bls_signature_batch_same_msg<R: CryptoRng>(
     sigs_pks: &[(&G1Affine, &G2Affine)],
     message: &G1Affine,
     rng: &mut R,

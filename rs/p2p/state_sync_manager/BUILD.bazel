@@ -107,7 +107,6 @@ rust_test_suite_with_extra_srcs(
         "@crate_index//:mockall",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
-        "@crate_index//:rand",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tokio-metrics",

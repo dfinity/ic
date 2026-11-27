@@ -70,7 +70,7 @@ use ic_vetkeys::{
     DerivedPublicKey, EncryptedVetKey, IbeCiphertext, IbeIdentity, IbeSeed, TransportSecretKey,
     VetKey,
 };
-use rand::Rng;
+use rand::{Rng, RngExt};
 use slog::info;
 use std::time::Duration;
 
@@ -285,7 +285,7 @@ fn test(env: TestEnv) {
             &canister_master_pubkey_app.derive_sub_key(context),
             &IbeIdentity::from_bytes(input),
             secret_message,
-            &IbeSeed::random(rng),
+            &IbeSeed::from_bytes(&rng.random::<[u8; 32]>()).unwrap(),
         );
 
         // When using the correct vetKey (i.e., the one for the correct input/context combination), the message MUST IBE-decrypt to the correct value
@@ -313,7 +313,7 @@ async fn derive_vetkey_with_canister<R: Rng>(
     log: &slog::Logger,
     rng: &mut R,
 ) -> VetKey {
-    let tsk = TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
+    let tsk = TransportSecretKey::from_seed(rng.random::<[u8; 32]>().to_vec())
         .expect("Failed to generate transport secret key");
 
     info!(log, "Deriving vetKey...");

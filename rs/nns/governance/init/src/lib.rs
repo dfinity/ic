@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use icp_ledger::Subaccount;
 #[cfg(not(target_arch = "wasm32"))]
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 #[cfg(not(target_arch = "wasm32"))]
 use rand_chacha::ChaCha20Rng;
 #[cfg(not(target_arch = "wasm32"))]

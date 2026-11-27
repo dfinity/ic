@@ -13,7 +13,7 @@ use ic_nervous_system_runtime::Runtime;
 use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::types::ProposalId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::cell::RefCell;
 use std::sync::Arc;

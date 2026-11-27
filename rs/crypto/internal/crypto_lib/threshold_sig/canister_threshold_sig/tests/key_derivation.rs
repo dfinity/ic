@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::RngExt;
 use std::convert::{TryFrom, TryInto};
 
 use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::*;
@@ -430,7 +430,7 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Canister
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support
     let path = (0..255)
-        .map(|_| rng.r#gen::<u32>() & 0x7FFFFFFF)
+        .map(|_| rng.random::<u32>() & 0x7FFFFFFF)
         .collect::<Vec<u32>>();
 
     let master_key = setup.public_key(&DerivationPath::new_bip32(&[]))?;

@@ -183,7 +183,7 @@ pub(super) mod construction {
         request_handler::RosettaRequestHandler,
     };
     use ic_base_types::CanisterId;
-    use rand_chacha::rand_core::OsRng;
+    use rand::{rand_core::UnwrapErr, rngs::SysRng};
     use rosetta_core::metrics::RosettaMetrics;
     use std::{
         str::FromStr,
@@ -197,7 +197,7 @@ pub(super) mod construction {
         PublicKey,
         ic_ed25519::PrivateKey,
     ) {
-        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut UnwrapErr(SysRng));
         let ledger_client = futures::executor::block_on(LedgerClient::new(
             Url::from_str("http://localhost:1234").unwrap(),
             CanisterId::from_u64(1),

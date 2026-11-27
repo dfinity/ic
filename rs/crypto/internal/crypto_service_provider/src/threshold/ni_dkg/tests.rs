@@ -14,7 +14,7 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types_test_utils::ids::NODE_1;
 use proptest::prelude::*;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 mod gen_dealing_encryption_key_pair_tests {

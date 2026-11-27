@@ -13,7 +13,7 @@ use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::{heartbeat, query, update};
 use ic_management_canister_types::CanisterId;
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::IntoFuture;
@@ -198,7 +198,7 @@ async fn fanout() {
         }
 
         for _ in 0..PER_SUBNET_RATE.with(|r| *r.borrow()) {
-            let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0..canisters.len()));
+            let idx = RNG.with(|rng| rng.borrow_mut().random_range(0..canisters.len()));
             let canister = canisters[idx];
 
             let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister));

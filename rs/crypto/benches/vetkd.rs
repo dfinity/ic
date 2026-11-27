@@ -65,8 +65,8 @@ fn vetkd_bench(criterion: &mut Criterion) {
 
 fn random_request_id(rng: &mut ReproducibleRng) -> RequestId {
     RequestId {
-        callback_id: CallbackId::from(rng.r#gen::<u64>()),
-        height: Height::new(rng.r#gen::<u64>()),
+        callback_id: CallbackId::from(rng.random::<u64>()),
+        height: Height::new(rng.random::<u64>()),
     }
 }
 
@@ -82,7 +82,7 @@ fn bench_create_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
                 let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
                     request_id: random_request_id(rng),
-                    caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                    caller: canister_test_id(rng.random::<u64>()).get(),
                     context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
@@ -112,7 +112,7 @@ fn bench_verify_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
                 let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
                     request_id: random_request_id(rng),
-                    caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                    caller: canister_test_id(rng.random::<u64>()).get(),
                     context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
@@ -150,7 +150,7 @@ fn bench_combine_encrypted_key_shares<M: Measurement, C: CryptoComponentRng>(
                     let vetkd_args = VetKdArgsOwned {
                         ni_dkg_id: config.dkg_id().clone(),
                         request_id: random_request_id(rng),
-                        caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                        caller: canister_test_id(rng.random::<u64>()).get(),
                         context: random_n_bytes(32, rng),
                         input: random_n_bytes(32, rng),
                         transport_public_key: random_transports_secret_key(rng).public_key(),
@@ -188,7 +188,7 @@ fn bench_verify_encrypted_key<M: Measurement, C: CryptoComponentRng>(
                 let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
                     request_id: random_request_id(rng),
-                    caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                    caller: canister_test_id(rng.random::<u64>()).get(),
                     context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
@@ -297,7 +297,7 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
 }
 
 fn random_n_bytes<R: Rng + CryptoRng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.r#gen::<u8>()).collect()
+    (0..n).map(|_| rng.random::<u8>()).collect()
 }
 
 fn random_node_in<R: Rng + CryptoRng>(nodes: &BTreeSet<NodeId>, rng: &mut R) -> NodeId {
@@ -310,12 +310,12 @@ fn n_random_nodes_in<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Vec<NodeId> {
     let n_usize = usize::try_from(n.get()).expect("conversion to usize failed");
-    let chosen = nodes.iter().copied().choose_multiple(rng, n_usize);
+    let chosen = nodes.iter().copied().sample(rng, n_usize);
     assert_eq!(chosen.len(), n_usize);
     chosen
 }
 
 fn random_transports_secret_key<R: Rng + CryptoRng>(rng: &mut R) -> TransportSecretKey {
-    ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
+    ic_vetkeys::TransportSecretKey::from_seed(rng.random::<[u8; 32]>().to_vec())
         .expect("failed to create transport secret key")
 }

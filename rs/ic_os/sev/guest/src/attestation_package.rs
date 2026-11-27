@@ -125,8 +125,7 @@ mod tests {
 
     #[test]
     fn test_generate_attestation_package_with_wrong_custom_data() {
-        let custom_data =
-            SevCustomData::random(SevCustomDataNamespace::Test, &mut rand::thread_rng());
+        let custom_data = SevCustomData::random(SevCustomDataNamespace::Test, &mut rand::rng());
         let signer = FakeAttestationReportSigner::default();
 
         let config = TrustedExecutionEnvironmentConfig {
@@ -150,8 +149,7 @@ mod tests {
 
     #[test]
     fn test_generate_attestation_package_with_wrong_signature() {
-        let custom_data =
-            SevCustomData::random(SevCustomDataNamespace::Test, &mut rand::thread_rng());
+        let custom_data = SevCustomData::random(SevCustomDataNamespace::Test, &mut rand::rng());
 
         let config = TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem: FakeAttestationReportSigner::default().get_certificate_chain_pem(),

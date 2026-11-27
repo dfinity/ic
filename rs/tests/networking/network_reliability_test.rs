@@ -38,7 +38,7 @@ use ic_system_test_driver::{
         spawn_round_robin_workload_engine,
     },
 };
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use rand_chacha::ChaCha8Rng;
 use slog::{Logger, debug, info};
 use std::cmp::max;
@@ -323,9 +323,10 @@ fn stress_node_periodically(
                     .expect("Failed to execute bash script from session");
                 let max_duration =
                     fraction_of_duration(remaining_duration, FRACTION_FROM_REMAINING_DURATION);
-                let sleep_time = Uniform::from(
+                let sleep_time = Uniform::try_from(
                     MIN_NODE_UNSTRESSED_TIME..=max(max_duration, MIN_NODE_UNSTRESSED_TIME),
                 )
+                .unwrap()
                 .sample(&mut rng);
                 info!(
                     &log,
@@ -344,9 +345,11 @@ fn stress_node_periodically(
             } else {
                 let max_duration =
                     fraction_of_duration(remaining_duration, FRACTION_FROM_REMAINING_DURATION);
-                let action_time =
-                    Uniform::from(MIN_NODE_STRESS_TIME..=max(max_duration, MIN_NODE_STRESS_TIME))
-                        .sample(&mut rng);
+                let action_time = Uniform::try_from(
+                    MIN_NODE_STRESS_TIME..=max(max_duration, MIN_NODE_STRESS_TIME),
+                )
+                .unwrap()
+                .sample(&mut rng);
                 let tc_rules = node
                     .block_on_bash_script_from_session(
                         &session,
@@ -384,9 +387,9 @@ fn reset_tc_ssh_command() -> String {
 }
 
 fn limit_tc_randomly_ssh_command(mut rng: &mut ChaCha8Rng) -> String {
-    let bandwidth_dist = Uniform::from(BANDWIDTH_MIN..=BANDWIDTH_MAX);
-    let latency_dist = Uniform::from(LATENCY_MIN..=LATENCY_MAX);
-    let drops_perc_dist = Uniform::from(DROPS_PERC_MIN..=DROPS_PERC_MAX);
+    let bandwidth_dist = Uniform::try_from(BANDWIDTH_MIN..=BANDWIDTH_MAX).unwrap();
+    let latency_dist = Uniform::try_from(LATENCY_MIN..=LATENCY_MAX).unwrap();
+    let drops_perc_dist = Uniform::try_from(DROPS_PERC_MIN..=DROPS_PERC_MAX).unwrap();
     let cfg = util::get_config();
     let p2p_listen_port = cfg.transport.unwrap().listening_port;
     // The second command deletes existing tc rules (if present).

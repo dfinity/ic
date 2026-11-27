@@ -90,6 +90,9 @@ strum_macros = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rand = { workspace = true, features = ["thread_rng"] }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-types = { path = "../../types/types" }
 

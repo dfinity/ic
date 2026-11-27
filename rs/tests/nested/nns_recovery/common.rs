@@ -45,7 +45,7 @@ use ic_testnet_mainnet_nns::{
 use ic_types::ReplicaVersion;
 use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command;
 use nested::util::{NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use slog::{Logger, info};
 use std::{
     net::IpAddr,
@@ -661,7 +661,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
         });
     let mut hosts_to_fix = other_hosts
-        .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        .sample(&mut rand::rng(), 2 * f)
         .collect::<Vec<_>>();
     if cfg.fix_dfinity_owned_node_like_np {
         hosts_to_fix.push(dfinity_owned_host.first().unwrap());

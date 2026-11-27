@@ -22,6 +22,9 @@ rand_chacha = { workspace = true, optional = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
 
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+rand = { workspace = true, optional = true, features = ["thread_rng"] }
+
 [features]
 default = ["rand"]
 rand = ["dep:rand", "dep:rand_chacha"]
@@ -30,7 +33,7 @@ rand = ["dep:rand", "dep:rand_chacha"]
 criterion = { workspace = true }
 hex = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rand_chacha = { workspace = true }
 wycheproof = { workspace = true, features = ["eddsa"] }
 

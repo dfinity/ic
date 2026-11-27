@@ -6,7 +6,7 @@ use ic_certification_test_utils::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::Digest;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngExt};
 
 criterion_main!(benches);
 criterion_group!(benches, canister_sig, invalid_canister_sig);
@@ -118,13 +118,13 @@ fn canister_signature_bench_impl(
 /// The reason the data can be random is that we don't need it to be valid for some data,
 /// we just need some digest that exists in the state tree's path "/canister/<canister_id>/certified_data"
 /// to successfully verify the signature.
-fn new_random_certified_data<R: Rng + CryptoRng>(rng: &mut R) -> Digest {
+fn new_random_certified_data<R: CryptoRng>(rng: &mut R) -> Digest {
     let mut random_certified_data: [u8; 32] = [0; 32];
     rng.fill(&mut random_certified_data);
     Digest(random_certified_data)
 }
 
-fn new_random_cert_without_delegation<R: Rng + CryptoRng>(
+fn new_random_cert_without_delegation<R: CryptoRng>(
     rng: &mut R,
 ) -> (Digest, ThresholdSigPublicKey, Vec<u8>) {
     let certified_data = new_random_certified_data(rng);
@@ -139,7 +139,7 @@ fn new_random_cert_without_delegation<R: Rng + CryptoRng>(
     (certified_data, pk, cbor)
 }
 
-fn new_random_cert_with_delegation<R: Rng + CryptoRng>(
+fn new_random_cert_with_delegation<R: CryptoRng>(
     rng: &mut R,
 ) -> (Digest, ThresholdSigPublicKey, Vec<u8>) {
     let certified_data = new_random_certified_data(rng);

@@ -22,7 +22,7 @@ ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provide
 ic-test-utilities-registry = { path = "../../../test_utilities/registry" }
 ic-types = { path = "../../../types/types" }
 prost = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rustls = { workspace = true }
 sev = { workspace = true }
 sev_guest = { path = "../../sev/guest" }

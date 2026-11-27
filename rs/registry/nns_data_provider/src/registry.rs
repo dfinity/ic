@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use prost::Message;
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use std::time::Duration;
 use url::Url;
 
@@ -101,7 +101,7 @@ impl RegistryCanister {
     /// Returns an `Agent` chosen at random
     pub fn choose_random_agent(&self) -> &Agent {
         self.agent
-            .choose(&mut rand::thread_rng())
+            .choose(&mut rand::rng())
             .expect("can't fail, ::new asserts list is non-empty")
     }
 

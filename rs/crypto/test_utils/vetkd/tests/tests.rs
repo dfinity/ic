@@ -1,26 +1,26 @@
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_test_utils_vetkd::*;
 use ic_vetkeys::{EncryptedVetKey, MasterPublicKey, TransportSecretKey};
-use rand::Rng;
+use rand::RngExt;
 
 #[test]
 fn should_generate_valid_bls_signature() {
     let rng = &mut ReproducibleRng::new();
 
-    let pk = PrivateKey::generate(&rng.r#gen::<[u8; 32]>());
+    let pk = PrivateKey::generate(&rng.random::<[u8; 32]>());
 
-    let canister_id = rng.r#gen::<[u8; 32]>();
-    let context = rng.r#gen::<[u8; 32]>();
-    let input = rng.r#gen::<[u8; 32]>();
+    let canister_id = rng.random::<[u8; 32]>();
+    let context = rng.random::<[u8; 32]>();
+    let input = rng.random::<[u8; 32]>();
 
-    let tsk = TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec()).unwrap();
+    let tsk = TransportSecretKey::from_seed(rng.random::<[u8; 32]>().to_vec()).unwrap();
 
     let ek_bytes = pk.vetkd_protocol(
         &canister_id,
         &context,
         &input,
         &tsk.public_key(),
-        &rng.r#gen::<[u8; 32]>(),
+        &rng.random::<[u8; 32]>(),
     );
 
     let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();

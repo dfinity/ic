@@ -14,7 +14,7 @@ ic-rosetta-api = { path = "../" }
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 nix = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }

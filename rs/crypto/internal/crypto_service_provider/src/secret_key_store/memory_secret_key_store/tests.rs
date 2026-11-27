@@ -6,7 +6,7 @@ use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use proptest::prelude::*;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 #[test]
@@ -398,7 +398,7 @@ mod insert_or_replace {
         fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = inmem_sks();
-            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.random::<[u8; 32]>());
             let secret_key = secret_key(rng);
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope).is_ok());
@@ -415,7 +415,7 @@ mod insert_or_replace {
         ) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = inmem_sks();
-            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.random::<[u8; 32]>());
             let first_secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, first_secret_key.clone(), scope_first_key).is_ok());
 
@@ -435,7 +435,7 @@ mod insert_or_replace {
         ) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = inmem_sks();
-            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.random::<[u8; 32]>());
             let secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, secret_key.clone(), scope1).is_ok());
 
@@ -448,7 +448,7 @@ mod insert_or_replace {
 
     fn secret_key<R: Rng>(rng: &mut R) -> CspSecretKey {
         CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
+            SecretArray::new_and_dont_zeroize_argument(&rng.random()),
         ))
     }
 

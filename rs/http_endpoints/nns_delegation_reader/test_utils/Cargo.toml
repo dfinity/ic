@@ -9,4 +9,4 @@ edition.workspace = true
 [dependencies]
 ic-certification-test-utils = { path = "../../../certification/test-utils" }
 ic-types = { path = "../../../types/types" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }

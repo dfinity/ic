@@ -29,7 +29,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
 };
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use std::collections::LinkedList;
 use std::sync::LazyLock;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -327,7 +327,7 @@ impl SysParam {
 ///   key.
 /// * `sys`: system parameters for the FS Encryption scheme.
 /// * `rng`: seeded pseudo random number generator.
-pub fn kgen<R: RngCore + CryptoRng>(
+pub fn kgen<R: CryptoRng>(
     associated_data: &[u8],
     sys: &SysParam,
     rng: &mut R,
@@ -435,7 +435,7 @@ impl SecretKey {
     /// 00001] after the first update. Generally, some computations
     /// happen one epoch later than they would with our current scheme. However,
     /// key update is a bit fiddlier.
-    pub fn update<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
+    pub fn update<R: CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
         if let Some(current_epoch) = self.current_epoch() {
             self.update_to(current_epoch, sys, rng);
         }
@@ -456,7 +456,7 @@ impl SecretKey {
     /// If `epoch` is the current epoch of the key, then nothing happens
     ///
     /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
-    pub fn update_to<R: RngCore + CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
+    pub fn update_to<R: CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
         if let Some(current_epoch) = self.current_epoch()
             && current_epoch > epoch
         {
@@ -689,7 +689,7 @@ impl EncryptionWitness {
 
 /// Encrypt chunks. Returns ciphertext as well as the witness for later use
 /// in the NIZK proofs.
-pub fn enc_chunks<R: RngCore + CryptoRng>(
+pub fn enc_chunks<R: CryptoRng>(
     recipient_and_message: &[(G1Affine, PlaintextChunks)],
     epoch: Epoch,
     associated_data: &[u8],

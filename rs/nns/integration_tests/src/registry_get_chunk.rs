@@ -23,7 +23,7 @@ use ic_registry_transport::pb::v1::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_state_machine_tests::StateMachine;
 use pretty_assertions::assert_eq;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use std::{cell::RefCell, rc::Rc, time::SystemTime};
 
 fn get_state_machine_time_nanoseconds(machine: &StateMachine) -> u64 {
@@ -363,7 +363,7 @@ fn test_get_chunk() {
 
     let big_len = 5_123_456;
     let big_monolithic_blob = StdRng::seed_from_u64(42)
-        .sample_iter(rand::distributions::Standard)
+        .sample_iter(rand::distr::StandardUniform)
         .take(big_len)
         .collect::<Vec<u8>>();
     let original_big_monolithic_blob = big_monolithic_blob.clone();

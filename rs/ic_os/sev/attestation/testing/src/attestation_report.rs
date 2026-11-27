@@ -2,8 +2,7 @@ use attestation::LAUNCH_MEASUREMENT_LEN;
 use p384::ecdsa::Signature;
 use p384::ecdsa::signature::Signer;
 use p384::elliptic_curve::Generate;
-use rand::{Rng, SeedableRng};
-use rand_0_10::SeedableRng as _;
+use rand::{RngExt, SeedableRng};
 use rsa::PrivateKey;
 use rsa::sha2::Sha384;
 use sev::Generation;
@@ -115,8 +114,7 @@ impl FakeAttestationReportSigner {
 
     pub fn new(seed: [u8; 32]) -> Self {
         let mut rng = rand::rngs::StdRng::from_seed(seed);
-        // `rsa`, `p384` and x509-cert take a rand 0.10 RNG.
-        let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
+        let mut rsa_rng = rand::rngs::StdRng::from_seed(rng.random());
 
         // ARK - RSA with RSASSA-PSS (root cert)
         let ark_key = PrivateKey::new(&mut rsa_rng, 1024).unwrap();
@@ -206,7 +204,7 @@ impl Default for FakeAttestationReportSigner {
     }
 }
 
-fn create_certificate<R: rand_0_10::CryptoRng>(
+fn create_certificate<R: rand::CryptoRng>(
     subject: &str,
     subject_public_key_info: SubjectPublicKeyInfo,
     issuer_key: PrivateKey,

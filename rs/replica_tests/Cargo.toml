@@ -38,7 +38,7 @@ ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 prost = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 slog-scope = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

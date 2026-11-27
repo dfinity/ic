@@ -57,7 +57,7 @@ mockall = { workspace = true }
 moka = { version = "0.12.15", features = ["sync"] }
 nftables = { workspace = true }
 nix = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 ratelimit = "0.10.1"
 rate-limits-api = { path = "../rate_limits/api" }
 salt-sharing-api = { path = "../salt_sharing/api" }

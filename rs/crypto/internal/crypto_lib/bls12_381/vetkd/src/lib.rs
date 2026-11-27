@@ -8,7 +8,7 @@
 pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, PairingInvalidPoint, Scalar};
 use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients, NodeIndices};
 
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use std::collections::BTreeMap;
 
 /// The index of a node
@@ -397,7 +397,7 @@ impl EncryptedKeyShare {
     pub const BYTES: usize = 2 * G1Affine::BYTES + G2Affine::BYTES;
 
     /// Create a new encrypted key share.
-    pub fn create<R: RngCore + CryptoRng>(
+    pub fn create<R: CryptoRng>(
         rng: &mut R,
         master_pk: &G2Affine,
         node_sk: &Scalar,

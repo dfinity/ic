@@ -36,7 +36,8 @@ use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicK
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::rngs::OsRng;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
 use rand::{CryptoRng, Rng};
 use std::fmt;
 use std::sync::Arc;
@@ -57,7 +58,8 @@ pub type CryptoComponent = CryptoComponentImpl<Csp>;
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
 /// handshakes.
-pub struct CryptoComponentImpl<C: CryptoServiceProvider, R: CryptoComponentRng = OsRng> {
+pub struct CryptoComponentImpl<C: CryptoServiceProvider, R: CryptoComponentRng = UnwrapErr<SysRng>>
+{
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
     vault: Arc<dyn CspVault>,
     csp: C,
@@ -222,7 +224,7 @@ impl CryptoComponentImpl<Csp> {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
-            csprng: CspRwLock::new_for_rng(OsRng, Arc::clone(&metrics)),
+            csprng: CspRwLock::new_for_rng(UnwrapErr(SysRng), Arc::clone(&metrics)),
             registry_client,
             node_id,
             time_source: Arc::new(SysTimeSource::new()),

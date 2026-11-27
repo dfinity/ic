@@ -68,9 +68,8 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::AccumulatedPriority;
     use ic_types::NumBytes;
-    use rand::Rng;
+    use rand::RngExt;
     use rand::seq::SliceRandom;
-    use rand::thread_rng;
 
     #[test]
     fn evict_empty() {
@@ -105,7 +104,7 @@ mod tests {
             });
         }
 
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(evict(candidates.clone(), 0.into(), 90, now, 0.into()), {
             candidates.sort_by_key(|x| x.last_used);
@@ -126,7 +125,7 @@ mod tests {
             });
         }
 
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(
             evict(
@@ -155,7 +154,7 @@ mod tests {
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(evict(candidates.clone(), 0.into(), 10, now, 0.into()), {
             candidates.sort_by_key(|x| x.last_used);
@@ -178,7 +177,7 @@ mod tests {
             total_rss += 50.into();
         }
 
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(
             evict(candidates.clone(), total_rss, 100, now, total_rss),
@@ -231,7 +230,7 @@ mod tests {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..51 {
-            let priority = rand::thread_rng().gen_range(0..100);
+            let priority = rand::rng().random_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
@@ -240,7 +239,7 @@ mod tests {
             });
         }
         for i in 0..49 {
-            let priority = rand::thread_rng().gen_range(0..100);
+            let priority = rand::rng().random_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now + Duration::from_secs(i + 1),
@@ -261,7 +260,7 @@ mod tests {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..100 {
-            let priority = rand::thread_rng().gen_range(0..100);
+            let priority = rand::rng().random_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
@@ -270,7 +269,7 @@ mod tests {
             });
         }
 
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(evict(candidates.clone(), 0.into(), 50, now, 0.into()), {
             // Since scheduler priority is not important when candidate is idle,
@@ -292,7 +291,7 @@ mod tests {
                 scheduler_priority: AccumulatedPriority::new(i.try_into().unwrap()),
             });
         }
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
         assert_eq!(evict(candidates.clone(), 0.into(), 50, now, 0.into()), {
             // Since last_used is the same for all candidates,
             // we sort only by scheduler priority.
@@ -315,7 +314,7 @@ mod tests {
             });
             total_rss += 50.into();
         }
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(
             evict(candidates.clone(), total_rss, 100, now, total_rss / 2),
@@ -344,7 +343,7 @@ mod tests {
                 i += 1;
             }
         }
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(
             evict(
@@ -379,7 +378,7 @@ mod tests {
                 total_rss += 50.into();
             }
         }
-        candidates.shuffle(&mut thread_rng());
+        candidates.shuffle(&mut rand::rng());
 
         assert_eq!(
             evict(

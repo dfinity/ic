@@ -2,7 +2,7 @@
 
 use super::types::*;
 use ic_logger::trace;
-use rand::{Rng, seq::SliceRandom};
+use rand::{Rng, RngExt, seq::SliceRandom};
 use std::time::Duration;
 
 fn get_instance_with_least_outgoing_message_timestamp<'a, 'b>(
@@ -86,7 +86,7 @@ impl DeliveryStrategy for RandomReceive {
             for other in instances.iter() {
                 if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
                     let mut in_queue = other.in_queue.borrow_mut();
-                    let delay = rng.gen_range(UNIT_TIME_STEP..self.max_delta);
+                    let delay = rng.random_range(UNIT_TIME_STEP..self.max_delta);
                     let msg = Message {
                         message: x.message.clone(),
                         timestamp: x.timestamp + Duration::from_millis(delay),
@@ -220,8 +220,8 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::thread_rng;
-    use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
+    use rand::SeedableRng;
+    use rand_chacha::ChaChaRng;
 
     fn check_distance(graph: &[Vec<usize>], degree: usize) {
         let n = graph.len();
@@ -238,7 +238,7 @@ mod test {
 
     #[test]
     fn test_random_graph() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let n = 10;
         let degree = 5;
         let graph = random_graph(n, degree, &mut rng);
@@ -247,7 +247,7 @@ mod test {
 
     #[test]
     fn test_distance_vector() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let n = 10;
         let degree = 5;
         let mut tries = 0;
@@ -264,7 +264,7 @@ mod test {
 
     #[test]
     fn test_random_graph_one_node() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let n = 1;
         let degree = 0;
         let mut graph = random_graph(n, degree, &mut rng);

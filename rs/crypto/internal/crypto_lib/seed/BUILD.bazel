@@ -42,7 +42,6 @@ rust_test_suite(
         "//rs/crypto/sha2",
         "@crate_index//:hex",
         "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
         "@crate_index//:serde",
         "@crate_index//:zeroize",
     ],

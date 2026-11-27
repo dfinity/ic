@@ -15,5 +15,5 @@ hpke = { version = "0.15.1", default-features = false, features = [ "nistp", "ae
 
 [dev-dependencies]
 hex = { workspace = true }
-rand = { version = "0.10.4", default-features = false, features = ["std_rng", "sys_rng"] }
-rand_chacha = { version = "0.10.0", default-features = false }
+rand = { workspace = true, features = ["sys_rng"] }
+rand_chacha = { workspace = true }

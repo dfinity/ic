@@ -6,9 +6,6 @@ rust_library(
     name = "utils",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = {
-        "@crate_index//:rand_0_10": "rand_0_10",
-    },
     crate_name = "ic_consensus_system_test_utils",
     deps = [
         # Keep sorted.
@@ -40,7 +37,6 @@ rust_library(
         "@crate_index//:leb128",
         "@crate_index//:prost",
         "@crate_index//:rand",
-        "@crate_index//:rand_0_10",
         "@crate_index//:reqwest",
         "@crate_index//:rsa",
         "@crate_index//:serde_json",

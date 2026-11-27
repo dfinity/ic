@@ -227,7 +227,7 @@ mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use crossbeam_channel::{Sender, unbounded};
-    use rand::Rng;
+    use rand::RngExt;
     use slog::{info, o, warn};
     use std::{path::PathBuf, sync::Arc};
     use tokio::runtime::Runtime;
@@ -310,8 +310,8 @@ mod tests {
     }
 
     fn get_unique_sock_path() -> PathBuf {
-        let mut rng = rand::thread_rng();
-        let random_n: u64 = rng.r#gen();
+        let mut rng = rand::rng();
+        let random_n: u64 = rng.random();
         let pid = std::process::id();
         let tmpdir = std::env::temp_dir();
 

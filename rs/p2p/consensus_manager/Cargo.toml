@@ -23,7 +23,6 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
@@ -34,5 +33,6 @@ ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 tower = { workspace = true }
 turmoil = { workspace = true }

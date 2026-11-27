@@ -228,8 +228,6 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:ic-vetkeys",
         "@crate_index//:prost",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
         "@crate_index//:slog",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",

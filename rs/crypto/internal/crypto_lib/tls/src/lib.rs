@@ -69,9 +69,9 @@ pub fn generate_tls_key_pair_der(
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    use rand::Rng;
+    use rand::RngExt;
     let rng = &mut seed.into_rng();
-    let serial: [u8; 19] = rng.r#gen();
+    let serial: [u8; 19] = rng.random();
     let secret_key = PrivateKey::generate_using_rng(rng);
     let x509_cert = x509_v3_certificate(
         common_name,

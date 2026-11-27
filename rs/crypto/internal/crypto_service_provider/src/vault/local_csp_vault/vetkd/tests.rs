@@ -9,7 +9,7 @@ use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types_test_utils::ids::canister_test_id;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 #[test]
@@ -138,7 +138,7 @@ impl CreateVetKdKeyShareTestSetup {
             context: b"context-123".to_vec(),
         };
         let input = b"some-input".to_vec();
-        let rng = ChaCha20Rng::from_seed(rng.r#gen());
+        let rng = ChaCha20Rng::from_seed(rng.random());
 
         Self {
             master_secret_key,

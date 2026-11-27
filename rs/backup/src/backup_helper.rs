@@ -10,7 +10,7 @@ use ic_recovery::{
 };
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 use slog::{Logger, debug, error, info, warn};
 use std::{
     collections::BTreeMap,
@@ -345,7 +345,7 @@ impl BackupHelper {
 
     pub(crate) fn collect_nodes(&self, num_nodes: usize) -> Result<Vec<IpAddr>, String> {
         let mut shuf_nodes = self.collect_all_subnet_nodes()?;
-        shuf_nodes.shuffle(&mut thread_rng());
+        shuf_nodes.shuffle(&mut rand::rng());
         Ok(shuf_nodes
             .iter()
             .filter(|ip| !self.blacklisted_nodes.contains(ip))

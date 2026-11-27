@@ -1,8 +1,8 @@
 use crate::cache::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::RngCore;
+use rand::Rng;
 
-fn random_signature_cache_entry<R: RngCore>(rng: &mut R) -> SignatureCacheEntry {
+fn random_signature_cache_entry<R: Rng>(rng: &mut R) -> SignatureCacheEntry {
     let mut pk = [0_u8; 96];
     let mut sig = [0_u8; 48];
     let mut msg = [0_u8; 32];

@@ -28,7 +28,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rustls = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }

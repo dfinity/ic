@@ -123,7 +123,7 @@ use icp_ledger::{
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use rand::{Rng, SeedableRng, prelude::IteratorRandom, rngs::StdRng};
+use rand::{RngExt, SeedableRng, prelude::IteratorRandom, rngs::StdRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal_macros::dec;
@@ -4024,7 +4024,7 @@ fn test_random_voting_rewards_scenarios() {
         let mut proposals = vec![];
         let mut total_proposal_weight = 0;
         for _proposal_index in 0..PROPOSAL_COUNT {
-            let proposer = rng.gen_range(0..neuron_count) as u64;
+            let proposer = rng.random_range(0..neuron_count) as u64;
 
             let mut votes = BTreeMap::new();
             for (neuron_id, _w) in neuron_weights.iter().enumerate() {
@@ -13975,16 +13975,16 @@ fn test_neuron_info_private_enforcement() {
 
     // Step 1.1: Select values that all neurons will share.
 
-    let controller = PrincipalId::new_user_test_id(random.r#gen());
-    let hot_key = PrincipalId::new_user_test_id(random.r#gen());
+    let controller = PrincipalId::new_user_test_id(random.random());
+    let hot_key = PrincipalId::new_user_test_id(random.random());
 
-    let proposal_id = random.r#gen();
+    let proposal_id = random.random();
     let recent_ballots = vec![api::BallotInfo {
         proposal_id: Some(ProposalId { id: proposal_id }),
         vote: Vote::Yes as i32,
     }];
 
-    let joined_community_fund_timestamp_seconds = Some(random.r#gen());
+    let joined_community_fund_timestamp_seconds = Some(random.random());
 
     // Step 1.2: Assemble the common neuron values.
     let base_neuron = {
@@ -13993,9 +13993,9 @@ fn test_neuron_info_private_enforcement() {
         let recent_ballots = recent_ballots.clone();
 
         let dissolve_state = Some(api::neuron::DissolveState::DissolveDelaySeconds(
-            random.r#gen(),
+            random.random(),
         ));
-        let cached_neuron_stake_e8s = random.r#gen();
+        let cached_neuron_stake_e8s = random.random();
 
         api::Neuron {
             controller,
@@ -14013,8 +14013,10 @@ fn test_neuron_info_private_enforcement() {
 
     // Step 1.3: Construct all neurons.
     let mut new_neuron = || {
-        let id = Some(NeuronId { id: random.r#gen() });
-        let account = (0..32).map(|_| random.r#gen()).collect();
+        let id = Some(NeuronId {
+            id: random.random(),
+        });
+        let account = (0..32).map(|_| random.random()).collect();
 
         api::Neuron {
             id,

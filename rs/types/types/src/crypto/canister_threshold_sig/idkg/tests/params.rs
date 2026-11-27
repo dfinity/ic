@@ -4,7 +4,7 @@ use crate::RegistryVersion;
 use crate::crypto::AlgorithmId;
 use assert_matches::assert_matches;
 use maplit::btreeset;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use std::collections::BTreeSet;
 
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
@@ -234,7 +234,7 @@ fn should_return_correct_initial_dealings_collection_threshold_for_unmasked() {
     }
 }
 
-fn check_unverified_dealings_collection_threshold_for_unmasked<R: Rng + CryptoRng>(
+fn check_unverified_dealings_collection_threshold_for_unmasked<R: CryptoRng>(
     number_of_dealers: u32,
     expected_threshold: u32,
     rng: &mut R,
@@ -720,7 +720,7 @@ fn disjoint_set() -> BTreeSet<NodeId> {
     set_of_nodes(&(11..20).collect::<Vec<_>>())
 }
 
-fn check_params_creation<R: Rng + CryptoRng>(
+fn check_params_creation<R: CryptoRng>(
     node_set: Option<BTreeSet<NodeId>>,
     operation: IDkgTranscriptOperation,
     expected_error: Option<IDkgParamsValidationError>,

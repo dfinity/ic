@@ -1,6 +1,6 @@
 //! Tests for the CLib NiDKG forward secure encryption
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
-pub use rand::{Rng, SeedableRng};
+pub use rand::{Rng, RngExt, SeedableRng};
 pub use std::collections::BTreeMap;
 
 mod internal_types {
@@ -77,7 +77,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
 #[test]
 fn should_not_update_key_on_current_or_past_epoch() {
     let rng = &mut reproducible_rng();
-    let associated_data = rng.r#gen::<[u8; 4]>();
+    let associated_data = rng.random::<[u8; 4]>();
 
     let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), &associated_data);
     let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
@@ -165,7 +165,7 @@ fn fs_key_message_pairs(
 fn encryption_should_work() {
     const NUM_RECEIVERS: u8 = 3;
     let rng = &mut ReproducibleRng::new();
-    let associated_data = rng.r#gen::<[u8; 22]>();
+    let associated_data = rng.random::<[u8; 22]>();
     let threshold = NumberOfNodes::from(2);
 
     let (public_coefficients, threshold_keys) =
@@ -197,7 +197,7 @@ fn encryption_should_work() {
 fn encrypted_messages_should_decrypt() {
     const NUM_RECEIVERS: u8 = 3;
     let rng = &mut ReproducibleRng::new();
-    let associated_data = rng.r#gen::<[u8; 18]>();
+    let associated_data = rng.random::<[u8; 18]>();
     let threshold = NumberOfNodes::from(2);
 
     let (public_coefficients, threshold_keys) =
@@ -254,7 +254,7 @@ fn decryption_should_fail_below_epoch() {
     const NUM_RECEIVERS: u8 = 3;
     let threshold = NumberOfNodes::from(2);
     let rng = &mut ReproducibleRng::new();
-    let associated_data = rng.r#gen::<[u8; 10]>();
+    let associated_data = rng.random::<[u8; 10]>();
 
     let (public_coefficients, threshold_keys) =
         generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
@@ -331,7 +331,7 @@ fn decryption_should_fail_below_epoch() {
 fn zk_proofs_should_verify() {
     const NUM_RECEIVERS: u8 = 3;
     let rng = &mut ReproducibleRng::new();
-    let associated_data = rng.r#gen::<[u8; 10]>();
+    let associated_data = rng.random::<[u8; 10]>();
     let threshold = NumberOfNodes::from(2);
     let (public_coefficients, threshold_keys) =
         generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));

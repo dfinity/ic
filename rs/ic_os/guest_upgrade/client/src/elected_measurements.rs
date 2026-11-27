@@ -308,7 +308,7 @@ mod tests {
         // Step 1: Prepare the world.
 
         let (stalled_url, connection_count) = start_stalled_endpoint().await;
-        let (nns_public_key, _nns_secret_key) = generate_root_of_trust(&mut rand::thread_rng());
+        let (nns_public_key, _nns_secret_key) = generate_root_of_trust(&mut rand::rng());
         let source = NnsElectedMeasurementsSource::new_with_nns_public_key(
             vec![stalled_url],
             nns_public_key,

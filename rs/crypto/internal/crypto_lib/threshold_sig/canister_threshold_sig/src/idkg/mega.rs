@@ -2,7 +2,7 @@ use crate::*;
 use core::fmt::{self, Debug};
 use ic_crypto_secrets_containers::SecretArray;
 use paste::paste;
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use strum_macros::EnumIter;
@@ -87,7 +87,7 @@ impl MEGaPrivateKey {
         MEGaPublicKey::new(EccPoint::mul_by_g(&self.secret))
     }
 
-    pub fn generate<R: RngCore + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
+    pub fn generate<R: Rng + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
         let secret = EccScalar::random(curve, rng);
         Self { secret }
     }

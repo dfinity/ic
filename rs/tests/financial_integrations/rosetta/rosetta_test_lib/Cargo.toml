@@ -28,7 +28,7 @@ ic-canister-client-sender = { path = "../../../../canister_client/sender" }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

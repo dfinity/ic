@@ -23,7 +23,7 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 lmdb-rkv = { workspace = true }
 prometheus = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 static_assertions = { workspace = true }

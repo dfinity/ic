@@ -6,7 +6,6 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, CertificateDelegation},
 };
-use rand::thread_rng;
 
 pub fn create_fake_certificate_delegation(
     canister_id_ranges: &Vec<(CanisterId, CanisterId)>,
@@ -14,8 +13,8 @@ pub fn create_fake_certificate_delegation(
 ) -> (CertificateDelegation, ThresholdSigPublicKey) {
     const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
 
-    let (non_nns_public_key, _non_nns_secret_key) = generate_root_of_trust(&mut thread_rng());
-    let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut thread_rng());
+    let (non_nns_public_key, _non_nns_secret_key) = generate_root_of_trust(&mut rand::rng());
+    let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut rand::rng());
     let certificate_tree = create_certificate_labeled_tree(
         canister_id_ranges,
         subnet_id,

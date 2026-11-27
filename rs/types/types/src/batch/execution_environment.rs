@@ -363,7 +363,7 @@ mod tests {
     use super::*;
     use ic_base_types::PrincipalId;
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
-    use rand::{Rng, RngCore, SeedableRng};
+    use rand::{Rng, RngExt, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
     /// Empty serialization test
@@ -493,13 +493,13 @@ mod tests {
 
     fn rng_epoch_stats<R>(rng: &mut R) -> QueryStats
     where
-        R: RngCore,
+        R: Rng,
     {
         QueryStats {
-            num_calls: rng.r#gen(),
-            num_instructions: rng.r#gen(),
-            ingress_payload_size: rng.r#gen(),
-            egress_payload_size: rng.r#gen(),
+            num_calls: rng.random(),
+            num_instructions: rng.random(),
+            ingress_payload_size: rng.random(),
+            egress_payload_size: rng.random(),
         }
     }
 }

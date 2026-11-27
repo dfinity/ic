@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::{CurveType, PublicKey};
 use ic_types::time::Time;
-use rand_chacha::rand_core::OsRng;
+use rand::{rand_core::UnwrapErr, rngs::SysRng};
 use rosetta_core::convert::principal_id_from_public_key;
 
 const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
@@ -20,7 +20,7 @@ fn neuron_requests_are_addressed_to_the_configured_governance_canister() {
         ic_nns_constants::GOVERNANCE_CANISTER_ID
     );
 
-    let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+    let key = ic_ed25519::PrivateKey::generate_using_rng(&mut UnwrapErr(SysRng));
     let pub_key = PublicKey {
         hex_bytes: hex::encode(key.public_key().serialize_raw()),
         curve_type: CurveType::Edwards25519,

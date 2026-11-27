@@ -13,7 +13,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::Public
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_sha2::Sha256;
 use ic_types::{NodeIndex, NumberOfNodes};
-use rand::RngCore;
+use rand::Rng;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::convert::TryInto;

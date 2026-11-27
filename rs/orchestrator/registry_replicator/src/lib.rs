@@ -549,7 +549,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreWriter};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use rand::{Rng, RngCore};
+    use rand::{Rng, RngExt};
     use tempfile::TempDir;
 
     const INIT_NUM_VERSIONS: usize = 5;
@@ -559,7 +559,7 @@ mod tests {
     fn random_init(local_store_path: &Path, n: usize, rng: &mut ReproducibleRng) {
         fn key_mutation(k: usize, rng: &mut ReproducibleRng) -> KeyMutation {
             let s = rng.next_u64() & 64;
-            let set: bool = rng.r#gen();
+            let set: bool = rng.random();
             KeyMutation {
                 key: k.to_string(),
                 value: if set {
@@ -572,7 +572,7 @@ mod tests {
 
         let random_changelog = (0..n)
             .map(|_i| {
-                let k = rng.r#gen::<usize>() % 64 + 1;
+                let k = rng.random::<u64>() as usize % 64 + 1;
                 (0..k).map(|k| key_mutation(k, rng)).collect()
             })
             .collect::<Changelog>();

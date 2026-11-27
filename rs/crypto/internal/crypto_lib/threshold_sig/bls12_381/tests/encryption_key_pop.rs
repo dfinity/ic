@@ -2,15 +2,13 @@
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::encryption_key_pop::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, RngExt, SeedableRng};
 
-fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
-    rng: &mut R,
-) -> (EncryptionKeyInstance, Scalar) {
+fn setup_pop_instance_and_witness<R: CryptoRng>(rng: &mut R) -> (EncryptionKeyInstance, Scalar) {
     let g1 = G1Affine::generator();
     let witness = Scalar::random(rng);
     let public_key = G1Affine::from(g1 * &witness);
-    let associated_data = rng.r#gen::<[u8; 10]>().to_vec();
+    let associated_data = rng.random::<[u8; 10]>().to_vec();
 
     let instance = EncryptionKeyInstance::new(&public_key, &associated_data);
 

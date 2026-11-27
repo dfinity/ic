@@ -13,7 +13,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::{Height, NumberOfNodes, RegistryVersion, SubnetId};
 use ic_types_test_utils::ids::{NODE_1, SUBNET_1, node_test_id};
-use rand::Rng;
+use rand::RngExt;
 use std::sync::Arc;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
@@ -205,7 +205,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
         let temp_crypto = TempCryptoComponent::builder()
             .with_node_id(node_id)
             .with_keys(ic_crypto_temp_crypto::NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
@@ -221,7 +221,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
     let pk = ThresholdSigPublicKey::try_from(&transcript)
         .expect("should extract public key from high threshold transcript");
 
-    let test_message = rng.r#gen::<[u8; 32]>();
+    let test_message = rng.random::<[u8; 32]>();
 
     let signature = sign_message(&test_message, &secret);
 

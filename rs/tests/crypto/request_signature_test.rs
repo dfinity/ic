@@ -24,7 +24,7 @@ use ic_types::messages::{
     HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_universal_canister::wasm;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngExt};
 use slog::{debug, info};
 
 const ALL_QUERY_API_VERSIONS: &[u8] = &[2, 3];
@@ -335,12 +335,12 @@ pub fn request_signature_test(env: TestEnv) {
     });
 }
 
-pub fn random_ecdsa_secp256k1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
+pub fn random_ecdsa_secp256k1_identity<R: CryptoRng>(rng: &mut R) -> Secp256k1Identity {
     let pem = ic_secp256k1::PrivateKey::generate_using_rng(rng).serialize_rfc5915_pem();
     Secp256k1Identity::from_pem(pem.as_bytes()).unwrap()
 }
 
-pub fn random_ecdsa_secp256r1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Prime256v1Identity {
+pub fn random_ecdsa_secp256r1_identity<R: CryptoRng>(rng: &mut R) -> Prime256v1Identity {
     let pem = ic_secp256r1::PrivateKey::generate_using_rng(rng).serialize_rfc5915_pem();
     Prime256v1Identity::from_pem(pem.as_bytes()).unwrap()
 }
@@ -1191,8 +1191,8 @@ fn clong_signature_with_random_bit_flipped(
 ) -> ic_agent::identity::Signature {
     let mut clone = signature.clone();
     if let Some(sig) = clone.signature.as_mut() {
-        let idx = rng.gen_range(0..sig.len());
-        sig[idx] ^= 1 << (rng.gen_range(0..8));
+        let idx = rng.random_range(0..sig.len());
+        sig[idx] ^= 1 << (rng.random_range(0..8));
         clone
     } else {
         panic!("cannot flip bit: missing signature");

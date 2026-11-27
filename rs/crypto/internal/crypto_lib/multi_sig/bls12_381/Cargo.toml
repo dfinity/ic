@@ -17,7 +17,6 @@ ic-crypto-sha2 = { path= "../../../../sha2" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
 serde = { workspace = true }
 zeroize = { workspace = true }
 
@@ -29,4 +28,5 @@ ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 ic-types = { path = "../../../../../types/types" }
 proptest = { workspace = true }
+rand_chacha = { workspace = true }
 serde_cbor = { workspace = true }

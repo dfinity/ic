@@ -48,9 +48,7 @@ fn secret_key_from_components(
 }
 
 /// Create a new secp256k1 keypair.
-fn new_keypair(
-    rng: &mut (impl rand::RngCore + rand::CryptoRng),
-) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
+fn new_keypair(rng: &mut impl rand::CryptoRng) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
     let (sk, pk) = {
         let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
 

@@ -12,7 +12,7 @@ ic-ed25519 = { path = "../../../packages/ic-ed25519" }
 ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 
 [dev-dependencies]
 bincode = { workspace = true }

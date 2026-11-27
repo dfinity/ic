@@ -37,7 +37,6 @@ lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = { workspace = true }
-rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = { workspace = true }
 rosetta-core = { path = "../common/rosetta_core" }
@@ -73,6 +72,7 @@ ic-rosetta-test-utils = { path = "../icp/test_utils" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prometheus-parse = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 url = { workspace = true }
 
 [[test]]

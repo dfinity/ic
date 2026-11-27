@@ -2,7 +2,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::NumberOfNodes;
 use ic_types::crypto::AlgorithmId;
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 use strum::IntoEnumIterator;
 
 fn alg_for_curve(curve: EccCurveType) -> AlgorithmId {
@@ -21,7 +21,7 @@ fn wrong_curve(curve: EccCurveType) -> EccCurveType {
     }
 }
 
-fn gen_private_keys<R: RngCore + CryptoRng>(
+fn gen_private_keys<R: Rng + CryptoRng>(
     rng: &mut R,
     curve: EccCurveType,
     cnt: usize,
@@ -604,7 +604,7 @@ struct Setup {
 }
 
 impl Setup {
-    fn new<R: RngCore + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
+    fn new<R: Rng + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
         let associated_data = vec![1, 2, 3];
         let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
         let threshold = 2;

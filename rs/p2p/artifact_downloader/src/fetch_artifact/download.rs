@@ -22,7 +22,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_quic_transport::Transport;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
-use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
+use rand::{rngs::SmallRng, seq::IteratorRandom};
 use tokio::{
     runtime::Handle,
     sync::watch,
@@ -332,7 +332,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             },
             Some((_, peer)) => self.invalid_artifact(id, peer, "it fails the integrity check"),
             None => {
-                let Some(peer) = peers.into_iter().choose(&mut SmallRng::from_entropy()) else {
+                let Some(peer) = peers.into_iter().choose(&mut rand::make_rng::<SmallRng>()) else {
                     return Attempt::Retry;
                 };
                 let bytes = Bytes::from(Artifact::PbId::proxy_encode(id.clone()));

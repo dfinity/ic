@@ -7,7 +7,7 @@ use icp_ledger::{
     Transaction,
 };
 
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use rand_distr::Distribution;
 use std::collections::{BTreeMap, VecDeque};
 use std::time::SystemTime;
