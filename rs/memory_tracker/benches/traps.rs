@@ -1,4 +1,4 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_types::{NumBytes, NumOsPages};
 use memory_tracker::{
     AccessKind, AccessedWasmPagesLimit, DeterministicMemoryTracker, DirtyPageTracking,
@@ -7,6 +7,7 @@ use memory_tracker::{
 
 use libc::{self, c_void};
 use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous};
+use std::hint::black_box;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;

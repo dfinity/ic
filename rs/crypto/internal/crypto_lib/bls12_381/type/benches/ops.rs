@@ -3,6 +3,7 @@ use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use paste::paste;
 use rand::{CryptoRng, Rng};
+use std::hint::black_box;
 use std::sync::Arc;
 
 const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);

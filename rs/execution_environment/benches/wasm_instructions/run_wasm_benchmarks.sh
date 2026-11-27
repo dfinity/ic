@@ -34,12 +34,17 @@ RES_FILE="${0##*/}.res.tmp"
 #   test wasm_instructions/i32_bin_op/i32.and/confirmation ... bench:     6553535 ns/iter (+/- 168333)
 CONFIRMATION_RES_FILE="${0##*/}.confirmation.res.tmp"
 
-# Re-run all the benchmarks (or use the cached results).
+# Re-run all the benchmarks (or use the cached results). Before caching the
+# results, the `sed` removes the thousands separators from the numbers in the
+# bencher output format (`bench:   3,333,486 ns/iter (+/- 78,821)`), so they
+# can be used in arithmetic.
 set -eo pipefail
 [ -s "${CACHE_FILE}" -a "${1}" != "-f" ] \
     || bazel run //rs/execution_environment:wasm_instructions_bench \
         -- ${BENCHMARK_ARGS} --output-format bencher \
-    | pee "cat" "rg '^test wasm_' > '${CACHE_FILE}' || true"
+    | pee "cat" "rg '^test wasm_' \
+        | sed -E -e :a -e 's/(bench: .*[0-9]),([0-9][0-9][0-9])/\1\2/' -e ta \
+        > '${CACHE_FILE}' || true"
 set +eo pipefail
 
 # Split the cache into the results and confirmations.

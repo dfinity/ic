@@ -28,6 +28,13 @@ LOG_FILE="${LOG_FILE:-${0##*/}.log}"
 # A temporary file to merge the results.
 TMP_FILE="${TMP_FILE:-${0##*/}.tmp}"
 
+# Prints the benchmark results from the command run log. The `sed` removes
+# the thousands separators from the numbers in the bencher output format
+# (`bench:   3,333,486 ns/iter (+/- 78,821)`), so they can be used in arithmetic.
+bench_results() {
+    sed -E -e :a -e 's/(bench: .*[0-9]),([0-9][0-9][0-9])/\1\2/' -e ta "${LOG_FILE}" | rg "${BENCH_RG}"
+}
+
 for i in $(seq 1000); do
     echo "==> $(date '+%Y-%m-%d %H:%M:%S') Iteration #${i}"
 
@@ -36,11 +43,11 @@ for i in $(seq 1000); do
 
     if ! [ -s "${MIN_FILE}" ]; then
         echo "    Setting the baseline in ${MIN_FILE}..."
-        cat "${LOG_FILE}" | rg "${BENCH_RG}" >"${MIN_FILE}"
+        bench_results >"${MIN_FILE}"
     else
         echo "    Merging the ${LOG_FILE} into ${MIN_FILE}..."
         rm -f "${TMP_FILE}"
-        cat "${LOG_FILE}" | rg "${BENCH_RG}" | while read new_bench; do
+        bench_results | while read new_bench; do
             name=$(echo "${new_bench}" | sed -E "${BENCH_NAME_SED}")
             new_result=$(echo "${new_bench}" | sed -E "${BENCH_RESULT_SED}")
 

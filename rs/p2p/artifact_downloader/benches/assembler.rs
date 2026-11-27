@@ -1,11 +1,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    hint::black_box,
     sync::{Arc, RwLock},
     time::Duration,
     vec,
 };
 
-use criterion::{BatchSize, Bencher, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BatchSize, Bencher, Criterion, criterion_group, criterion_main};
 use ic_artifact_downloader::{FetchStrippedConsensusArtifact, MIN_STRIPPED_CONTENT_BYTES};
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_interfaces::p2p::consensus::{

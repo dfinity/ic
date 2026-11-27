@@ -1,5 +1,5 @@
 use criterion::measurement::Measurement;
-use criterion::{BatchSize, BenchmarkId, Criterion, black_box};
+use criterion::{BatchSize, BenchmarkId, Criterion};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_canonical_state::{lazy_tree_conversion::replicated_state_as_lazy_tree, traverse};
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
@@ -28,6 +28,7 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 use maplit::btreemap;
+use std::hint::black_box;
 use std::sync::Arc;
 
 fn bench_traversal<M: Measurement + 'static>(c: &mut Criterion<M>) {
