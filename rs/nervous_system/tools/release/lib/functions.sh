@@ -143,25 +143,33 @@ get_nns_canister_code_location() {
     LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_canister_core "
     LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger-types"
     SNS_INIT="$RUST_DIR/sns/init"
-    # Map of locations
-    code_location__registry="$RUST_DIR/registry/canister"
-    code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
-    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
-    code_location__icp_ledger_archive="$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON"
-    code_location__root="$RUST_DIR/nns/handlers/root"
-    code_location__cycles_minting="$RUST_DIR/nns/cmc"
-    code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
-    code_location__genesis_token="$RUST_DIR/nns/gtc"
-    code_location__identity="$RUST_DIR/nns/identity"
-    code_location__nns_ui="$RUST_DIR/nns/nns-ui"
-    code_location__sns_wasm="$RUST_DIR/nns/sns-wasm $SNS_INIT"
-    code_location__node_rewards="$RUST_DIR/node_rewards/canister $RUST_DIR/node_rewards $RUST_DIR/registry/node_provider_rewards"
-    code_location__migration="$RUST_DIR/migration_canister"
-    code_location__engine_controller="$RUST_DIR/engine_controller"
 
+    # Map of locations. CANISTER_NAME may come from untrusted input (e.g. a
+    # proposal title), so it is only ever compared against this fixed list.
+    # Do NOT build a variable name from it and use indirect expansion
+    # (${!name}): bash evaluates array subscripts in such names, which runs
+    # any embedded $(...).
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
-    n=code_location__${UNDERSCORED_CANISTER_NAME}
-    echo ${!n}
+    case "$UNDERSCORED_CANISTER_NAME" in
+        registry) echo "$RUST_DIR/registry/canister" ;;
+        governance) echo "$RUST_DIR/nns/governance $SNS_INIT" ;;
+        ledger) echo "$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON" ;;
+        icp_ledger_archive) echo "$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON" ;;
+        root) echo "$RUST_DIR/nns/handlers/root" ;;
+        cycles_minting) echo "$RUST_DIR/nns/cmc" ;;
+        lifeline) echo "$RUST_DIR/nns/handlers/lifeline" ;;
+        genesis_token) echo "$RUST_DIR/nns/gtc" ;;
+        identity) echo "$RUST_DIR/nns/identity" ;;
+        nns_ui) echo "$RUST_DIR/nns/nns-ui" ;;
+        sns_wasm) echo "$RUST_DIR/nns/sns-wasm $SNS_INIT" ;;
+        node_rewards) echo "$RUST_DIR/node_rewards/canister $RUST_DIR/node_rewards $RUST_DIR/registry/node_provider_rewards" ;;
+        migration) echo "$RUST_DIR/migration_canister" ;;
+        engine_controller) echo "$RUST_DIR/engine_controller" ;;
+        *)
+            echo "Unknown NNS canister name: $(printf '%q' "$CANISTER_NAME")" >&2
+            return 1
+            ;;
+    esac
 }
 
 get_sns_canister_code_location() {
@@ -169,17 +177,22 @@ get_sns_canister_code_location() {
 
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
-    # Map of locations
-    code_location__root="$RUST_DIR/sns/root"
-    code_location__governance="$RUST_DIR/sns/governance"
-    code_location__ledger="$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/ledger_suite/common/ledger_core $RUST_DIR/ledger_suite/common/ledger_canister_core"
-    code_location__swap="$RUST_DIR/sns/swap"
-    code_location__archive="$RUST_DIR/ledger_suite/icrc1"
-    code_location__index="$RUST_DIR/ledger_suite/icrc1"
 
+    # Map of locations. See get_nns_canister_code_location for why this is a
+    # case statement rather than an indirect variable lookup.
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
-    n=code_location__${UNDERSCORED_CANISTER_NAME}
-    echo ${!n}
+    case "$UNDERSCORED_CANISTER_NAME" in
+        root) echo "$RUST_DIR/sns/root" ;;
+        governance) echo "$RUST_DIR/sns/governance" ;;
+        ledger) echo "$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/ledger_suite/common/ledger_core $RUST_DIR/ledger_suite/common/ledger_canister_core" ;;
+        swap) echo "$RUST_DIR/sns/swap" ;;
+        archive) echo "$RUST_DIR/ledger_suite/icrc1" ;;
+        index) echo "$RUST_DIR/ledger_suite/icrc1" ;;
+        *)
+            echo "Unknown SNS canister name: $(printf '%q' "$CANISTER_NAME")" >&2
+            return 1
+            ;;
+    esac
 }
 
 ### Functions related to SNS deployments
