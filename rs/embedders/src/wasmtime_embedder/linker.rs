@@ -1237,6 +1237,19 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "is_subnet_admin", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::IS_SUBNET_ADMIN, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_is_subnet_admin(src, size, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "in_replicated_execution", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::IN_REPLICATED_EXECUTION)?;

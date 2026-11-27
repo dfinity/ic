@@ -51,6 +51,7 @@ pub mod overhead {
     pub const DEBUG_PRINT: NumInstructions = NumInstructions::new(100);
     pub const GLOBAL_TIMER_SET: NumInstructions = NumInstructions::new(500);
     pub const IS_CONTROLLER: NumInstructions = NumInstructions::new(1_000);
+    pub const IS_SUBNET_ADMIN: NumInstructions = NumInstructions::new(1_000);
     pub const IN_REPLICATED_EXECUTION: NumInstructions = NumInstructions::new(500);
     pub const MSG_ARG_DATA_COPY: NumInstructions = NumInstructions::new(500);
     pub const MSG_ARG_DATA_SIZE: NumInstructions = NumInstructions::new(500);
