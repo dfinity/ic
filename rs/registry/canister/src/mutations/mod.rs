@@ -29,7 +29,6 @@ pub mod do_update_api_boundary_nodes_version;
 pub mod do_update_elected_hostos_versions;
 pub mod do_update_node_directly;
 pub mod do_update_node_operator_config;
-pub mod do_update_node_operator_config_directly;
 pub mod do_update_node_rewards_table;
 pub mod do_update_nodes_hostos_version;
 pub mod do_update_ssh_readonly_access_for_all_unassigned_nodes;
