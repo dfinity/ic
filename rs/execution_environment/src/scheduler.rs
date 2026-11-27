@@ -259,15 +259,15 @@ impl SchedulerImpl {
             .any(|canister| canister.has_long_install_code());
 
         loop {
+            if round_limits.instructions_reached() {
+                break;
+            }
+
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                if can_execute_subnet_msg(
-                    &msg,
-                    ongoing_long_install_code,
-                    state.canister_states(),
-                    round_limits,
-                ) {
+                if can_execute_subnet_msg(&msg, ongoing_long_install_code, state.canister_states())
+                {
                     available_subnet_messages = true;
                     break;
                 }
@@ -1838,33 +1838,24 @@ fn execute_canisters_on_thread(
 ///  - Calls with no effective canister ID.
 ///  - Calls with an effective canister ID, but no matching canister state.
 ///
-/// Never execute calls when the canister has a paused execution.
+/// Never execute calls when the canister has a paused execution, a paused
+/// install code, or an aborted install code.
 ///
 /// Beyond that, invoke `Ic00MethodPermissions::can_be_executed()` to determine
-/// whether the specific call can be executed, based on factors such as whether
-/// the instruction limit has been reached, there's an ongoing long install code
-/// execution, or the canister has an aborted execution.
+/// whether the specific call can be executed: calls are not executed if the
+/// method does not run on an aborted canister and the canister has an aborted
+/// execution, or if the method installs code and there is an ongoing long
+/// install code execution.
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
     canister_states: &CanisterStates,
-    round_limits: &mut RoundLimits,
 ) -> bool {
     let msg_method = match msg {
         SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
         SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
         SubnetMessage::Response { .. } => None,
     };
-
-    // Some heavy methods use round instructions.
-    let instructions_reached = round_limits.instructions_reached();
-
-    // `list_canisters` iterates over the subnet's canisters and thus consumes
-    // round instructions, even though it has no effective canister ID. Defer it
-    // to a later round if the round instruction limit has already been reached.
-    if let Some(Ic00Method::ListCanisters) = msg_method {
-        return !instructions_reached;
-    }
 
     let Some(effective_canister_id) = msg.effective_canister_id() else {
         // If there is no effective canister ID, execute the subnet message.
@@ -1901,11 +1892,7 @@ fn can_execute_subnet_msg(
         };
 
     let permissions = Ic00MethodPermissions::new(method);
-    permissions.can_be_executed(
-        instructions_reached,
-        ongoing_long_install_code,
-        effective_canister_is_aborted,
-    )
+    permissions.can_be_executed(ongoing_long_install_code, effective_canister_is_aborted)
 }
 
 /// Based on the type of the subnet message to execute, figure out its

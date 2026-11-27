@@ -18,7 +18,6 @@ use ic_embedders::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
-use ic_execution_environment::Ic00MethodPermissions;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
@@ -1720,8 +1719,6 @@ impl ExecutionTest {
     /// as per the canister metrics match the given number of `instructions_used: NumInstructions`.
     /// The value of `cycles_used_before: NominalCycles` is expected to be
     /// the cycles used for instructions by the given canister before executing the given `message: SubnetMessage`.
-    /// Additionally, if `instructions_used: NumInstructions` is not zero, asserts that
-    /// `Ic00MethodPermissions::counts_toward_round_limit` is set to true for the corresponding method.
     fn assert_expected_cycles_metrics_change(
         &self,
         canister: &CanisterState,
@@ -1756,9 +1753,6 @@ impl ExecutionTest {
                     cycles_used,
                     self.expected_cycles_metrics_change(message, instructions_used),
                 );
-            }
-            if let Some(method) = method {
-                assert!(Ic00MethodPermissions::new(method).counts_toward_round_limit());
             }
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(

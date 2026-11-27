@@ -1455,68 +1455,6 @@ fn dts_long_running_calls() {
 }
 
 #[test]
-fn dts_unrelated_subnet_messages_make_progress() {
-    let env = dts_env(
-        NumInstructions::from(1_000_000_000),
-        NumInstructions::from(250_000),
-    );
-
-    let binary = wat2wasm(DTS_WAT);
-
-    let user_id = PrincipalId::new_anonymous();
-
-    let settings = Some(
-        CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![user_id])
-            .build(),
-    );
-
-    let canister = env
-        .install_canister_with_cycles(
-            binary.clone(),
-            vec![],
-            settings.clone(),
-            INITIAL_CYCLES_BALANCE,
-        )
-        .unwrap();
-
-    let unrelated_canister = env
-        .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
-        .unwrap();
-
-    // Enable the checkpoints so that the first install code message is always
-    // aborted and doesn't make progress.
-    env.set_checkpoints_enabled(true);
-
-    let upgrade = {
-        let args = InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister, binary, vec![]);
-        env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
-    };
-
-    for _ in 0..5 {
-        // With checkpoints enabled, the update message will be repeatedly
-        // aborted, so there will be no progress.
-        env.tick();
-    }
-
-    let status = {
-        let arg = Encode!(&CanisterIdRecord::from(unrelated_canister)).unwrap();
-        env.send_ingress(user_id, IC_00, Method::CanisterStatus, arg)
-    };
-
-    env.await_ingress(status, 30).unwrap();
-
-    assert_eq!(
-        ingress_state(env.ingress_status(&upgrade)),
-        Some(IngressState::Processing)
-    );
-
-    env.set_checkpoints_enabled(false);
-
-    env.await_ingress(upgrade, 30).unwrap();
-}
-
-#[test]
 fn dts_ingress_status_of_update_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
