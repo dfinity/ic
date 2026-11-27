@@ -6,6 +6,7 @@ use ic_embedders::wasm_utils::validation::{
     RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
 };
 use ic_embedders::wasmtime_embedder::system_api::ApiType;
+use ic_management_canister_types_private::MAX_ALLOWED_GLOBALS_COUNT;
 use ic_types::methods::WasmMethod;
 use lazy_static::lazy_static;
 use std::collections::BTreeSet;
@@ -250,7 +251,7 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Conf
     Config {
         min_funcs: 10,
         min_exports: 10,
-        max_globals: embedder_config.max_globals,
+        max_globals: MAX_ALLOWED_GLOBALS_COUNT,
         max_funcs: embedder_config.max_functions,
         max_instructions: WASM_FUNCTION_SIZE_LIMIT,
 
@@ -354,7 +355,7 @@ pub fn generate_exports(
     module.section(&functions);
 
     // Global Section (dummy values)
-    let global_export_count = u.int_in_range(10..=embedder_config.max_globals)?;
+    let global_export_count = u.int_in_range(10..=MAX_ALLOWED_GLOBALS_COUNT)?;
     let mut globals = GlobalSection::new();
     for _ in 0..global_export_count {
         globals.global(

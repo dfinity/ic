@@ -8,9 +8,9 @@ use crate::{
     metadata_state::UnflushedCheckpointOps,
     page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
 };
-use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
+use ic_config::embedders::WASM_MAX_SIZE;
 use ic_management_canister_types_private::{
-    Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
+    Global, GlobalTimer, MAX_ALLOWED_GLOBALS_COUNT, OnLowWasmMemoryHookStatus, SnapshotSource,
     UploadCanisterSnapshotMetadataArgs,
 };
 use ic_sys::PAGE_SIZE;
@@ -552,7 +552,7 @@ impl ValidatedSnapshotMetadata {
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
             return Err(MetadataValidationError::StableMemoryTooLarge);
         }
-        if raw.globals.get().len() > MAX_GLOBALS {
+        if raw.globals.get().len() > MAX_ALLOWED_GLOBALS_COUNT {
             return Err(MetadataValidationError::ExportedGlobalsTooLarge);
         }
         // a 32 byte hash
