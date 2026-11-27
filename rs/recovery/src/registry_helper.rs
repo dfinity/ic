@@ -4,9 +4,7 @@ use crate::{
     util::{block_on, write_public_key_to_file},
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key_from_pem, parse_threshold_sig_key_from_pem_file, public_key_to_der,
-};
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem, public_key_to_der};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
@@ -52,7 +50,6 @@ pub enum RegistryPollingStrategy {
 pub struct RegistryHelper {
     registry_replicator: Arc<RegistryReplicator>,
     polling_strategy: RegistryPollingStrategy,
-    is_mainnet: Option<bool>,
 }
 
 impl RegistryHelper {
@@ -63,13 +60,9 @@ impl RegistryHelper {
         nns_pem_path: &Path,
         polling_strategy: RegistryPollingStrategy,
     ) -> Self {
-        let (nns_pub_key, is_mainnet) = match get_nns_public_key(&nns_url, nns_pem_path, &logger) {
-            Ok((nns_pub_key, is_mainnet)) => (Some(nns_pub_key), Some(is_mainnet)),
-            Err(err) => {
-                error!(logger, "Failed getting the NNS public key: {}", err);
-                (None, None)
-            }
-        };
+        let nns_pub_key = get_nns_public_key(&nns_url, nns_pem_path, &logger)
+            .inspect_err(|err| error!(logger, "Failed getting the NNS public key: {}", err))
+            .ok();
         let registry_replicator = Arc::new(block_on(RegistryReplicator::new(
             logger.clone().into(),
             &local_store_path,
@@ -81,15 +74,21 @@ impl RegistryHelper {
         Self {
             registry_replicator,
             polling_strategy,
-            is_mainnet,
         }
     }
 
-    /// Returns whether the registry is the mainnet registry, i.e., whether the
-    /// NNS public key it is validated against is the mainnet NNS public key,
-    /// or `None` if the NNS public key could not be obtained.
+    /// Compares the root subnet's signing key at the latest local registry
+    /// version with the mainnet key. A resumed store can have a different root
+    /// key from the bootstrap PEM. Missing or unreadable records yield `None`.
     pub fn is_mainnet(&self) -> Option<bool> {
-        self.is_mainnet
+        let registry = self.registry_client();
+        let version = registry.get_latest_version();
+        let root_subnet = registry.get_root_subnet_id(version).ok()??;
+        let key = make_crypto_threshold_signing_pubkey_key(root_subnet);
+        let bytes = registry.get_value(&key, version).ok()??;
+        let public_key = PublicKey::decode(bytes.as_slice()).ok()?;
+        let key = ThresholdSigPublicKey::try_from(public_key).ok()?;
+        Some(key == mainnet_nns_public_key())
     }
 
     /// Returns the underlying [RegistryClient].
@@ -171,12 +170,12 @@ impl RegistryHelper {
     }
 }
 
-/// Returns the NNS public key and whether it is the mainnet NNS public key.
+/// Reads the bootstrap NNS public key, downloading it if needed.
 fn get_nns_public_key(
     nns_url: &Url,
     nns_pem_path: &Path,
     logger: &Logger,
-) -> RecoveryResult<(ThresholdSigPublicKey, bool)> {
+) -> RecoveryResult<ThresholdSigPublicKey> {
     if nns_pem_path.exists() {
         info!(
             logger,
@@ -187,16 +186,13 @@ fn get_nns_public_key(
         download_nns_pem(nns_url, nns_pem_path, logger)?;
     }
 
-    let key = parse_threshold_sig_key_from_pem_file(nns_pem_path)
-        .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem file: {e}")))?;
-
     let downloaded_key = read_file(nns_pem_path)
         .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem: {e}")))?;
+    let key = parse_threshold_sig_key_from_pem(downloaded_key.as_bytes())
+        .map_err(|e| RecoveryError::RegistryError(format!("Failed to parse nns.pem: {e}")))?;
     info!(logger, "Continuing with public key:\n{}", downloaded_key);
 
-    let is_mainnet = key == mainnet_nns_public_key();
-
-    if is_mainnet {
+    if key == mainnet_nns_public_key() {
         info!(
             logger,
             "Downloaded key and included NNS public key are equal!"
@@ -208,7 +204,7 @@ fn get_nns_public_key(
         )
     }
 
-    Ok((key, is_mainnet))
+    Ok(key)
 }
 
 /// The mainnet NNS public key, which is included in the binary.
@@ -274,11 +270,56 @@ fn get_value_from_registry_canister(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_base_types::subnet_id_into_protobuf;
+    use ic_registry_keys::ROOT_SUBNET_ID_KEY;
+    use ic_registry_local_store::{KeyMutation, LocalStoreImpl};
 
     /// The bundled `ic_public_key.pem` parses as a threshold signature public
     /// key, so `mainnet_nns_public_key` never panics.
     #[test]
     fn mainnet_nns_public_key_is_valid() {
         let _ = mainnet_nns_public_key();
+    }
+
+    #[test]
+    fn resumed_registry_uses_the_root_key_in_the_local_store() {
+        let root_subnet = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        let mainnet_key = PublicKey::from(mainnet_nns_public_key());
+        let testnet_key = PublicKey {
+            key_value: vec![42; ThresholdSigPublicKey::SIZE],
+            ..mainnet_key.clone()
+        };
+
+        for (registry_key, pem_key, expected) in [
+            (Some(mainnet_key.clone()), &testnet_key, Some(true)),
+            (Some(testnet_key.clone()), &mainnet_key, Some(false)),
+            (None, &testnet_key, None),
+            (Some(PublicKey::default()), &testnet_key, None),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = dir.path().join("registry");
+            let pem = dir.path().join("nns.pem");
+            write_public_key_to_file(&public_key_to_der(&pem_key.key_value).unwrap(), &pem)
+                .unwrap();
+            let entry = vec![
+                KeyMutation {
+                    key: ROOT_SUBNET_ID_KEY.to_string(),
+                    value: Some(subnet_id_into_protobuf(root_subnet).encode_to_vec()),
+                },
+                KeyMutation {
+                    key: make_crypto_threshold_signing_pubkey_key(root_subnet),
+                    value: registry_key.map(|key| key.encode_to_vec()),
+                },
+            ];
+            LocalStoreImpl::from_changelog(vec![entry], &store).unwrap();
+            let helper = RegistryHelper::new(
+                Logger::root(slog::Discard, slog::o!()),
+                Url::parse("http://localhost").unwrap(),
+                store,
+                &pem,
+                RegistryPollingStrategy::OnlyOnInit,
+            );
+            assert_eq!(helper.is_mainnet(), expected);
+        }
     }
 }

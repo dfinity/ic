@@ -745,7 +745,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::CoolDownSourceSubnet | StepType::CheckRegistryForCoolingDownFlag => {}
             StepType::CheckMergeReadiness => print_url_and_ask_for_confirmation(
                 &self.logger,
-                &self.recovery.registry_helper,
+                self.recovery.registry_helper.is_mainnet(),
                 || self.dashboard_url(),
                 "The tool evaluates the merge readiness condition itself, and waits until it \
                  holds. Please check the dashboard as well, to see whether it is safe to merge \

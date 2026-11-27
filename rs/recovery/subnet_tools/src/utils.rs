@@ -4,7 +4,6 @@ use ic_recovery::{
     cli::wait_for_confirmation,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::read_file,
-    registry_helper::RegistryHelper,
     util::subnet_id_from_str,
 };
 use ic_registry_routing_table::CanisterIdRange;
@@ -106,16 +105,15 @@ pub fn find_expected_state_hash_for_subnet_id(
 /// Prints a dashboard URL and waits until the operator confirms that what it
 /// shows allows the next step to be taken.
 ///
-/// The dashboards only cover mainnet, so nothing is printed if the registry is
-/// known not to be the mainnet registry. If that is unknown, the dashboard is
-/// printed, so that it is never skipped on mainnet.
+/// Skips the dashboard for a known non-mainnet registry. An unknown network
+/// still gets the dashboard and confirmation prompt.
 pub fn print_url_and_ask_for_confirmation(
     logger: &Logger,
-    registry_helper: &RegistryHelper,
+    is_mainnet: Option<bool>,
     url: impl FnOnce() -> String,
     text_to_display: impl std::fmt::Display,
 ) {
-    if registry_helper.is_mainnet() == Some(false) {
+    if is_mainnet == Some(false) {
         info!(
             logger,
             "Skipping the dashboard check, since the subnets do not belong to mainnet"
@@ -142,6 +140,25 @@ mod tests {
 
     use ic_recovery::file_sync_helper::write_file;
     use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn dashboard_is_requested_on_mainnet_and_when_the_network_is_unknown() {
+        let logger = Logger::root(slog::Discard, slog::o!());
+        for (is_mainnet, expected) in [(Some(true), true), (None, true), (Some(false), false)] {
+            let mut requested = false;
+            print_url_and_ask_for_confirmation(
+                &logger,
+                is_mainnet,
+                || {
+                    requested = true;
+                    // An invalid URL avoids waiting for stdin in this test.
+                    String::new()
+                },
+                "Check the dashboard",
+            );
+            assert_eq!(requested, expected);
+        }
+    }
 
     #[test]
     fn find_expected_state_hash_for_subnet_id_test() {

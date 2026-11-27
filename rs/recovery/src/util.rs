@@ -93,13 +93,24 @@ impl ExecutionMode {
     /// its output is self-explanatory where it is logged, i.e., on remote
     /// execution.
     pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
-        let path = path.display();
-        let exists = format!("{path} exists");
-        self.execute(
-            format!("test -e {path} && echo '{exists}' || echo '{path} does not exist'"),
+        let path = path.to_str().ok_or_else(|| {
+            RecoveryError::UnexpectedError(format!(
+                "Cannot pass non-UTF-8 path {path:?} to the shell"
+            ))
+        })?;
+        let escaped = path.replace('\'', r"'\''");
+        let output = self.execute(
+            format!(
+                r#"path='{escaped}'
+if test -e "$path"; then
+    printf '%s exists\n' "$path"
+else
+    printf '%s does not exist\n' "$path"
+fi"#
+            ),
             None,
-        )
-        .map(|output| output.is_some_and(|s| s.trim() == exists))
+        )?;
+        Ok(output.is_some_and(|line| line == format!("{path} exists\n")))
     }
 
     /// The status of the checkpoint in the directory `checkpoint`, or `None`
@@ -293,7 +304,10 @@ mod tests {
     fn checkpoint_status_matches_state_layout() {
         use ic_state_layout::{CheckpointLayout, ReadOnly};
 
-        let root = tempfile::tempdir().expect("Could not create a temp dir");
+        let root = tempfile::Builder::new()
+            .prefix("operator's checkpoints $1 %s ")
+            .tempdir()
+            .expect("Could not create a temp dir");
         let height = Height::new(100);
         let checkpoint = root.path().join("0000000000000064");
 

@@ -423,7 +423,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
 
                 print_url_and_ask_for_confirmation(
                     &self.logger,
-                    &self.recovery.registry_helper,
+                    self.recovery.registry_helper.is_mainnet(),
                     url,
                     "Please check the dashboard to see if it is safe to begin subnet splitting",
                 );
@@ -494,7 +494,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
 
                 print_url_and_ask_for_confirmation(
                     &self.logger,
-                    &self.recovery.registry_helper,
+                    self.recovery.registry_helper.is_mainnet(),
                     url,
                     "Please check the dashboard to see if it is safe to unhalt the \
                     destination subnet and/or remove the canister migrations entry",
