@@ -8,9 +8,9 @@
 //! * A transfer must call the configured ledger and debit the sender's default
 //!   account.
 //! * A neuron request must call the configured governance canister. A
-//!   `manage_neuron` request names its neuron in the `nonce` and in the
-//!   subaccount `H(controller, neuron_index)` of its `arg`, and its command
-//!   must be the displayed operation.
+//!   `manage_neuron` request names its neuron by the subaccount
+//!   `H(controller, neuron_index)` in its `arg`, and its command must be the
+//!   displayed operation.
 //! * A signed request carries one envelope per ingress expiry, and
 //!   `/construction/submit` broadcasts whichever one is currently valid, so all
 //!   envelopes must carry the same update.
@@ -156,7 +156,6 @@ pub fn verify_signed_target(
         RequestType::Stake { neuron_index } => {
             verify_governance_canister(update, governance_canister_id)?;
             verify_method_name(update, CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT)?;
-            verify_nonce_neuron_index(update, *neuron_index)?;
             // The neuron is `H(controller, memo)`, displayed against the signer.
             let args: ClaimOrRefreshNeuronFromAccount = decode_arg(update, "stake")?;
             if args.memo != *neuron_index {
@@ -261,7 +260,6 @@ fn verify_manage_neuron(
 ) -> Result<(), ApiError> {
     verify_governance_canister(update, governance_canister_id)?;
     verify_method_name(update, MANAGE_NEURON)?;
-    verify_nonce_neuron_index(update, neuron_index)?;
 
     let manage: ManageNeuronRequest = decode_arg(update, "manage_neuron")?;
 
@@ -364,33 +362,6 @@ fn verify_neuron_subaccount(
              display (controller {controller}, neuron_index {neuron_index}). Refusing to \
              describe a request that targets a different neuron than it appears to."
         )));
-    }
-    Ok(())
-}
-
-fn verify_nonce_neuron_index(
-    update: &HttpCanisterUpdate,
-    neuron_index: u64,
-) -> Result<(), ApiError> {
-    let nonce = update.nonce.as_ref().ok_or_else(|| {
-        ApiError::invalid_request(
-            "The signed update carries no nonce, so the displayed neuron_index \
-             cannot be verified against it.",
-        )
-    })?;
-    let signed_neuron_index: u64 = crate::convert::decode_canister_method_arg(nonce.0.as_ref())
-        .map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Could not decode the neuron index from the signed nonce: {e:#}"
-            ))
-        })?;
-    if signed_neuron_index != neuron_index {
-        return Err(mismatch(
-            "neuron_index",
-            neuron_index,
-            signed_neuron_index,
-            "the signed nonce",
-        ));
     }
     Ok(())
 }

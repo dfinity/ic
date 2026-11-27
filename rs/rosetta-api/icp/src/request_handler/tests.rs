@@ -1663,7 +1663,7 @@ mod construction_endpoints {
             (
                 "rewritten neuron index",
                 Box::new(|t| t.requests[1].0 = RequestType::Disburse { neuron_index: 0 }),
-                "neuron_index 0, but the signed nonce says 7",
+                "does not belong to the neuron Rosetta would display",
             ),
             (
                 "substituted command",
@@ -1719,7 +1719,7 @@ mod construction_endpoints {
         unsigned.updates[0].0 = RequestType::Disburse { neuron_index: 0 };
         let err = parse(&handler, &network_identifier, false, unsigned.to_string()).unwrap_err();
         assert!(
-            format!("{err:?}").contains("neuron_index 0, but the signed nonce says 7"),
+            format!("{err:?}").contains("does not belong to the neuron Rosetta would display"),
             "{err:?}"
         );
     }

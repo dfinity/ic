@@ -345,7 +345,7 @@ fn every_manage_neuron_request_is_bound_to_the_signed_command() {
 }
 
 #[test]
-fn a_manage_neuron_request_must_name_its_neuron_by_signed_nonce_and_subaccount() {
+fn a_manage_neuron_request_must_name_its_neuron_by_signed_subaccount() {
     let manage = |id, neuron_id_or_subaccount| ManageNeuronRequest {
         id,
         neuron_id_or_subaccount,
@@ -355,19 +355,6 @@ fn a_manage_neuron_request_must_name_its_neuron_by_signed_nonce_and_subaccount()
     let honest = manage(None, Some(subaccount(owner(), NEURON_INDEX)));
 
     let cases = [
-        (
-            "missing nonce",
-            HttpCanisterUpdate {
-                nonce: None,
-                ..manage_neuron_update(owner(), NEURON_INDEX, &honest)
-            },
-            "carries no nonce",
-        ),
-        (
-            "other nonce",
-            manage_neuron_update(owner(), 0, &honest),
-            "neuron_index 7, but the signed nonce says 0",
-        ),
         (
             "legacy id",
             manage_neuron_update(
@@ -401,11 +388,18 @@ fn a_manage_neuron_request_must_name_its_neuron_by_signed_nonce_and_subaccount()
         ),
     ];
 
-    verify(
-        &disburse(),
-        &manage_neuron_update(owner(), NEURON_INDEX, &honest),
-    )
-    .unwrap();
+    // The nonce does not reach governance, so it is not checked.
+    let honest_update = manage_neuron_update(owner(), NEURON_INDEX, &honest);
+    for nonce in [None, Some(Blob(Encode!(&0u64).unwrap()))] {
+        verify(
+            &disburse(),
+            &HttpCanisterUpdate {
+                nonce,
+                ..honest_update.clone()
+            },
+        )
+        .unwrap();
+    }
     for (name, update, expected) in cases {
         assert_rejected(name, verify(&disburse(), &update), expected);
     }
@@ -468,7 +462,7 @@ fn every_governance_request_is_bound_to_the_governance_canister_and_method() {
 }
 
 #[test]
-fn stake_is_bound_to_the_signed_nonce_memo_and_controller() {
+fn stake_is_bound_to_the_signed_memo_and_controller() {
     let stake = |neuron_index| RequestType::Stake { neuron_index };
 
     verify(&stake(NEURON_INDEX), &stake_update(None, NEURON_INDEX)).unwrap();
@@ -477,11 +471,14 @@ fn stake_is_bound_to_the_signed_nonce_memo_and_controller() {
         &stake_update(Some(owner()), NEURON_INDEX),
     )
     .unwrap();
-    assert_rejected(
-        "rewritten index",
-        verify(&stake(0), &stake_update(None, NEURON_INDEX)),
-        "neuron_index 0, but the signed nonce says 7",
-    );
+    verify(
+        &stake(NEURON_INDEX),
+        &HttpCanisterUpdate {
+            nonce: None,
+            ..stake_update(None, NEURON_INDEX)
+        },
+    )
+    .unwrap();
     assert_rejected(
         "other memo",
         verify(&stake(NEURON_INDEX), &stake_update(None, 0)),
