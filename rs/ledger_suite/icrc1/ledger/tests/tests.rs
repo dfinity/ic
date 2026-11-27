@@ -251,6 +251,22 @@ fn test_get_all_blocks_with_archiving_disabled() {
 }
 
 #[test]
+fn test_archive_reports_its_own_config_metrics() {
+    ic_ledger_suite_state_machine_tests::test_archive_reports_its_own_config_metrics(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_archive_and_dedup_config_metrics() {
+    ic_ledger_suite_state_machine_tests::test_archive_and_dedup_config_metrics(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_upgrade_archive_options() {
     ic_ledger_suite_state_machine_tests::test_upgrade_archive_options(
         ledger_wasm(),
