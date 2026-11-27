@@ -210,11 +210,7 @@ fn undo_withdrawal_request(requests: state::SubmittedWithdrawalRequests, utxos: 
 
 /// Updates the UTXOs for the main account of the minter to pick up change from
 /// previous retrieve BTC requests.
-async fn fetch_main_utxos<R: CanisterRuntime>(
-    main_account: &Account,
-    main_address: &String,
-    runtime: &R,
-) -> Vec<Utxo> {
+async fn fetch_main_utxos<R: CanisterRuntime>(main_address: &String, runtime: &R) -> Vec<Utxo> {
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
@@ -237,12 +233,12 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
         }
     };
 
-    state::read_state(|s| match s.utxos_state_addresses.get(main_account) {
-        Some(known_utxos) => utxos
+    // Compare by outpoint: after a reorg the same outpoint can be reported at a different height.
+    state::read_state(|s| {
+        utxos
             .into_iter()
-            .filter(|u| !known_utxos.contains(u))
-            .collect(),
-        None => utxos,
+            .filter(|u| !s.minted_outpoints.contains(&u.outpoint))
+            .collect()
     })
 }
 
@@ -722,7 +718,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
             runtime.derive_minter_address_str(s),
         )
     });
-    let new_utxos = fetch_main_utxos(&main_account, &main_address_str, runtime).await;
+    let new_utxos = fetch_main_utxos(&main_address_str, runtime).await;
 
     state::mutate_state(|state| {
         process_maybe_finalized_transactions(
