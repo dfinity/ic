@@ -177,14 +177,18 @@ pub(super) mod construction {
     use crate::{
         ledger_client::LedgerClient,
         models::{
-            Amount, ConstructionDeriveRequest, Currency, CurveType, NetworkIdentifier, Operation,
-            OperationIdentifier, PublicKey, operation::OperationType,
+            Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
+            ConstructionPayloadsRequest, ConstructionPayloadsResponse, Currency, CurveType,
+            NetworkIdentifier, Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
+            operation::OperationType,
         },
+        request::Request,
         request_handler::RosettaRequestHandler,
+        request_types::Disburse,
     };
     use ic_base_types::CanisterId;
     use rand_chacha::rand_core::OsRng;
-    use rosetta_core::metrics::RosettaMetrics;
+    use rosetta_core::{convert::principal_id_from_public_key, metrics::RosettaMetrics};
     use std::{
         str::FromStr,
         sync::{Arc, atomic::AtomicBool},
@@ -307,6 +311,74 @@ pub(super) mod construction {
         ];
 
         (handler, network_identifier, operations, pub_key, key)
+    }
+
+    pub(crate) fn sign_and_combine(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        pub_key: &PublicKey,
+        key: &ic_ed25519::PrivateKey,
+        payloads: ConstructionPayloadsResponse,
+    ) -> String {
+        let signatures = payloads
+            .payloads
+            .into_iter()
+            .map(|payload| {
+                let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
+                Signature {
+                    signing_payload: payload,
+                    public_key: pub_key.clone(),
+                    signature_type: SignatureType::Ed25519,
+                    hex_bytes: hex::encode(key.sign_message(&bytes)),
+                }
+            })
+            .collect();
+
+        handler
+            .construction_combine(ConstructionCombineRequest {
+                network_identifier: network_identifier.clone(),
+                unsigned_transaction: payloads.unsigned_transaction,
+                signatures,
+            })
+            .unwrap()
+            .signed_transaction
+    }
+
+    pub(crate) fn signed_disburse(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        pub_key: &PublicKey,
+        key: &ic_ed25519::PrivateKey,
+        neuron_index: u64,
+    ) -> (Vec<Operation>, String, String) {
+        let account =
+            icp_ledger::AccountIdentifier::from(principal_id_from_public_key(pub_key).unwrap());
+        let operations = Request::requests_to_operations(
+            &[Request::Disburse(Disburse {
+                account,
+                amount: None,
+                recipient: Some(icp_ledger::AccountIdentifier::from(
+                    ic_types::PrincipalId::new_user_test_id(42),
+                )),
+                neuron_index,
+            })],
+            "TKN",
+        )
+        .unwrap();
+
+        let payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: None,
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+        let unsigned_transaction = payloads.unsigned_transaction.clone();
+        let signed_transaction =
+            sign_and_combine(handler, network_identifier, pub_key, key, payloads);
+
+        (operations, unsigned_transaction, signed_transaction)
     }
 }
 
@@ -1218,11 +1290,445 @@ fn should_combine_neuron_workflow_over_max_ingress_window() {
         .expect("the largest transaction should be combined");
 }
 
+mod construction_endpoints {
+    use super::construction::{
+        setup_handler, setup_transfer_test, sign_and_combine, signed_disburse,
+    };
+    use crate::{
+        errors::ApiError,
+        models::{
+            ConstructionHashRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            ConstructionPayloadsRequestMetadata, NetworkIdentifier, SignedTransaction,
+            UnsignedTransaction,
+        },
+        request::Request,
+        request_handler::RosettaRequestHandler,
+        request_types::*,
+        transaction_id::{NEURON_MANAGEMENT_PSEUDO_HASH, TransactionIdentifier},
+    };
+    use ic_ledger_canister_core::ledger::LedgerTransaction;
+    use ic_types::PrincipalId;
+    use icp_ledger::{AccountIdentifier, Memo, TimeStamp, Tokens, Transaction};
+    use proptest::{prelude::*, strategy::Union};
+    use rosetta_core::convert::principal_id_from_public_key;
+    use std::{str::FromStr, time::SystemTime};
+
+    type Tampering<'a> = Box<dyn Fn(&mut SignedTransaction) + 'a>;
+
+    fn parse(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        signed: bool,
+        transaction: String,
+    ) -> Result<Vec<crate::models::Operation>, ApiError> {
+        handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed,
+                transaction,
+            })
+            .map(|parsed| parsed.operations)
+    }
+
+    fn hash(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        transaction: &SignedTransaction,
+    ) -> Result<String, ApiError> {
+        handler
+            .construction_hash(ConstructionHashRequest {
+                network_identifier: network_identifier.clone(),
+                signed_transaction: transaction.to_string(),
+            })
+            .map(|hash| hash.transaction_identifier.hash)
+    }
+
+    fn submitted(
+        handler: &RosettaRequestHandler,
+        transaction: &SignedTransaction,
+    ) -> Result<Vec<Request>, ApiError> {
+        transaction
+            .requests
+            .iter()
+            .map(|request| {
+                Request::from_signed_request(
+                    request,
+                    handler.ledger.ledger_canister_id(),
+                    handler.ledger.governance_canister_id(),
+                )
+            })
+            .collect()
+    }
+
+    fn arb_neuron_request(account: AccountIdentifier) -> impl Strategy<Value = Request> {
+        let neuron_index = 0..4_u64;
+        let other = PrincipalId::new_user_test_id(42);
+        let controller = prop::option::of(Just(other));
+        let recipient = prop::option::of(Just(AccountIdentifier::from(other)));
+        let percentage = prop::option::of(1..=100_u32);
+        Union::new(vec![
+            neuron_index
+                .clone()
+                .prop_map(move |neuron_index| {
+                    Request::Stake(Stake {
+                        account,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (neuron_index.clone(), controller.clone())
+                .prop_map(move |(neuron_index, controller)| {
+                    Request::NeuronInfo(NeuronInfo {
+                        account,
+                        controller,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (0..4_u64)
+                .prop_map(move |page_number| {
+                    Request::ListNeurons(ListNeurons {
+                        account,
+                        page_number: Some(page_number),
+                    })
+                })
+                .boxed(),
+            (neuron_index.clone(), 0..u32::MAX as u64)
+                .prop_map(move |(neuron_index, timestamp)| {
+                    Request::SetDissolveTimestamp(SetDissolveTimestamp {
+                        account,
+                        neuron_index,
+                        timestamp: crate::models::seconds::Seconds(timestamp),
+                    })
+                })
+                .boxed(),
+            (neuron_index.clone(), any::<bool>())
+                .prop_map(move |(neuron_index, setting)| {
+                    Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity {
+                        account,
+                        neuron_index,
+                        requested_setting_for_auto_stake_maturity: setting,
+                    })
+                })
+                .boxed(),
+            neuron_index
+                .clone()
+                .prop_map(move |neuron_index| {
+                    Request::StartDissolve(StartDissolve {
+                        account,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            neuron_index
+                .clone()
+                .prop_map(move |neuron_index| {
+                    Request::StopDissolve(StopDissolve {
+                        account,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (
+                neuron_index.clone(),
+                prop::option::of((1..u64::MAX).prop_map(Tokens::from_e8s)),
+                recipient.clone(),
+            )
+                .prop_map(move |(neuron_index, amount, recipient)| {
+                    Request::Disburse(Disburse {
+                        account,
+                        amount,
+                        recipient,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (neuron_index.clone(), 1..=100_u32, recipient)
+                .prop_map(move |(neuron_index, percentage_to_disburse, recipient)| {
+                    Request::DisburseMaturity(DisburseMaturity {
+                        account,
+                        percentage_to_disburse,
+                        recipient,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            neuron_index
+                .clone()
+                .prop_map(move |neuron_index| {
+                    Request::AddHotKey(AddHotKey {
+                        account,
+                        neuron_index,
+                        key: PublicKeyOrPrincipal::Principal(other),
+                    })
+                })
+                .boxed(),
+            neuron_index
+                .clone()
+                .prop_map(move |neuron_index| {
+                    Request::RemoveHotKey(RemoveHotKey {
+                        account,
+                        neuron_index,
+                        key: PublicKeyOrPrincipal::Principal(other),
+                    })
+                })
+                .boxed(),
+            (neuron_index.clone(), controller.clone(), percentage.clone())
+                .prop_map(move |(neuron_index, controller, percentage_to_spawn)| {
+                    Request::Spawn(Spawn {
+                        account,
+                        spawned_neuron_index: neuron_index + 10,
+                        controller,
+                        percentage_to_spawn,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (neuron_index.clone(), percentage)
+                .prop_map(move |(neuron_index, percentage_to_stake)| {
+                    Request::StakeMaturity(StakeMaturity {
+                        account,
+                        percentage_to_stake,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (
+                neuron_index.clone(),
+                prop::option::of(any::<u64>()),
+                1..=2_i32,
+            )
+                .prop_map(move |(neuron_index, proposal, vote)| {
+                    Request::RegisterVote(RegisterVote {
+                        account,
+                        proposal,
+                        vote,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (
+                neuron_index.clone(),
+                0..20_i32,
+                prop::collection::vec(any::<u64>(), 0..15),
+                controller.clone(),
+            )
+                .prop_map(move |(neuron_index, topic, followees, controller)| {
+                    Request::Follow(Follow {
+                        account,
+                        topic,
+                        followees,
+                        controller,
+                        neuron_index,
+                    })
+                })
+                .boxed(),
+            (neuron_index, controller)
+                .prop_map(move |(neuron_index, controller)| {
+                    Request::RefreshVotingPower(RefreshVotingPower {
+                        account,
+                        neuron_index,
+                        controller,
+                    })
+                })
+                .boxed(),
+        ])
+    }
+
+    #[test]
+    fn every_neuron_request_round_trips_through_the_construction_endpoints() {
+        let (handler, network_identifier, pub_key, key) = setup_handler();
+        let account = AccountIdentifier::from(principal_id_from_public_key(&pub_key).unwrap());
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let config = proptest::test_runner::Config {
+            cases: 32,
+            ..Default::default()
+        };
+
+        proptest!(config, |(
+            requests in prop::collection::vec(arb_neuron_request(account), 1..=3)
+                .prop_filter("payloads rejects repeated requests", |requests| {
+                    requests.iter().enumerate().all(|(i, r)| !requests[..i].contains(r))
+                }),
+            ingress_window_secs in prop::option::of(600..1_800_u64),
+        )| {
+            let operations = Request::requests_to_operations(&requests, "TKN").unwrap();
+            let metadata = ingress_window_secs.map(|secs| {
+                ConstructionPayloadsRequestMetadata {
+                    memo: None,
+                    created_at_time: Some(now),
+                    ingress_start: Some(now),
+                    ingress_end: Some(now + secs * 1_000_000_000),
+                }
+                .try_into()
+                .unwrap()
+            });
+            let payloads = handler
+                .construction_payloads(ConstructionPayloadsRequest {
+                    network_identifier: network_identifier.clone(),
+                    operations: operations.clone(),
+                    metadata,
+                    public_keys: Some(vec![pub_key.clone()]),
+                })
+                .unwrap();
+
+            prop_assert_eq!(
+                &parse(&handler, &network_identifier, false, payloads.unsigned_transaction.clone()).unwrap(),
+                &operations
+            );
+
+            let signed = sign_and_combine(&handler, &network_identifier, &pub_key, &key, payloads);
+            prop_assert_eq!(
+                &parse(&handler, &network_identifier, true, signed.clone()).unwrap(),
+                &operations
+            );
+
+            let signed = SignedTransaction::from_str(&signed).unwrap();
+            prop_assert_eq!(submitted(&handler, &signed).unwrap(), requests);
+            prop_assert_eq!(
+                hash(&handler, &network_identifier, &signed).unwrap(),
+                NEURON_MANAGEMENT_PSEUDO_HASH
+            );
+        });
+    }
+
+    #[test]
+    fn the_construction_endpoints_reject_a_request_that_differs_from_its_signed_payload() {
+        let (handler, network_identifier, operations, pub_key, key) = setup_transfer_test();
+        let signer = AccountIdentifier::from(principal_id_from_public_key(&pub_key).unwrap());
+        let memo = 5;
+        let created_at_time = 1_700_000_000_000_000_000;
+        let transfer_payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations,
+                metadata: Some(
+                    ConstructionPayloadsRequestMetadata {
+                        memo: Some(memo),
+                        created_at_time: Some(created_at_time),
+                        ingress_start: None,
+                        ingress_end: None,
+                    }
+                    .try_into()
+                    .unwrap(),
+                ),
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+        let transfer = SignedTransaction::from_str(&sign_and_combine(
+            &handler,
+            &network_identifier,
+            &pub_key,
+            &key,
+            transfer_payloads,
+        ))
+        .unwrap();
+        let (_, unsigned_disburse, disburse) =
+            signed_disburse(&handler, &network_identifier, &pub_key, &key, 7);
+        let (_, _, other_disburse) =
+            signed_disburse(&handler, &network_identifier, &pub_key, &key, 9);
+        let disburse = SignedTransaction::from_str(&disburse).unwrap();
+        let other_envelope = SignedTransaction::from_str(&other_disburse)
+            .unwrap()
+            .requests[0]
+            .1[0]
+            .clone();
+
+        let honest = SignedTransaction {
+            requests: vec![transfer.requests[0].clone(), disburse.requests[0].clone()],
+        };
+        let expected_hash = TransactionIdentifier::from(
+            &Transaction::new(
+                signer,
+                signer,
+                None,
+                Tokens::from_e8s(100_000_000),
+                Tokens::from_e8s(1_000_000),
+                Memo(memo),
+                TimeStamp::from_nanos_since_unix_epoch(created_at_time),
+            )
+            .hash(),
+        );
+        assert_eq!(
+            hash(&handler, &network_identifier, &honest).unwrap(),
+            expected_hash.0.hash
+        );
+        parse(&handler, &network_identifier, true, honest.to_string()).unwrap();
+        submitted(&handler, &honest).unwrap();
+
+        let tamperings: Vec<(&str, Tampering, &str)> = vec![
+            (
+                "rewritten neuron index",
+                Box::new(|t| t.requests[1].0 = RequestType::Disburse { neuron_index: 0 }),
+                "does not belong to the neuron Rosetta would display",
+            ),
+            (
+                "substituted command",
+                Box::new(|t| t.requests[1].0 = RequestType::StartDissolve { neuron_index: 7 }),
+                "The signed manage_neuron command is not the",
+            ),
+            (
+                "relabelled transfer",
+                Box::new(|t| t.requests[0].0 = RequestType::StartDissolve { neuron_index: 0 }),
+                "A neuron request must be addressed to canister",
+            ),
+            (
+                "envelope of another request",
+                Box::new(|t| t.requests[1].1.push(other_envelope.clone())),
+                "must differ only in their ingress expiry",
+            ),
+            (
+                "read state of another request",
+                Box::new(|t| t.requests[1].1[0].read_state = other_envelope.read_state.clone()),
+                "must read the result of that",
+            ),
+            (
+                "no envelope",
+                Box::new(|t| t.requests[1].1.clear()),
+                "No request payload provided",
+            ),
+        ];
+
+        for (name, tamper, expected) in tamperings {
+            let mut tampered = honest.clone();
+            tamper(&mut tampered);
+            let results = [
+                (
+                    "parse",
+                    parse(&handler, &network_identifier, true, tampered.to_string()).map(|_| ()),
+                ),
+                (
+                    "hash",
+                    hash(&handler, &network_identifier, &tampered).map(|_| ()),
+                ),
+                ("submit", submitted(&handler, &tampered).map(|_| ())),
+            ];
+            for (endpoint, result) in results {
+                let err = result.expect_err(&format!("{endpoint} accepted {name}"));
+                assert!(
+                    format!("{err:?}").contains(expected),
+                    "{endpoint} rejected {name} with {err:?}, expected {expected:?}"
+                );
+            }
+        }
+
+        let mut unsigned = UnsignedTransaction::from_str(&unsigned_disburse).unwrap();
+        unsigned.updates[0].0 = RequestType::Disburse { neuron_index: 0 };
+        let err = parse(&handler, &network_identifier, false, unsigned.to_string()).unwrap_err();
+        assert!(
+            format!("{err:?}").contains("does not belong to the neuron Rosetta would display"),
+            "{err:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn construction_submit_refuses_a_read_state_call_the_ic_would_reject() {
     use crate::models::{
-        ConstructionCombineRequest, ConstructionPayloadsRequest, ConstructionSubmitRequest,
-        CurveType, PublicKey, Signature, SignatureType, SignedTransaction,
+        ConstructionPayloadsRequest, ConstructionSubmitRequest, SignedTransaction,
     };
     use ic_types::messages::Blob;
 
@@ -1233,33 +1739,11 @@ async fn construction_submit_refuses_a_read_state_call_the_ic_would_reject() {
             network_identifier: network_identifier.clone(),
             operations,
             metadata: None,
-            public_keys: Some(vec![pub_key]),
+            public_keys: Some(vec![pub_key.clone()]),
         })
         .unwrap();
-    let signatures = payloads
-        .payloads
-        .into_iter()
-        .map(|payload| {
-            let bytes = hex::decode(&payload.hex_bytes).unwrap();
-            Signature {
-                signing_payload: payload,
-                public_key: PublicKey::new(
-                    hex::encode(key.public_key().serialize_raw()),
-                    CurveType::Edwards25519,
-                ),
-                signature_type: SignatureType::Ed25519,
-                hex_bytes: hex::encode(key.sign_message(&bytes)),
-            }
-        })
-        .collect();
-    let signed_transaction = handler
-        .construction_combine(ConstructionCombineRequest {
-            network_identifier: network_identifier.clone(),
-            unsigned_transaction: payloads.unsigned_transaction,
-            signatures,
-        })
-        .unwrap()
-        .signed_transaction;
+    let signed_transaction =
+        construction::sign_and_combine(&handler, &network_identifier, &pub_key, &key, payloads);
     let submit = |signed_transaction| {
         handler.construction_submit(ConstructionSubmitRequest {
             network_identifier: network_identifier.clone(),

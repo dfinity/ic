@@ -1,4 +1,3 @@
-use ic_base_types::CanisterId;
 use proptest::{
     prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
 };
@@ -21,7 +20,7 @@ use ic_nns_governance_api::{
     manage_neuron::{self, NeuronIdOrSubaccount},
 };
 use ic_types::{
-    PrincipalId,
+    CanisterId, PrincipalId,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
     },
@@ -165,14 +164,21 @@ fn manage_neuron_args_exceeding_decoding_quotas() -> Vec<(&'static str, Vec<u8>)
     .collect()
 }
 
-fn set_dissolve_timestamp_update(arg: Vec<u8>) -> HttpCanisterUpdate {
+fn set_dissolve_timestamp_sender() -> PrincipalId {
+    PrincipalId::new_user_test_id(1)
+}
+
+fn set_dissolve_timestamp_update(
+    governance_canister_id: &CanisterId,
+    arg: Vec<u8>,
+) -> HttpCanisterUpdate {
     HttpCanisterUpdate {
-        canister_id: Blob(CanisterId::from_u64(1).get().to_vec()),
+        canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "manage_neuron".to_string(),
         arg: Blob(arg),
-        sender: Blob(PrincipalId::new_user_test_id(1).to_vec()),
+        sender: Blob(set_dissolve_timestamp_sender().to_vec()),
         ingress_expiry: 1,
-        nonce: None,
+        nonce: Some(Blob(Encode!(&0_u64).unwrap())),
         sender_info: None,
     }
 }
@@ -185,7 +191,7 @@ fn parse_unsigned_set_dissolve_timestamp(
     let unsigned_transaction = UnsignedTransaction {
         updates: vec![(
             RequestType::SetDissolveTimestamp { neuron_index: 0 },
-            set_dissolve_timestamp_update(arg),
+            set_dissolve_timestamp_update(handler.ledger.governance_canister_id(), arg),
         )],
         ingress_expiries: vec![1],
     };
@@ -200,7 +206,7 @@ fn submitted_set_dissolve_timestamp(
     handler: &RosettaRequestHandler,
     arg: Vec<u8>,
 ) -> Result<Request, ApiError> {
-    let update = set_dissolve_timestamp_update(arg);
+    let update = set_dissolve_timestamp_update(handler.ledger.governance_canister_id(), arg);
     let read_state = crate::convert::make_read_state_from_update(&update);
     let envelope_pair = EnvelopePair {
         update: HttpRequestEnvelope {
@@ -242,7 +248,7 @@ fn test_parse_and_submit_reject_args_exceeding_decoding_quotas() {
 
         let err = submitted_set_dissolve_timestamp(&handler, args).unwrap_err();
         assert!(
-            format!("{err:?}").contains("Could not parse manage_neuron")
+            format!("{err:?}").contains("Could not decode manage_neuron argument")
                 && format!("{err:?}").contains("Decoding cost exceeds the limit"),
             "{name}: unexpected submit error: {err:?}"
         );
@@ -256,7 +262,13 @@ fn test_parse_and_submit_accept_args_with_short_unexpected_vec() {
     let args = Encode!(
         &ManageNeuronRequest {
             id: None,
-            neuron_id_or_subaccount: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
+                crate::convert::neuron_subaccount_bytes_from_principal(
+                    &set_dissolve_timestamp_sender(),
+                    0,
+                )
+                .to_vec(),
+            )),
             command: set_dissolve_timestamp_command(),
         },
         &vec![(); 100]
