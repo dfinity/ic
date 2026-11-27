@@ -162,6 +162,7 @@ mod tests {
         check_canister_migrations_invariants, check_routing_table_invariants,
     };
     use ic_base_types::CanisterId;
+    use ic_protobuf::proxy::ProxyDecodeError;
     use ic_protobuf::registry::routing_table::v1::{
         CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
     };
@@ -406,8 +407,23 @@ mod tests {
             error.msg
         );
 
-        // Step 3.2: The error has a source.
-        assert!(error.source.is_some());
+        // Step 3.2: The source pinpoints the overlap: the second shard's range
+        // starts at 0x100, before the first shard's range ends at 0x1ff.
+        let source = error
+            .source
+            .as_ref()
+            .expect("the error should have a source")
+            .downcast_ref::<ProxyDecodeError>()
+            .expect("the source should be a ProxyDecodeError");
+        let ProxyDecodeError::Other(source_msg) = source else {
+            panic!("expected ProxyDecodeError::Other, got {source:?}");
+        };
+        assert!(
+            source_msg.contains("RoutingTableNotDisjoint"),
+            "{source_msg}"
+        );
+        let overlap_start = format!("current start {}", CanisterId::from(0x100));
+        assert!(source_msg.contains(&overlap_start), "{source_msg}");
     }
 
     #[test]
