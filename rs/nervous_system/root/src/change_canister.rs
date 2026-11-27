@@ -18,7 +18,8 @@ use dfn_core::println;
 use ic_cdk::call::{Call, CallFailed};
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
-    CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    BoundedChunkHashes, CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
 };
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_runtime::Runtime;
@@ -294,10 +295,12 @@ async fn install_code(request: ChangeCanisterRequest) -> Result<(), CallFailed> 
     {
         let target_canister = canister_id;
         let store_canister = Some(store_canister_id.get());
-        let chunk_hashes_list = chunk_hashes_list
-            .into_iter()
-            .map(|hash| ChunkHash { hash })
-            .collect();
+        let chunk_hashes_list = BoundedChunkHashes::new(
+            chunk_hashes_list
+                .into_iter()
+                .map(|hash| ChunkHash { hash })
+                .collect(),
+        );
         let argument = InstallChunkedCodeArgs {
             mode,
             target_canister,

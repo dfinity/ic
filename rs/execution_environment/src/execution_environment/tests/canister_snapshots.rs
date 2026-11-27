@@ -5,14 +5,15 @@ use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, Global, GlobalTimer, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    self as ic00, BoundedGlobals, CanisterChange, CanisterChangeDetails,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    CanisterSnapshotResponse, ChunkHash, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, Global,
+    GlobalTimer, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method,
+    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -3321,7 +3322,7 @@ fn canister_snapshot_invalid_metadata_fails() {
     assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
 
     let mut faulty_md = md_upload_args_original.clone();
-    faulty_md.globals = vec![Global::I32(42); 1001];
+    faulty_md.globals = BoundedGlobals::new(vec![Global::I32(42); 1001]);
     let e = test
         .subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
         .expect_err("Expected error");

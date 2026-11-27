@@ -15079,7 +15079,10 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-recovery",
+ "ic-registry-client-fake",
  "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
@@ -19068,6 +19071,7 @@ dependencies = [
  "nested",
  "registry-canister",
  "slog",
+ "tempfile",
  "tokio",
 ]
 
@@ -21036,6 +21040,7 @@ dependencies = [
  "ic-cdk",
  "ic-management-canister-types-private",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]

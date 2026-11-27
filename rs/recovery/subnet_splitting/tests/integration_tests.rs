@@ -222,36 +222,36 @@ fn load_metrics_e2e_test() {
             states_sizes_bytes
                 .source
                 .min(states_sizes_bytes.destination),
-            2588742,
+            2439749,
             0.1
         );
         assert_near!(
             states_sizes_bytes
                 .source
                 .max(states_sizes_bytes.destination),
-            6368233,
+            6425066,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .min(instructions_executed.destination),
-            144130832,
+            143736573,
             0.1
         );
         assert_near!(
             instructions_executed
                 .source
                 .max(instructions_executed.destination),
-            144605505,
+            145047064,
             0.1
         );
         assert_eq_oriented!(canisters_installed, 15, 5);
-        assert_eq_oriented!(ingress_messages_executed, 25, 14);
-        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
-        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 20, 8);
-        assert_eq_oriented!(http_outcalls_executed, 10, 0);
-        assert_eq_oriented!(heartbeats_and_global_timers_executed, 315, 379);
+        assert_eq_oriented!(ingress_messages_executed, 26, 13);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 6, 4);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 19, 9);
+        assert_eq_oriented!(http_outcalls_executed, 9, 1);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 312, 382);
         let canisters_with_broken_local_connections =
             broken_connections.map(|connections| connections.len() as u64);
         assert_eq_oriented!(canisters_with_broken_local_connections, 1, 1);

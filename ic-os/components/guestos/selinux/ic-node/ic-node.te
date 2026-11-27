@@ -291,6 +291,19 @@ search_dirs_pattern(iptables_t, var_run_t, ic_config_var_run_t)
 read_files_pattern(iptables_t, ic_config_var_run_t, ic_config_var_run_t)
 
 ###############################################################################
+# SSH agent forwarding
+
+# sshd creates the sockets of forwarded agents in ~/.ssh/agent. The directory
+# has its own type, so that sshd cannot write the rest of ~/.ssh.
+type ic_ssh_agent_home_t;
+userdom_user_home_content(ic_ssh_agent_home_t)
+
+require { type sshd_t, ssh_home_t; }
+create_dirs_pattern(sshd_t, ssh_home_t, ic_ssh_agent_home_t)
+filetrans_add_pattern(sshd_t, ssh_home_t, ic_ssh_agent_home_t, dir, "agent")
+manage_sock_files_pattern(sshd_t, ic_ssh_agent_home_t, ic_ssh_agent_home_t)
+
+###############################################################################
 # Canister sandbox
 
 role system_r types ic_canister_sandbox_t;
