@@ -112,16 +112,16 @@ def find_split(
     first_in_range = None
     last_in_range = None
     for k in range(len(assignments)):
-        is_to_be_migrated = assignments[k] == 1
+        is_to_be_migrated = assignments[k] == 0
         # The routing table assigns the canister IDs between two of the subnet's canister ID ranges
         # to other subnets, so a range must not span them.
         is_in_next_subnet_range = k > 0 and range_indices[k] != range_indices[k - 1]
 
-        if is_to_be_migrated or is_in_next_subnet_range:
+        if not is_to_be_migrated or is_in_next_subnet_range:
             if first_in_range is not None and last_in_range is not None:
                 ranges.append((first_in_range, last_in_range))
             first_in_range, last_in_range = None, None
-        if not is_to_be_migrated:
+        if is_to_be_migrated:
             canister_id = index_to_canister_id[k]
             last_in_range = canister_id
             if first_in_range is None:
