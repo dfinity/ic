@@ -407,8 +407,7 @@ mod tests {
             error.msg
         );
 
-        // Step 3.2: The source pinpoints the overlap: the second shard's range
-        // starts at 0x100, before the first shard's range ends at 0x1ff.
+        // Step 3.2: The problem: overlap.
         let source = error
             .source
             .as_ref()
