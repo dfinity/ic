@@ -285,8 +285,9 @@ Store the proposal file paths as `NNS_PROPOSAL_PATHS` and `SNS_PROPOSAL_PATHS`.
 **IMPORTANT: This step requires interactive HSM PIN entry, which cannot be done
 inside the Claude Code session.**
 
-Check memory for the user's saved neuron ID. If found, pre-fill it and ask the user
-to confirm. If not found, ask the user for their neuron ID.
+Check memory for the user's saved neuron ID. If found, pre-fill it (as
+`NEURON_ID=...` in the command below) and ask the user to confirm. If not
+found, leave `NEURON_ID=...` out: the script asks for the neuron ID itself.
 
 Instruct the user to:
 1. Plug in their HSM key and unplug their YubiKey
@@ -295,34 +296,44 @@ Instruct the user to:
    - `pkcs11-tool --login --test`: more thorough. It prompts for the HSM PIN, so
      it also confirms that the PIN works before any proposal is submitted.
 
-Then, print the exact commands for the user to run in a **separate terminal / tmux pane**.
+Then, print the exact command for the user to run in a **separate terminal / tmux pane**.
 Use the actual proposals directory path (e.g. `../proposals/release-2026-04-06`), not a
-variable. Each command should `tee` its output to a file so Claude can read the proposal
-IDs afterward.
+variable, and list every proposal file, NNS first, then SNS. The command `tee`s
+its output to a file so Claude can read the proposal IDs afterward.
 
-For each NNS proposal:
 ```
-./rs/nervous_system/tools/release/submit-mainnet-nns-upgrade-proposal.sh \
-    ../proposals/release-YYYY-MM-DD/nns-$CANISTER.md \
-    $NEURON_ID \
+NEURON_ID=$NEURON_ID \
+./rs/nervous_system/tools/release/submit-governance-upgrade-proposals.sh \
+    ../proposals/release-YYYY-MM-DD/nns-$CANISTER_1.md \
+    ../proposals/release-YYYY-MM-DD/nns-$CANISTER_2.md \
+    ../proposals/release-YYYY-MM-DD/sns-$CANISTER_3.md \
     2>&1 \
-    | tee /tmp/proposal-nns-$CANISTER.out
+    | tee /tmp/submit-governance-upgrade-proposals.out
 ```
 
-For each SNS proposal:
-```
-./rs/nervous_system/tools/release/submit-mainnet-publish-sns-wasm-proposal.sh \
-    ../proposals/release-YYYY-MM-DD/sns-$CANISTER.md \
-    $NEURON_ID \
-    2>&1 \
-    | tee /tmp/proposal-sns-$CANISTER.out
-```
+Tell the user what to expect. The script:
 
-Note: Do NOT pipe through `sed` — it buffers output and hides the interactive HSM PIN prompt.
+1. Checks all the proposal files (no TODOs, all for the same commit). If any
+   check fails, it lists the problems and submits nothing.
+2. Asks for the neuron ID, unless `NEURON_ID` is set.
+3. Prints the full text of each proposal, then a summary: the neuron, the
+   commit, the NNS canisters to upgrade, and the SNS canisters to publish.
+4. Asks for the HSM PIN. Entering it is the confirmation; pressing Ctrl+C
+   cancels.
+5. Submits the proposals in the order given, one line each, like
+   `(2/4) NNS Registry... proposal NNNNN`. If one fails (e.g. wrong PIN), it
+   prints why, stops, and lists the proposals it already submitted.
+6. Ends with a summary of the new proposals.
 
-The submit scripts output `https://dashboard.internetcomputer.org/proposal/$PROPOSAL_ID`.
-After the user confirms submissions are done, read each `/tmp/proposal-*.out` file
-and extract the proposal ID by grepping for that URL.
+Note: Do NOT pipe through `sed` — it buffers output and hides the interactive prompts.
+
+After the user confirms the submissions are done, read
+`/tmp/submit-governance-upgrade-proposals.out`. The summary at the end has one
+line per proposal, like
+`NNS Registry: https://dashboard.internetcomputer.org/proposal/NNNNN`. If the
+file is missing (e.g. the user ran the command elsewhere), ask the user for the
+proposal IDs, and ask which canister each one is for, rather than assuming the
+order.
 
 Store proposal IDs as `NNS_PROPOSAL_IDS` and `SNS_PROPOSAL_IDS`.
 
@@ -410,6 +421,10 @@ For each proposal ID, run:
 ```
 ./rs/nervous_system/tools/release/add-release-to-changelog.sh $PROPOSAL_ID
 ```
+
+Run these concurrently (e.g. as parallel Bash calls). Each run only changes the
+`CHANGELOG.md` and `unreleased_changelog.md` of its own canister, so they do not
+interfere with one another.
 
 After updating changelogs:
 1. Create a branch: `changelog-update-YYYY-MM-DD`

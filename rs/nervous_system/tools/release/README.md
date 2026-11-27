@@ -188,39 +188,34 @@ Finally, run
 # In addition to the following, we assume that you still have the environment
 # variables from the previous section...
 
-# e.g. for Daniel Wong, 51
-SUBMITTING_NEURON_ID=51
-
-# NNS:
-for CANISTER in "${NNS_CANISTERS[@]}"
-do
-    ./rs/nervous_system/tools/release/submit-mainnet-nns-upgrade-proposal.sh \
-        $PROPOSALS_DIR/nns-$CANISTER.md \
-        $SUBMITTING_NEURON_ID
-done
-
-# SNS:
-for CANISTER in "${SNS_CANISTERS[@]}"
-do
-    ./rs/nervous_system/tools/release/submit-mainnet-publish-sns-wasm-proposal.sh \
-        $PROPOSALS_DIR/sns-$CANISTER.md \
-        $SUBMITTING_NEURON_ID
-done
+./rs/nervous_system/tools/release/submit-governance-upgrade-proposals.sh \
+    $PROPOSALS_DIR/[ns]ns-*.md
 ```
+
+It asks for your neuron ID. (To skip that question, set the `NEURON_ID`
+environment variable.)
 
 You can look up your neuron ID [here in Notion][neuron-id]. For example, Daniel Wong has neuron ID 51.
 
 [neuron-id]: https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682
 
 
-The submission scripts validate your proposal texts. Specifically, it enforces
-the following requirements:
+Before submitting anything, the script checks all the proposal texts:
 
-1. There are no TODO items left in the proposal text.
+1. There are no TODO items left in any of them.
+2. They are all for the same commit.
 
-If your proposal text checks out, the script then prompts you for your HSM pin.
+If they check out, it asks for your neuron ID, and then shows the proposals,
+followed by a summary: the commit, which NNS canisters are to be upgraded, and
+which SNS canisters are to be published. If that seems right, enter your HSM
+PIN (just once); otherwise, press Ctrl+C. It then submits the proposals,
+printing one line per proposal, and at the end, lists the new proposals. If one
+of the proposals fails (e.g. because the PIN was wrong), it shows why, and the
+rest are not submitted.
 
-Once the proposal(s) have been made, take a note of the proposal ID (printed at the end).
+To submit just one proposal, use `submit-mainnet-nns-upgrade-proposal.sh` or
+`submit-mainnet-publish-sns-wasm-proposal.sh` directly. They take
+`<PROPOSAL_FILE> <NEURON_ID>`.
 
 You will need to notify people about this proposal so that they know to vote on it.
 Jump back to the [release runbook in Notion][1].
