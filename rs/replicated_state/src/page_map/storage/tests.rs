@@ -10,10 +10,12 @@ use std::{
 use crate::page_map::{
     FileDescriptor, MAX_NUMBER_OF_FILES, MemoryInstructions, MemoryMapOrData, PageAllocator,
     PageDelta, PageMap, PersistenceError, StorageMetrics,
+    checkpoint::Mapping,
     storage::{
-        CURRENT_OVERLAY_VERSION, Checkpoint, FileIndex, MergeCandidate, MergeDestination,
-        OverlayFile, PAGE_INDEX_RANGE_NUM_BYTES, PageIndexRange, SIZE_NUM_BYTES, Shard, Storage,
-        StorageLayout, VERSION_NUM_BYTES, validate,
+        CURRENT_OVERLAY_VERSION, Checkpoint, FileIndex, MERGE_READ_WINDOW, MergeCandidate,
+        MergeDestination, MergeInput, MergeReader, OverlayFile, PAGE_INDEX_RANGE_NUM_BYTES,
+        PageIndexRange, PageSource, ReadWindow, SIZE_NUM_BYTES, Shard, Storage, StorageLayout,
+        VERSION_NUM_BYTES, validate, write_pages,
     },
     test_utils::{ShardedTestStorageLayout, TestStorageLayout, base_only_storage_layout},
 };
@@ -132,7 +134,7 @@ fn verify_overlays(
     }
     // Check the overlay is sharded properly.
     for (shard, overlay_file) in existing_shards {
-        for (page_index, _) in overlay_file.iter() {
+        for (page_index, _) in overlay_file.file_index_iter() {
             assert!(page_index.get() >= shard.get() * lsmt_config.shard_num_pages);
             assert!(page_index.get() < (shard.get() + 1) * lsmt_config.shard_num_pages);
             assert!(page_index.get() <= expected.max_page_index().unwrap().get());
@@ -1523,6 +1525,105 @@ fn overlapping_page_ranges() {
             .count(),
         0
     );
+}
+
+/// Writes a file of `num_pages` pages, each filled with `tag` and starting with
+/// its index, and opens it as a `Checkpoint`, i.e. mapped.
+fn mapped_test_file(dir: &Path, name: &str, tag: u8, num_pages: usize) -> Checkpoint {
+    let path = dir.join(name);
+    let mut data = vec![tag; num_pages * PAGE_SIZE];
+    for (index, page) in data.as_chunks_mut::<PAGE_SIZE>().0.iter_mut().enumerate() {
+        page[..8].copy_from_slice(&(index as u64).to_le_bytes());
+    }
+    std::fs::write(&path, data).unwrap();
+    Checkpoint::open(&path).unwrap()
+}
+
+/// Page `index` of the merge input file mapped by `mapping`.
+fn input_page(mapping: &Mapping, index: usize) -> PageSource<'_> {
+    PageSource::Input {
+        mapping,
+        offset: (index * PAGE_SIZE) as u64,
+    }
+}
+
+/// Pages of `inputs` across windows and back: of both, interleaved; in two
+/// windows and a partial one of the first; and in the second, smaller than a
+/// window.
+fn input_pages_across_windows<'a>([a, b]: [&'a Mapping; 2]) -> Vec<PageSource<'a>> {
+    let window_pages = MERGE_READ_WINDOW / PAGE_SIZE;
+    vec![
+        input_page(a, 0),
+        input_page(b, 2),
+        input_page(a, window_pages),
+        input_page(a, 1),
+        input_page(a, 2 * window_pages + 5),
+        input_page(b, 0),
+        input_page(a, window_pages - 1),
+    ]
+}
+
+/// Two mapped files for `input_pages_across_windows`.
+fn inputs_across_windows(dir: &Path) -> [Checkpoint; 2] {
+    let window_pages = MERGE_READ_WINDOW / PAGE_SIZE;
+    [
+        mapped_test_file(dir, "a", 1, 2 * window_pages + 6),
+        mapped_test_file(dir, "b", 2, 3),
+    ]
+}
+
+/// The data of the page at `source`, read through its mapping.
+fn page_data(source: PageSource) -> Vec<u8> {
+    match source {
+        PageSource::Memory(data) => data.to_vec(),
+        PageSource::Input { mapping, offset } => {
+            mapping.as_slice()[offset as usize..][..PAGE_SIZE].to_vec()
+        }
+        PageSource::Zeroes => vec![0; PAGE_SIZE],
+    }
+}
+
+#[test]
+fn write_pages_writes_pages_from_their_sources() {
+    let dir = tempdir().unwrap();
+    let files = inputs_across_windows(dir.path());
+    let inputs = files.each_ref().map(|file| file.mapping().unwrap());
+    let memory_page = [3; PAGE_SIZE];
+    let mut pages = input_pages_across_windows(inputs);
+    pages.insert(3, PageSource::Zeroes);
+    pages.insert(5, PageSource::Memory(&memory_page));
+    let expected: Vec<u8> = pages.iter().flat_map(|&page| page_data(page)).collect();
+
+    let path = dir.path().join("out");
+    write_pages(&mut File::create(&path).unwrap(), &pages).unwrap();
+    assert!(std::fs::read(&path).unwrap() == expected);
+}
+
+#[test]
+fn merge_reader_falls_back_to_buffered_reads() {
+    let dir = tempdir().unwrap();
+    let files = inputs_across_windows(dir.path());
+    let inputs = files.each_ref().map(|file| file.mapping().unwrap());
+    // As where `O_DIRECT` is unavailable.
+    let mut reader = MergeReader {
+        inputs: inputs
+            .iter()
+            .map(|&mapping| MergeInput {
+                mapping,
+                direct: None,
+                window: ReadWindow::default(),
+            })
+            .collect(),
+    };
+
+    for (i, page) in input_pages_across_windows(inputs).into_iter().enumerate() {
+        let PageSource::Input { mapping, offset } = page else {
+            unreachable!()
+        };
+        let mut data = [0; PAGE_SIZE];
+        reader.read_page(mapping, offset, &mut data).unwrap();
+        assert!(data.as_slice() == page_data(page), "page {i} differs");
+    }
 }
 
 #[cfg(not(feature = "fuzzing_code"))]

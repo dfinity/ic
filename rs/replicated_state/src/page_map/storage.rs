@@ -419,28 +419,23 @@ pub struct OverlayFile {
 }
 
 impl OverlayFile {
-    fn iter(&self) -> impl Iterator<Item = (PageIndex, &[u8])> {
-        self.index_iter()
-            .flat_map(
-                |PageIndexRange {
-                     start_page,
-                     end_page,
-                     start_file_index,
-                 }| {
-                    (start_page.get()..end_page.get()).map(move |index| {
-                        (
-                            PageIndex::new(index),
-                            FileIndex::new(start_file_index.get() + index - start_page.get()),
-                        )
-                    })
-                },
-            )
-            .map(|(index, offset)| {
-                let page = get_page_in_mapping(&self.mapping, offset);
-                // In a validated mapping, all file_indices from the index are within range.
-                assert!(page.is_some());
-                (index, page.unwrap().as_slice())
-            })
+    /// The overlay's pages in index order: each one's index in the `PageMap` and
+    /// position in the file.
+    fn file_index_iter(&self) -> impl Iterator<Item = (PageIndex, FileIndex)> {
+        self.index_iter().flat_map(
+            |PageIndexRange {
+                 start_page,
+                 end_page,
+                 start_file_index,
+             }| {
+                (start_page.get()..end_page.get()).map(move |index| {
+                    (
+                        PageIndex::new(index),
+                        FileIndex::new(start_file_index.get() + index - start_page.get()),
+                    )
+                })
+            },
+        )
     }
 
     /// Get the page at `page_index`.
@@ -469,12 +464,12 @@ impl OverlayFile {
         }
         let max_index = delta.max_page_index().unwrap().get();
         let num_shards = num_shards(max_index + 1, lsmt_config);
-        let mut page_data: Vec<Vec<&[u8]>> = vec![Vec::new(); num_shards as usize];
+        let mut page_data: Vec<Vec<PageSource>> = vec![Vec::new(); num_shards as usize];
         let mut page_indices: Vec<Vec<PageIndex>> = vec![Vec::new(); num_shards as usize];
 
         for (index, data) in delta.iter() {
             let shard = index.get() / lsmt_config.shard_num_pages;
-            page_data[shard as usize].push(data.contents());
+            page_data[shard as usize].push(PageSource::Memory(data.contents()));
             page_indices[shard as usize].push(*index);
         }
 
@@ -923,7 +918,7 @@ pub trait StorageLayout {
     /// Path for overlay of given height.
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf;
 
-    /// All existing overlay files.
+    /// All existing overlay files, oldest first.
     fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>>;
 
     /// Get the height of an existing overlay path.
@@ -1060,7 +1055,7 @@ enum MergeDestination {
 /// `MergeCandidate` shows which files to merge into a single `PageMap`.
 #[derive(Clone, Debug)]
 pub struct MergeCandidate {
-    /// Overlay files to merge.
+    /// Overlay files to merge, oldest first.
     overlays: Vec<PathBuf>,
     /// Base to merge if any.
     base: Option<PathBuf>,
@@ -1072,8 +1067,8 @@ pub struct MergeCandidate {
     start_page: PageIndex,
     end_page: PageIndex,
 
-    /// Number of overlays for this shard. Can be larger then `overlays.len() + base.len()` for a
-    /// parital merge.
+    /// Number of overlays for this shard. Can be larger than `overlays.len()
+    /// + base.iter().count()` for a partial merge.
     num_files_before: u64,
     /// Size of shards related to this merge on disk. For a partial merge larger than
     /// `input_size_bytes`.
@@ -1236,7 +1231,7 @@ impl MergeCandidate {
             MergeDestination::BaseFile(_) => (1, u64::MAX),
             MergeDestination::SingleShardOverlay(_) => (1, u64::MAX),
         };
-        let mut page_data: Vec<Vec<&[u8]>> = vec![Vec::new(); num_output_shards];
+        let mut page_data: Vec<Vec<PageSource>> = vec![Vec::new(); num_output_shards];
         let mut page_indices: Vec<Vec<PageIndex>> = vec![Vec::new(); num_output_shards];
         // Group sorted `merged_iterator` by `page_index`. Elements within group are sorted by
         // priority; we need only the first element of each group.
@@ -1446,42 +1441,54 @@ impl MergeCandidate {
         Ok(result)
     }
 
+    /// The merged pages in index order: for each index, the newest version among
+    /// `existing_base` and the overlays in `existing` (oldest first), as a
+    /// `PageSource::Input` into the respective file.
     fn merge_data<'a>(
         existing_base: &'a Option<Checkpoint>,
         existing: &'a [OverlayFile],
-    ) -> Vec<(PageIndex, &'a [u8])> {
+    ) -> Vec<(PageIndex, PageSource<'a>)> {
         struct PageWithPriority<'a> {
             // Page index in the `PageMap`.
             page_index: PageIndex,
-            page_data: &'a [u8],
+            source: PageSource<'a>,
             // Given the same `page_index`, we chose the data with the lowest priority to write.
             priority: usize,
         }
 
         let iterators_with_priority: Vec<Box<dyn Iterator<Item = PageWithPriority>>> = existing
             .iter()
-            .rev()
             .enumerate()
-            .map(|(priority, overlay)| {
+            .map(|(position, overlay)| {
+                // The newest overlay, the last one, takes precedence.
+                let priority = existing.len() - 1 - position;
+                let mapping = overlay.mapping.as_ref();
                 Box::new(
                     overlay
-                        .iter()
-                        .map(move |(page_index, page_data)| PageWithPriority {
+                        .file_index_iter()
+                        .map(move |(page_index, file_index)| PageWithPriority {
                             page_index,
-                            page_data,
+                            source: PageSource::Input {
+                                mapping,
+                                offset: file_index.get() * PAGE_SIZE as u64,
+                            },
                             priority,
                         }),
                 ) as Box<dyn Iterator<Item = PageWithPriority>>
             })
-            .chain(existing_base.as_ref().map(|checkpoint| {
-                Box::new((0..checkpoint.num_pages()).map(move |index| {
-                    let page_index = PageIndex::new(index as u64);
-                    PageWithPriority {
-                        page_index,
-                        page_data: checkpoint.get_page(page_index).as_slice(),
+            .chain(existing_base.as_ref().and_then(|base| {
+                // An empty base file has no mapping, and no pages either.
+                let mapping = base.mapping()?;
+                Some(
+                    Box::new((0..base.num_pages()).map(move |index| PageWithPriority {
+                        page_index: PageIndex::new(index as u64),
+                        source: PageSource::Input {
+                            mapping,
+                            offset: (index * PAGE_SIZE) as u64,
+                        },
                         priority: existing.len(),
-                    }
-                })) as Box<dyn Iterator<Item = PageWithPriority>>
+                    })) as Box<dyn Iterator<Item = PageWithPriority>>,
+                )
             }))
             .collect();
 
@@ -1501,7 +1508,7 @@ impl MergeCandidate {
                 let page_with_priority = group
                     .next()
                     .expect("chunk_by is expected to create non-empty groups");
-                (page_with_priority.page_index, page_with_priority.page_data)
+                (page_with_priority.page_index, page_with_priority.source)
             })
             .collect()
     }
@@ -1510,6 +1517,10 @@ impl MergeCandidate {
     /// The criteria is that each file has to be larger than the sum of the sizes of the newer files,
     /// with the base file having to be at least 4 times as large as the sum of the overlays.
     /// Also see the `MergeCandidate::new` documentation.
+    ///
+    /// `existing_lengths` are the sizes of the shard's files, oldest first,
+    /// (including the base, if any).
+    ///
     /// If no merge is required, return `None`.
     fn num_files_to_merge(existing_lengths: &[u64]) -> Option<usize> {
         let mut merge_to_get_pyramid = 0;
@@ -1663,10 +1674,10 @@ enum ExpandBeforeStart {
 
 /// Expand gaps between ranges with zeroes, and also [0; start) if `expand_before_start` is YES.
 fn expand_with_zeroes<'a>(
-    pages: &[&'a [u8]],
+    pages: &[PageSource<'a>],
     indices: &[PageIndex],
     expand_before_start: ExpandBeforeStart,
-) -> (Vec<&'a [u8]>, Vec<PageIndex>) {
+) -> (Vec<PageSource<'a>>, Vec<PageIndex>) {
     if indices.is_empty() {
         return (Vec::new(), Vec::new());
     }
@@ -1675,16 +1686,14 @@ fn expand_with_zeroes<'a>(
         ExpandBeforeStart::No => indices[0].get() as usize,
     };
 
-    let mut result_pages = vec![
-        &ZEROED_PAGE as &PageBytes as &[u8];
-        (indices.last().unwrap().get() as usize - start) + 1
-    ];
+    let mut result_pages =
+        vec![PageSource::Zeroes; (indices.last().unwrap().get() as usize - start) + 1];
     let result_indices: Vec<_> = (start..indices.last().unwrap().get() as usize + 1)
         .map(|i| PageIndex::from(i as u64))
         .collect();
     assert_eq!(pages.len(), indices.len());
     for (page, index) in pages.iter().zip(indices) {
-        result_pages[index.get() as usize - start] = page;
+        result_pages[index.get() as usize - start] = *page;
     }
     assert_eq!(result_pages.len(), result_indices.len());
     (result_pages, result_indices)
@@ -1692,7 +1701,7 @@ fn expand_with_zeroes<'a>(
 
 /// Write all the pages into their corresponding indices as a base file (dense storage).
 fn write_base(
-    pages: &[&[u8]],
+    pages: &[PageSource],
     indices: &[PageIndex],
     path: &Path,
     metrics: &StorageMetrics,
@@ -1723,25 +1732,198 @@ fn write_base(
     Ok(())
 }
 
-/// Helper function to write the data section of an overlay file.
-fn write_pages(file: &mut File, data: &Vec<&[u8]>) -> std::io::Result<()> {
-    let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
-    for page in data {
-        if buf.len() + page.len() > BUF_SIZE {
-            file.write_all(&buf)?;
-            buf.clear();
+/// Where `write_pages` takes a page's data from.
+#[derive(Clone, Copy)]
+enum PageSource<'a> {
+    /// Memory, e.g. a flush's page delta.
+    Memory(&'a PageBytes),
+    /// The page at byte `offset` of a merge input file, read by a `MergeReader`.
+    Input { mapping: &'a Mapping, offset: u64 },
+    /// Zeroes, filling a gap between pages.
+    Zeroes,
+}
+
+/// Writes `pages` back to back: the data section of an overlay or base file.
+fn write_pages(file: &mut File, pages: &[PageSource]) -> std::io::Result<()> {
+    let mut reader = MergeReader::default();
+    let mut buf = vec![0; BUF_SIZE.min(pages.len() * PAGE_SIZE)];
+    for chunk in pages.chunks(BUF_SIZE / PAGE_SIZE) {
+        let len = chunk.len() * PAGE_SIZE;
+        for (page, dst) in chunk.iter().zip(buf[..len].as_chunks_mut::<PAGE_SIZE>().0) {
+            match *page {
+                PageSource::Memory(data) => *dst = *data,
+                PageSource::Input { mapping, offset } => reader.read_page(mapping, offset, dst)?,
+                PageSource::Zeroes => dst.fill(0),
+            }
         }
-        buf.extend(*page);
+        file.write_all(&buf[..len])?;
     }
-    file.write_all(&buf)?;
     Ok(())
+}
+
+/// Size and alignment of the windows in which a `MergeReader` reads each input
+/// file.
+const MERGE_READ_WINDOW: usize = 4 << 20;
+
+/// A page-aligned page, so that buffers made of them suit `O_DIRECT` reads.
+#[derive(Clone, Copy)]
+#[repr(C, align(4096))]
+struct AlignedPage(PageBytes);
+
+/// One input file's current window: its file offset and length (0 before the
+/// first read), and its pages.
+#[derive(Default)]
+struct ReadWindow {
+    offset: u64,
+    len: usize,
+    pages: Vec<AlignedPage>,
+}
+
+impl ReadWindow {
+    /// The buffer's first `len` bytes, after growing it to hold at least that many.
+    fn bytes(&mut self, len: usize) -> &mut [u8] {
+        let pages = len.div_ceil(PAGE_SIZE);
+        if self.pages.len() < pages {
+            self.pages.resize(pages, AlignedPage([0; PAGE_SIZE]));
+        }
+        // SAFETY: `AlignedPage` is a byte array without padding, and the slice lies
+        // within `self.pages`, which stays mutably borrowed for the slice's lifetime.
+        let all = unsafe {
+            std::slice::from_raw_parts_mut(
+                self.pages.as_mut_ptr().cast::<u8>(),
+                self.pages.len() * PAGE_SIZE,
+            )
+        };
+        &mut all[..len]
+    }
+}
+
+/// Reads a merge's input pages from the input files with `O_DIRECT`, rather
+/// than through their mappings.
+///
+/// A merge reads every input page once. Through the mappings, those reads go
+/// through the page cache: they evict canister memory that execution then
+/// faults back in, and once the kernel's thrashing protection kicks in for
+/// recently evicted pages, read-around stops and the merge faults in one 4 KiB
+/// page at a time. Instead, each input file is read in consecutive
+/// `MERGE_READ_WINDOW`-aligned windows, superseded pages included, so that the
+/// reads stay large and sequential.
+///
+/// Falls back to buffered reads of the same file where `O_DIRECT` is
+/// unavailable (e.g. tmpfs) or refused.
+#[derive(Default)]
+struct MergeReader<'a> {
+    /// The input files read so far.
+    inputs: Vec<MergeInput<'a>>,
+}
+
+impl<'a> MergeReader<'a> {
+    /// Copies the page at byte `offset` of `mapping`'s file into `dst`, first
+    /// reading the window that holds it, unless that was the file's last one read.
+    fn read_page(
+        &mut self,
+        mapping: &'a Mapping,
+        offset: u64,
+        dst: &mut PageBytes,
+    ) -> std::io::Result<()> {
+        debug_assert_eq!(offset % PAGE_SIZE as u64, 0);
+        let start = offset - offset % MERGE_READ_WINDOW as u64;
+        let input = self.input(mapping);
+        if input.window.len == 0 || input.window.offset != start {
+            input.read_window(start)?;
+        }
+        *dst = input.window.pages[(offset - start) as usize / PAGE_SIZE].0;
+        Ok(())
+    }
+
+    /// `mapping`'s input, added on first use. A merge has only a handful of inputs,
+    /// so they are looked up by address, one by one.
+    fn input(&mut self, mapping: &'a Mapping) -> &mut MergeInput<'a> {
+        let i = match self
+            .inputs
+            .iter()
+            .position(|input| std::ptr::eq(input.mapping, mapping))
+        {
+            Some(i) => i,
+            None => {
+                self.inputs.push(MergeInput {
+                    mapping,
+                    direct: reopen_direct(mapping.file()),
+                    window: ReadWindow::default(),
+                });
+                self.inputs.len() - 1
+            }
+        };
+        &mut self.inputs[i]
+    }
+}
+
+/// A `MergeReader`'s input file.
+struct MergeInput<'a> {
+    /// The file's mapping, which identifies the input.
+    mapping: &'a Mapping,
+    /// The file opened again with `O_DIRECT`; `None` if that failed.
+    direct: Option<File>,
+    /// The window last read.
+    window: ReadWindow,
+}
+
+impl MergeInput<'_> {
+    /// Reads the window at file offset `start`: up to `MERGE_READ_WINDOW` bytes,
+    /// fewer at the end of the file.
+    fn read_window(&mut self, start: u64) -> std::io::Result<()> {
+        use std::os::unix::fs::FileExt;
+        let len =
+            (self.mapping.as_slice().len() as u64 - start).min(MERGE_READ_WINDOW as u64) as usize;
+        // Whole pages, so that `O_DIRECT` reads stay aligned; at the end of the file,
+        // the last read returns only the bytes up to the end.
+        let buf = self.window.bytes(len.next_multiple_of(PAGE_SIZE));
+        let mut done = 0;
+        if let Some(direct) = &self.direct {
+            while done < len && done % PAGE_SIZE == 0 {
+                match direct.read_at(&mut buf[done..], start + done as u64) {
+                    Ok(0) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+                    Ok(n) => done += n,
+                    Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(err) if err.raw_os_error() == Some(libc::EINVAL) => break,
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+        if done < len {
+            self.mapping
+                .file()
+                .read_exact_at(&mut buf[done..len], start + done as u64)?;
+        }
+        self.window.offset = start;
+        self.window.len = len;
+        Ok(())
+    }
+}
+
+/// Opens `file` again, for reading with `O_DIRECT`. `None` if that fails, e.g.
+/// because the file system doesn't support `O_DIRECT`.
+#[cfg(target_os = "linux")]
+fn reopen_direct(file: &File) -> Option<File> {
+    use std::os::unix::{fs::OpenOptionsExt, io::AsRawFd};
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECT)
+        .open(format!("/proc/self/fd/{}", file.as_raw_fd()))
+        .ok()
+}
+
+/// `None`: only Linux has `O_DIRECT`.
+#[cfg(not(target_os = "linux"))]
+fn reopen_direct(_file: &File) -> Option<File> {
+    None
 }
 
 /// Writes an overlay file to `path`.
 ///
 /// On success, returns the `OverlayFile` that was just written, for validation.
 fn write_overlay(
-    pages: &Vec<&[u8]>,
+    pages: &[PageSource],
     indices: &[PageIndex],
     path: &Path,
     metrics: &StorageMetrics,
@@ -1838,7 +2020,9 @@ pub enum BaseFileSerialization {
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct StorageSerialization {
+    /// The serialized `StorageImpl::base`.
     pub base: BaseFileSerialization,
+    /// The serialized `StorageImpl::overlays`, oldest first.
     pub overlays: Vec<OverlayFileSerialization>,
 }
 

@@ -29,7 +29,9 @@ pub(crate) struct Checkpoint {
 /// The memory map is read-only and most functions are helper functions to read pages.
 pub(crate) struct Mapping {
     mmap: ScopedMmap,
-    _file: File, // It is not used but it keeps the `file_descriptor` alive.
+    /// The mapped file, which keeps `file_descriptor` open. Merges read their inputs from it (see
+    /// `MergeReader`).
+    file: File,
     file_descriptor: FileDescriptor,
 }
 
@@ -57,7 +59,7 @@ impl Mapping {
             })?;
             let fd = file.as_raw_fd();
             Ok(Some(Mapping {
-                _file: file,
+                file,
                 file_descriptor: FileDescriptor { fd },
                 mmap,
             }))
@@ -144,6 +146,11 @@ impl Mapping {
     pub(crate) fn file_descriptor(&self) -> &FileDescriptor {
         &self.file_descriptor
     }
+
+    /// The mapped file.
+    pub(crate) fn file(&self) -> &File {
+        &self.file
+    }
 }
 
 impl Checkpoint {
@@ -198,6 +205,11 @@ impl Checkpoint {
             },
             |mapping| mapping.get_memory_instructions(),
         )
+    }
+
+    /// The file's mapping, unless the file is empty.
+    pub(crate) fn mapping(&self) -> Option<&Mapping> {
+        self.mapping.as_deref()
     }
 
     /// Returns the max number of (possibly) non-zero pages in this
