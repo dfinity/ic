@@ -508,7 +508,8 @@ fn check_high_threshold_public_key_and_cup_contents(
         if let Err(err) = CupType::try_from(&cup_contents) {
             bad_subnets.insert(subnet_id);
             println!(
-                "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: cup_type of cup contents for subnet {subnet_id} cannot be decoded: {err:?}"
+                "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: \
+                 cup_type of cup contents for subnet {subnet_id} cannot be decoded: {err:?}"
             );
             continue;
         }
