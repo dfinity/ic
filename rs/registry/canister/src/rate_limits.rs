@@ -252,19 +252,6 @@ impl Registry {
         })
     }
 
-    /// Tries to reserve capacity for a node provider operation.
-    /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
-    pub fn try_reserve_capacity_for_node_provider_operation(
-        &self,
-        now: SystemTime,
-        node_provider_id: PrincipalId,
-        requested_capacity: u64,
-    ) -> Result<Reservation<String>, RateLimiterError> {
-        with_node_provider_rate_limiter(|rate_limiter| {
-            rate_limiter.try_reserve(now, node_provider_key(node_provider_id), requested_capacity)
-        })
-    }
-
     /// Commits the reserved usage (i.e. commit the reserved usage)
     /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
     pub fn commit_used_capacity_for_node_operator_operation(
@@ -304,16 +291,6 @@ impl Registry {
         operator_result?;
         provider_result?;
         Ok(())
-    }
-
-    /// Commits the reserved usage for a node provider operation.
-    /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
-    pub fn commit_used_capacity_for_node_provider_operation(
-        &self,
-        now: SystemTime,
-        reservation: Reservation<String>,
-    ) -> Result<(), RateLimiterError> {
-        with_node_provider_rate_limiter(|rate_limiter| rate_limiter.commit(now, reservation))
     }
 
     // This function tells how much capacity is left, which is very useful for tests.  This could also
