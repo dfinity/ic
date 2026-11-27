@@ -16,6 +16,8 @@ Runbook::
 
 Success::
 . Both subnets are functional after the split and the canisters are migrated.
+. New canisters can be created on both subnets after the split, both before and after the canister
+  migration is completed.
 . The canisters remain available and keep exchanging messages without errors while the canister
   migration is completed.
 
@@ -250,6 +252,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         )
         .await;
         check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
+        check_canister_creation(&env, &test_params.canister_migration_list).await;
 
         // The split records the migrated canister ranges as migrating from the source to the
         // destination subnet.
@@ -313,6 +316,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
             &test_params.canister_migration_list,
         );
         check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
+        check_canister_creation(&env, &test_params.canister_migration_list).await;
 
         // The split and the canister migration are done and all checks passed; stop the calls
         // probe just before the chatting canisters' metrics are measured and the canisters are
@@ -927,6 +931,120 @@ async fn check_counter_canisters(
             }
         }
     }
+}
+
+/// Checks that a new canister can be created on each of the source and destination subnets, and
+/// that it is then hosted by the subnet that created it.
+async fn check_canister_creation(env: &TestEnv, migrated_canister_ranges: &[CanisterIdRange]) {
+    let source_subnet = get_source_subnet(env);
+    let destination_subnet = get_destination_subnet(env);
+
+    tokio::join!(
+        create_canister_and_check_it_is_hosted(
+            env,
+            &source_subnet,
+            "source",
+            migrated_canister_ranges
+        ),
+        create_canister_and_check_it_is_hosted(
+            env,
+            &destination_subnet,
+            "destination",
+            migrated_canister_ranges
+        ),
+    );
+}
+
+/// Creates a counter canister on `subnet` and checks that
+/// 1. its canister id is assigned to `subnet` by the routing table,
+/// 2. its canister id is not one of the migrated ones,
+/// 3. it executes update calls and answers queries on `subnet`.
+async fn create_canister_and_check_it_is_hosted(
+    env: &TestEnv,
+    subnet: &SubnetSnapshot,
+    subnet_type: &str,
+    migrated_canister_ranges: &[CanisterIdRange],
+) {
+    let node = subnet
+        .nodes()
+        .next()
+        .expect("Every subnet has at least one node");
+
+    // A failed attempt may leave behind a canister without code, which is harmless.
+    let canister_id = retry_with_msg_async!(
+        format!("Creating a counter canister on the {subnet_type} subnet"),
+        &env.logger(),
+        Duration::from_secs(60),
+        Duration::from_secs(5),
+        || async {
+            node.canister_installer_from_env("COUNTER_CANISTER_WAT_PATH")
+                .install()
+                .await
+                .map(|canister_id| CanisterId::unchecked_from_principal(PrincipalId(canister_id)))
+        }
+    )
+    .await
+    .unwrap_or_else(|err| {
+        panic!("Failed to create a canister on the {subnet_type} subnet: {err:#}")
+    });
+    info!(
+        env.logger(),
+        "Created canister {canister_id} on the {subnet_type} subnet {}", subnet.subnet_id
+    );
+
+    assert!(
+        subnet
+            .subnet_canister_ranges()
+            .iter()
+            .any(|range| range.contains(&canister_id)),
+        "Canister {canister_id}, created on the {subnet_type} subnet {}, is not assigned to it \
+        by the routing table",
+        subnet.subnet_id
+    );
+    assert!(
+        !migrated_canister_ranges
+            .iter()
+            .any(|range| range.contains(&canister_id)),
+        "Canister {canister_id}, created on the {subnet_type} subnet {}, has a migrated canister \
+        id: {migrated_canister_ranges:?}",
+        subnet.subnet_id
+    );
+
+    let agent = node.build_canister_agent().await;
+    agent
+        .get()
+        .update(&canister_id.get().0, "write".to_string())
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to make an update call to canister {canister_id} on the {subnet_type} \
+                subnet: {err}"
+            )
+        });
+    let counter = agent
+        .get()
+        .query(&canister_id.get().0, "read".to_string())
+        .call()
+        .await
+        .map(|response| u32::from_le_bytes(response.as_slice().try_into().unwrap()))
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to make a query call to canister {canister_id} on the {subnet_type} \
+                subnet: {err}"
+            )
+        });
+    assert_eq!(
+        counter, 1,
+        "The counter of the canister {canister_id} on the {subnet_type} subnet should have been \
+        incremented exactly once"
+    );
+
+    info!(
+        env.logger(),
+        "Verified that the new canister {canister_id} is hosted by the {subnet_type} subnet {}",
+        subnet.subnet_id
+    );
 }
 
 /// Checks that the nodes are assigned to the correct subnets both according to the registry and to
