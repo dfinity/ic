@@ -36,7 +36,7 @@ impl NotificationClient {
     pub fn message_slack(&self, message: String) {
         info!(self.log, "{}", message);
         let url = format!(
-            "https://hooks.slack.com/services/T43F9UHS5/B027BHAQ1HQ/{}",
+            "https://hjhf7-7qaaa-aaaaz-qadaq-cai.icp0.io/api/hooks/WH-0025/{}",
             self.slack_token
         );
         let data_str = format!(
