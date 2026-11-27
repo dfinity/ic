@@ -1,7 +1,7 @@
 use alloy_consensus::TxEip1559;
 use alloy_primitives::U256;
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::{Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
@@ -1364,6 +1364,210 @@ fn decode_ledger_memo_smoke() {
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
     );
+}
+
+/// Smoke-tests the ICRC-21 / ICRC-10 endpoints exposed by the minter:
+///
+/// * `icrc10_supported_standards` advertises both standards with the canonical
+///   `dfinity/ICRC` URLs.
+/// * `icrc21_canister_call_consent_message` produces both a GenericDisplay
+///   markdown message and a FieldsDisplay structured message for `withdraw_eth`,
+///   with the configured network's token symbols threaded through.
+/// * Unsupported methods return `Icrc21Error::UnsupportedCanisterCall`.
+///
+/// The ckERC20 case (`withdraw_erc20`) is covered in `tests/ckerc20.rs`.
+#[test]
+fn should_provide_icrc21_consent_message_for_withdraw_eth() {
+    use ic_cketh_minter::endpoints::WithdrawalArg;
+    use ic_cketh_minter::endpoints::ckerc20::WithdrawErc20Arg;
+    use icrc_ledger_types::icrc21::errors::Icrc21Error;
+    use icrc_ledger_types::icrc21::requests::{
+        ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    };
+    use icrc_ledger_types::icrc21::responses::{ConsentMessage, Value};
+
+    let cketh = CkEthSetup::default(); // Mainnet minter: "ckETH" / "ETH" symbols.
+    let caller: Principal = cketh.caller.into();
+    let make_request = |method: &str,
+                        arg: Vec<u8>,
+                        device_spec: Option<DisplayMessageType>|
+     -> ConsentMessageRequest {
+        ConsentMessageRequest {
+            method: method.to_string(),
+            arg,
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec,
+            },
+        }
+    };
+
+    // 1. icrc10_supported_standards advertises ICRC-10 and ICRC-21.
+    let standards = cketh.icrc10_supported_standards();
+    let names: Vec<_> = standards.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"ICRC-10") && names.contains(&"ICRC-21"),
+        "expected ICRC-10 and ICRC-21 in supported standards, got {names:?}"
+    );
+    let icrc21 = standards
+        .iter()
+        .find(|s| s.name == "ICRC-21")
+        .expect("ICRC-21 entry missing");
+    assert_eq!(
+        icrc21.url,
+        "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md"
+    );
+
+    // 2a. withdraw_eth / GenericDisplay renders the expected Markdown sections, with the
+    // configured (mainnet) token symbols. The assertion is a full-string equality so any
+    // wording change has to be updated here consciously. The destination address is
+    // displayed in its EIP-55 checksummed form.
+    let args = WithdrawalArg {
+        amount: Nat::from(CKETH_WITHDRAWAL_AMOUNT),
+        recipient: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_lowercase(),
+        from_subaccount: None,
+    };
+    let info = cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request(
+                "withdraw_eth",
+                Encode!(&args).unwrap(),
+                Some(DisplayMessageType::GenericDisplay),
+            ),
+        )
+        .expect("consent message should be produced for withdraw_eth");
+    let message = match info.consent_message {
+        ConsentMessage::GenericDisplayMessage(m) => m,
+        other => panic!("expected GenericDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(
+        message,
+        format!(
+            "# Convert ckETH to ETH\n\n\
+             Authorize the ckETH minter to burn ckETH from your account and send the \
+             equivalent amount in ETH, minus the Ethereum transaction fee, to the Ethereum \
+             address below. The fee is estimated by the minter when it processes the \
+             withdrawal. Any unused part of the fee is not refunded.\n\n\
+             **Amount to convert:** `0.09999999999999999 ckETH`\n\n\
+             **Ethereum destination address:**\n`{DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS}`"
+        )
+    );
+
+    // 2b. withdraw_eth / FieldsDisplay renders the structured intent + (Amount, Ethereum
+    // address, Transaction fee) fields.
+    let info = cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request(
+                "withdraw_eth",
+                Encode!(&args).unwrap(),
+                Some(DisplayMessageType::FieldsDisplay),
+            ),
+        )
+        .expect("consent message should be produced for withdraw_eth");
+    let fields_display = match info.consent_message {
+        ConsentMessage::FieldsDisplayMessage(f) => f,
+        other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(fields_display.intent, "ckETH to ETH");
+    assert_eq!(
+        fields_display.fields,
+        vec![
+            (
+                "Amount".to_string(),
+                Value::TokenAmount {
+                    decimals: 18,
+                    amount: CKETH_WITHDRAWAL_AMOUNT,
+                    symbol: "ckETH".to_string(),
+                }
+            ),
+            (
+                "Ethereum address".to_string(),
+                Value::Text {
+                    content: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                }
+            ),
+            (
+                "Transaction fee".to_string(),
+                Value::Text {
+                    content: "Deducted from the amount as estimated by the minter; any unused \
+                              part is not refunded"
+                        .to_string(),
+                }
+            ),
+        ]
+    );
+
+    // 3. A blocked destination address and an amount below the minimum withdrawal amount
+    // are rejected, as they are by withdraw_eth.
+    let blocked = WithdrawalArg {
+        recipient: SAMPLE_BLOCKED_ADDRESS.to_string(),
+        ..args
+    };
+    let err = cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request("withdraw_eth", Encode!(&blocked).unwrap(), None),
+        )
+        .expect_err("expected UnsupportedCanisterCall");
+    assert_matches!(
+        err,
+        Icrc21Error::UnsupportedCanisterCall(info) if info.description.contains("is blocked")
+    );
+    let too_small = WithdrawalArg {
+        amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT - 1),
+        recipient: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        from_subaccount: None,
+    };
+    let err = cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request("withdraw_eth", Encode!(&too_small).unwrap(), None),
+        )
+        .expect_err("expected UnsupportedCanisterCall");
+    assert_matches!(
+        err,
+        Icrc21Error::UnsupportedCanisterCall(info)
+        if info.description.contains("below the minimum withdrawal amount")
+    );
+
+    // 4. withdraw_erc20 is rejected for a ledger that is not a ckERC20 ledger known to the
+    // minter (here the ckERC20 feature is not even active).
+    let withdraw_erc20 = WithdrawErc20Arg {
+        amount: Nat::from(1_u8),
+        ckerc20_ledger_id: cketh.ledger_id,
+        recipient: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        from_cketh_subaccount: None,
+        from_ckerc20_subaccount: None,
+    };
+    let err = cketh
+        .icrc21_canister_call_consent_message(
+            caller,
+            &make_request("withdraw_erc20", Encode!(&withdraw_erc20).unwrap(), None),
+        )
+        .expect_err("expected UnsupportedCanisterCall");
+    assert_matches!(err, Icrc21Error::UnsupportedCanisterCall(_));
+
+    // 5. Unsupported methods return UnsupportedCanisterCall.
+    for method in [
+        "deposit_eth",
+        "deposit_erc20",
+        "retrieve_eth_status",
+        "minter_address",
+    ] {
+        let err = cketh
+            .icrc21_canister_call_consent_message(caller, &make_request(method, vec![], None))
+            .expect_err("expected UnsupportedCanisterCall");
+        assert_matches!(
+            err,
+            Icrc21Error::UnsupportedCanisterCall(_),
+            "method {method:?} should be rejected as unsupported"
+        );
+    }
 }
 
 #[test]

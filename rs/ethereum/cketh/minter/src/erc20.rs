@@ -38,11 +38,15 @@ impl Display for CkTokenSymbol {
 }
 
 impl CkTokenSymbol {
-    pub fn cketh_symbol_from_state(state: &State) -> Self {
-        match state.ethereum_network {
+    pub fn cketh_symbol(network: EthereumNetwork) -> Self {
+        match network {
             EthereumNetwork::Mainnet => Self::from_str("ckETH").unwrap(),
             EthereumNetwork::Sepolia => Self::from_str("ckSepoliaETH").unwrap(),
         }
+    }
+
+    pub fn cketh_symbol_from_state(state: &State) -> Self {
+        Self::cketh_symbol(state.ethereum_network)
     }
 }
 

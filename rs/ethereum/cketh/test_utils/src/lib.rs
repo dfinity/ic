@@ -14,6 +14,7 @@ use ic_cketh_minter::endpoints::{
     MemoType, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
     WithdrawalSearchParameter,
 };
+use ic_cketh_minter::icrc21::StandardRecord;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
@@ -28,6 +29,9 @@ use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::common::rest::{
     CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, IcpConfig,
@@ -726,6 +730,36 @@ impl CkEthSetup {
                 )
             ),
             DecodeLedgerMemoResult
+        )
+        .unwrap()
+    }
+
+    pub fn icrc10_supported_standards(&self) -> Vec<StandardRecord> {
+        Decode!(
+            &assert_reply(self.env.query_call(
+                self.minter_id,
+                Principal::anonymous(),
+                "icrc10_supported_standards",
+                Encode!().unwrap()
+            )),
+            Vec<StandardRecord>
+        )
+        .unwrap()
+    }
+
+    pub fn icrc21_canister_call_consent_message(
+        &self,
+        sender: Principal,
+        request: &ConsentMessageRequest,
+    ) -> Result<ConsentInfo, Icrc21Error> {
+        Decode!(
+            &assert_reply(self.env.update_call(
+                self.minter_id,
+                sender,
+                "icrc21_canister_call_consent_message",
+                Encode!(request).unwrap()
+            )),
+            Result<ConsentInfo, Icrc21Error>
         )
         .unwrap()
     }
