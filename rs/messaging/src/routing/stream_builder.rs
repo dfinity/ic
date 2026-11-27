@@ -813,6 +813,7 @@ impl StreamBuilderImpl {
                         .set(signals_end.get() as i64);
                 },
             );
+        self.observe_misrouted_messages(&state);
 
         {
             // Record the enqueuing time of any messages newly enqueued into the streams.
@@ -825,7 +826,6 @@ impl StreamBuilderImpl {
             }
         }
 
-        self.observe_misrouted_messages(&state);
         state
     }
 
