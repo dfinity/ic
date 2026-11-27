@@ -484,6 +484,62 @@ fn test_mul_by_g_is_correct() -> CanisterThresholdResult<()> {
 }
 
 #[test]
+fn test_mul_by_g_and_pedersen_are_correct_for_edge_case_scalars() -> CanisterThresholdResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
+        let one = EccScalar::one(curve_type);
+
+        let mut scalars = vec![];
+        for small in 1..64 {
+            scalars.push(EccScalar::from_u64(curve_type, small).negate());
+        }
+        // 2^i and 2^i - 1 for every bit position
+        let mut pow2 = one.clone();
+        for _ in 0..curve_type.scalar_bits() {
+            scalars.push(pow2.clone());
+            scalars.push(pow2.sub(&one)?);
+            pow2 = pow2.add(&pow2)?;
+        }
+        // Repeated bytes. For secp256r1 the bytes k * 0x11 put every nonzero signed radix-16 digit
+        // at each of the 64 low positions: the low digits of 0xkk...kk are all k for k < 8, and
+        // those of 0xkk...kk + 1 are all k - 15 for 7 <= k < 15 (so all -8 for 0x7777...78)
+        for byte in [
+            0x07, 0x08, 0x0f, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x70, 0x77, 0x78, 0x7f, 0x80,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0xff,
+        ] {
+            let mut bytes = vec![byte; curve_type.scalar_bytes()];
+            scalars.push(EccScalar::from_bytes_wide(curve_type, &bytes)?);
+            let last = bytes.len() - 1;
+            bytes[last] = bytes[last].wrapping_add(1);
+            scalars.push(EccScalar::from_bytes_wide(curve_type, &bytes)?);
+        }
+
+        let random = EccScalar::random(curve_type, rng);
+        let h_random = h.scalar_mul(&random)?;
+        let g_random = g.scalar_mul(&random)?;
+        for s in &scalars {
+            let g_s = g.scalar_mul(s)?;
+            assert_eq!(g_s, EccPoint::mul_by_g(s));
+            assert_eq!(g_s.add_points(&h_random)?, EccPoint::pedersen(s, &random)?);
+            assert_eq!(
+                g_random.add_points(&h.scalar_mul(s)?)?,
+                EccPoint::pedersen(&random, s)?
+            );
+        }
+
+        let zero = EccScalar::zero(curve_type);
+        assert_eq!(
+            EccPoint::identity(curve_type),
+            EccPoint::pedersen(&zero, &zero)?
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn test_y_is_even() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 

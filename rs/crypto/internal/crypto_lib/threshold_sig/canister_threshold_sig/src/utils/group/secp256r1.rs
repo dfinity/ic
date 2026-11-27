@@ -1,7 +1,7 @@
 use hex_literal::hex;
 use p256::elliptic_curve::{
     Field, Group,
-    group::{GroupEncoding, ff::PrimeField},
+    group::{Curve as _, GroupEncoding, ff::PrimeField},
     ops::{LinearCombination, Reduce},
     scalar::IsHigh,
     sec1::FromSec1Point,
@@ -183,9 +183,6 @@ pub struct Point {
     p: p256::ProjectivePoint,
 }
 
-super::algos::declare_mul_by_g_impl!(Secp256r1MulByGenerator, Point, Scalar);
-super::algos::declare_mul2_table_impl!(Secp256r1Mul2Table, Point, Scalar);
-
 /// Static deserialization of the fixed alternative group generator
 static SECP256R1_GENERATOR_H: LazyLock<Point> = LazyLock::new(|| {
     Point::deserialize(&hex!(
@@ -195,13 +192,113 @@ static SECP256R1_GENERATOR_H: LazyLock<Point> = LazyLock::new(|| {
 });
 
 /// Precomputed multiples of the group generator for fast multiplication
-static SECP256R1_MUL_BY_GEN_TABLE: LazyLock<Secp256r1MulByGenerator> =
-    LazyLock::new(|| Secp256r1MulByGenerator::new(&Point::generator()));
+static SECP256R1_MUL_BY_G_TABLE: LazyLock<Secp256r1FixedBaseTable> =
+    LazyLock::new(|| Secp256r1FixedBaseTable::new(&Point::generator()));
 
-/// Precomputed linear combinations of the g and h generators
-/// for fast Pedersen commitment computation
-static SECP256R1_MUL2_GX_HY_TABLE: LazyLock<Secp256r1Mul2Table> =
-    LazyLock::new(Secp256r1Mul2Table::for_standard_generators);
+/// Precomputed multiples of the alternative group generator, used together
+/// with SECP256R1_MUL_BY_G_TABLE for fast Pedersen commitment computation
+static SECP256R1_MUL_BY_H_TABLE: LazyLock<Secp256r1FixedBaseTable> =
+    LazyLock::new(|| Secp256r1FixedBaseTable::new(&Point::generator_h()));
+
+/// Precomputed multiples of a fixed point P, for constant-time multiplication
+///
+/// A scalar k is written in signed radix 16 as `k = sum(d[i] * 16^i)` with 65
+/// digits `d[i]` in [-8, 8) (see `Self::digits`). Window i of the table holds the
+/// affine points `P_i, 2*P_i, ..., 8*P_i` where `P_i = 16^i * P`; a negative
+/// digit uses the negation of an entry. So `k*P` is the sum of the points
+/// `d[i]*P_i`, which costs one constant-time lookup and one mixed (projective
+/// plus affine) point addition per digit, and no doublings.
+///
+/// The precomputation is expensive, so this is only worth using for points
+/// which are multiplied many times (the standard group generators).
+struct Secp256r1FixedBaseTable {
+    table: Vec<p256::AffinePoint>,
+}
+
+impl Secp256r1FixedBaseTable {
+    /// The number of signed radix-16 digits of a 256-bit scalar: 64 plus a final carry
+    const DIGITS: usize = 65;
+    /// The number of table entries per digit: the largest absolute value of a digit
+    const WINDOW_ELEM: usize = 8;
+
+    fn new(p: &Point) -> Self {
+        let mut multiples = Vec::with_capacity(Self::DIGITS * Self::WINDOW_ELEM);
+        let mut p_i = p.p;
+        for _ in 0..Self::DIGITS {
+            let mut multiple = p256::ProjectivePoint::IDENTITY;
+            for _ in 0..Self::WINDOW_ELEM {
+                multiple += p_i;
+                multiples.push(multiple);
+            }
+            // 16 * P_i = 2 * (8 * P_i)
+            p_i = multiple.double();
+        }
+        let mut table = vec![p256::AffinePoint::IDENTITY; multiples.len()];
+        p256::ProjectivePoint::batch_normalize(&multiples, &mut table);
+        Self { table }
+    }
+
+    /// Returns the signed radix-16 digits of a scalar, least significant first
+    ///
+    /// Digits 0 to 63 are in [-8, 8) and digit 64 is 0 or 1.
+    fn digits(scalar: &p256::Scalar) -> [i8; Self::DIGITS] {
+        let mut digits = [0_i8; Self::DIGITS];
+        for (i, byte) in scalar.to_bytes().iter().rev().enumerate() {
+            digits[2 * i] = (byte & 0xf) as i8;
+            digits[2 * i + 1] = (byte >> 4) as i8;
+        }
+        // Move each digit from [0, 16] to [-8, 8), carrying into the next one. This never
+        // overflows; in builds with overflow checks, wrapping arithmetic keeps them off the
+        // secret digits.
+        let mut carry = 0_i8;
+        for digit in &mut digits {
+            let d = digit.wrapping_add(carry);
+            carry = d.wrapping_add(8) >> 4;
+            *digit = d.wrapping_sub(carry << 4);
+        }
+        digits
+    }
+
+    /// Returns digit * 16^i * P, for digit in [-8, 8]
+    ///
+    /// Runs in constant time: it reads every entry of window i, and negates
+    /// the selected point with a conditional assignment.
+    fn lookup(&self, i: usize, digit: i8) -> p256::AffinePoint {
+        let window = &self.table[Self::WINDOW_ELEM * i..Self::WINDOW_ELEM * (i + 1)];
+        let sign = digit >> 7; // -1 if the digit is negative, otherwise 0
+        let abs = (digit ^ sign).wrapping_sub(sign) as u8;
+        let mut result = p256::AffinePoint::IDENTITY;
+        for (j, multiple) in window.iter().enumerate() {
+            result.conditional_assign(multiple, abs.ct_eq(&(j as u8 + 1)));
+        }
+        let negated = -result;
+        result.conditional_assign(&negated, Choice::from((sign & 1) as u8));
+        result
+    }
+
+    /// Computes P*x
+    fn mul(&self, x: &Scalar) -> Point {
+        let digits = Self::digits(&x.s);
+        let mut accum = p256::ProjectivePoint::from(self.lookup(0, digits[0]));
+        for (i, digit) in digits.iter().enumerate().skip(1) {
+            accum += self.lookup(i, *digit);
+        }
+        Point::new(accum)
+    }
+
+    /// Computes P*x + Q*y, where Q is the point of `other`
+    fn mul2(&self, x: &Scalar, other: &Self, y: &Scalar) -> Point {
+        let x_digits = Self::digits(&x.s);
+        let y_digits = Self::digits(&y.s);
+        let mut accum = p256::ProjectivePoint::from(self.lookup(0, x_digits[0]));
+        accum += other.lookup(0, y_digits[0]);
+        for (i, (x_digit, y_digit)) in x_digits.iter().zip(&y_digits).enumerate().skip(1) {
+            accum += self.lookup(i, *x_digit);
+            accum += other.lookup(i, *y_digit);
+        }
+        Point::new(accum)
+    }
+}
 
 impl Point {
     /// Internal constructor (private)
@@ -243,7 +340,6 @@ impl Point {
     ///
     /// Equivalent to p1*s1 + p2*s2
     pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
-        // Use mul2 table here!
         Self::new(p256::ProjectivePoint::lincomb(&[
             (p1.p, s1.s),
             (p2.p, s2.s),
@@ -269,7 +365,7 @@ impl Point {
     }
 
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {
-        SECP256R1_MUL2_GX_HY_TABLE.mul2(s1, s2)
+        SECP256R1_MUL_BY_G_TABLE.mul2(s1, &SECP256R1_MUL_BY_H_TABLE, s2)
     }
 
     /// Add two points
@@ -301,10 +397,8 @@ impl Point {
     }
 
     /// Scalar multiplication with the customary generator
-    ///
-    /// Currently p256 does not support MulByGenerator trait
     pub fn mul_by_g(scalar: &Scalar) -> Self {
-        SECP256R1_MUL_BY_GEN_TABLE.mul(scalar)
+        SECP256R1_MUL_BY_G_TABLE.mul(scalar)
     }
 
     /// Serialize the point to bytes in compressed format
@@ -325,23 +419,67 @@ impl Point {
         }
     }
 
-    /// Returns tbl[index-1] if index > 0 or otherwise identity element
-    ///
-    /// Namely if index is equal to zero, or is out of range, identity is returned
-    #[inline]
-    fn ct_select(tbl: &[Self], index: usize) -> Self {
-        let mut result = Self::identity();
-        let index = index.wrapping_sub(1);
-        for (i, val) in tbl.iter().enumerate() {
-            let choice = usize::ct_eq(&i, &index);
-            result = Self::conditional_select(&result, val, choice);
-        }
-
-        result
-    }
-
     /// Hash to curve (random oracle variant)
     pub fn hash2curve(input: &[u8], domain_sep: &[u8]) -> Self {
         h2c_secp256r1(input, domain_sep)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use rand::RngCore;
+
+    fn scalar_from_digit(digit: i8) -> p256::Scalar {
+        let abs = p256::Scalar::from(u64::from(digit.unsigned_abs()));
+        if digit < 0 { -abs } else { abs }
+    }
+
+    #[test]
+    fn test_signed_radix_16_digits_are_in_range_and_sum_to_the_scalar() {
+        let rng = &mut reproducible_rng();
+
+        let mut scalars = vec![Scalar::zero(), Scalar::one(), Scalar::one().negate()];
+        // The 64 low digits of 0x7777...78 are all -8
+        let mut bytes = [0x77; Scalar::BYTES];
+        bytes[Scalar::BYTES - 1] = 0x78;
+        scalars.push(Scalar::deserialize(&bytes).expect("Less than the group order"));
+        for _ in 0..300 {
+            let mut bytes = [0; 2 * Scalar::BYTES];
+            rng.fill_bytes(&mut bytes);
+            scalars.push(Scalar::from_wide_bytes(&bytes).expect("Valid length"));
+        }
+
+        let sixteen = p256::Scalar::from(16_u64);
+        for scalar in &scalars {
+            let digits = Secp256r1FixedBaseTable::digits(&scalar.s);
+            let (final_carry, low_digits) = digits.split_last().expect("Not empty");
+            assert!(low_digits.iter().all(|digit| (-8..8).contains(digit)));
+            assert!((0..=1).contains(final_carry));
+
+            let sum = digits.iter().rev().fold(p256::Scalar::ZERO, |sum, digit| {
+                sum * sixteen + scalar_from_digit(*digit)
+            });
+            assert_eq!(sum, scalar.s);
+        }
+    }
+
+    #[test]
+    fn test_lookup_returns_every_multiple_of_every_window() {
+        for (table, p) in [
+            (&*SECP256R1_MUL_BY_G_TABLE, Point::generator()),
+            (&*SECP256R1_MUL_BY_H_TABLE, Point::generator_h()),
+        ] {
+            let mut p_i = p.p;
+            for i in 0..Secp256r1FixedBaseTable::DIGITS {
+                for digit in -8..=8 {
+                    let expected = p_i * scalar_from_digit(digit);
+                    let looked_up = p256::ProjectivePoint::from(table.lookup(i, digit));
+                    assert_eq!(looked_up, expected, "window {i}, digit {digit}");
+                }
+                p_i = p_i.double().double().double().double();
+            }
+        }
     }
 }
