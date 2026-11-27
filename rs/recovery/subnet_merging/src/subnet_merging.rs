@@ -130,7 +130,8 @@ pub enum StepType {
     /// Wait until the registry no longer holds the source subnet, i.e. until
     /// the proposal deleting it has been executed.
     CheckRegistryForSourceSubnetDeletion,
-    /// Delete the working directory of the tool.
+    /// Delete everything in the recovery directory of the tool, the downloaded
+    /// and the merged states included.
     Cleanup,
 }
 
@@ -179,9 +180,12 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for the proposals labeling the source
-    /// subnet as "cooling down" and merging it into the destination subnet to
-    /// be adopted, executed and visible in the registry.
+    /// How long to wait, in seconds, for each of the proposals labeling the
+    /// source subnet as "cooling down", merging it into the destination subnet
+    /// and deleting it to be adopted, executed and visible in the registry.
+    /// Also how long to wait for every other subnet to reach the registry
+    /// version at which the source subnet is merged into the destination
+    /// subnet.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -912,6 +916,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 ic_admin_cmd: get_propose_to_delete_subnet_command(
                     &self.recovery.admin_helper,
                     self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
                 ),
             }
             .into(),

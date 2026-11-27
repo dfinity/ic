@@ -8,8 +8,9 @@ use crate::{
     },
 };
 
-use ic_base_types::SubnetId;
+use ic_base_types::{RegistryVersion, SubnetId};
 use ic_cup_explorer::get_cup;
+use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
@@ -1046,22 +1047,11 @@ impl Step for CheckSourceSubnetDeletedStep {
             &self.logger,
             || {
                 let registry_version = self.registry_helper.latest_registry_version()?;
-                let deleted = self
-                    .registry_helper
-                    .registry_client()
-                    .is_subnet_deleted(source_subnet_id, registry_version)
-                    .map_err(|err| {
-                        RecoveryError::RegistryError(format!(
-                            "Failed to check whether subnet {source_subnet_id} is deleted at \
-                             registry version {registry_version}: {err}"
-                        ))
-                    })?;
-                if !deleted {
-                    return Err(RecoveryError::RegistryError(format!(
-                        "Subnet {source_subnet_id} is still in the registry at version \
-                         {registry_version}"
-                    )));
-                }
+                ensure_subnet_deleted(
+                    &*self.registry_helper.registry_client(),
+                    source_subnet_id,
+                    registry_version,
+                )?;
                 Ok(registry_version)
             },
         )?;
@@ -1072,4 +1062,29 @@ impl Step for CheckSourceSubnetDeletedStep {
         );
         Ok(())
     }
+}
+
+/// Fails unless the registry records `subnet_id` as deleted at
+/// `registry_version`, i.e. held its subnet record at an earlier version and
+/// holds none at this one. A subnet the registry never held is not deleted.
+fn ensure_subnet_deleted(
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+) -> RecoveryResult<()> {
+    let deleted = registry_client
+        .is_subnet_deleted(subnet_id, registry_version)
+        .map_err(|err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to check whether subnet {subnet_id} is deleted at registry version \
+                 {registry_version}: {err}"
+            ))
+        })?;
+    if !deleted {
+        return Err(RecoveryError::RegistryError(format!(
+            "The registry does not record subnet {subnet_id} as deleted at version \
+             {registry_version}"
+        )));
+    }
+    Ok(())
 }

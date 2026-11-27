@@ -55,11 +55,12 @@ pub(crate) fn get_propose_to_merge_subnets_command(
     ic_admin
 }
 
-/// Propose to delete the subnet that was merged away and that hosts no canister
-/// ID range anymore.
+/// Propose to delete the source subnet, which was merged into the destination
+/// subnet and hosts no canister ID range anymore.
 pub(crate) fn get_propose_to_delete_subnet_command(
     admin_helper: &AdminHelper,
-    subnet_id: SubnetId,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
 ) -> IcAdmin {
     let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
@@ -68,11 +69,11 @@ pub(crate) fn get_propose_to_delete_subnet_command(
         .add_argument(
             SUMMARY_ARG,
             quote(format!(
-                "Delete subnet {subnet_id}, which was merged into another subnet and hosts no \
-                 canister id range anymore",
+                "Delete subnet {source_subnet_id}, which was merged into subnet \
+                 {destination_subnet_id} and hosts no canister ID range anymore",
             )),
         )
-        .add_argument(SUBNET_ID_ARG, subnet_id);
+        .add_argument(SUBNET_ID_ARG, source_subnet_id);
 
     admin_helper.add_proposer_args(&mut ic_admin);
 
@@ -167,6 +168,7 @@ mod tests {
         let result = get_propose_to_delete_subnet_command(
             &fake_admin_helper(),
             subnet_id_from_str(FAKE_SUBNET_ID_1),
+            subnet_id_from_str(FAKE_SUBNET_ID_2),
         )
         .join(" ");
 
@@ -175,7 +177,7 @@ mod tests {
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-delete-subnet \
-            --summary \"Delete subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, which was merged into another subnet and hosts no canister id range anymore\" \
+            --summary \"Delete subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, which was merged into subnet mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe and hosts no canister ID range anymore\" \
             --subnet-id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --test-neuron-proposer"
         );

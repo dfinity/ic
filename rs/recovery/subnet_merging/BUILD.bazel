@@ -63,6 +63,9 @@ rust_test(
         # Keep sorted.
         "//rs/config",
         "//rs/monitoring/metrics",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
         "//rs/replicated_state",
         "@crate_index//:tempfile",
     ],

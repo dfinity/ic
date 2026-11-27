@@ -21,7 +21,7 @@ Runbook::
    and install the NNS canisters.
 1. Install a universal canister on each of `S` and `D`.
 2. Run the subnet merging tool on a node of `D`, over SSH, without prompts and
-   with all its steps but `Cleanup`, which would delete the working directory
+   with all its steps but `Cleanup`, which would empty the recovery directory
    the checks below inspect: it downloads the state of `S` from a node of `S`
    over SSH and the state of `D` locally, merges them on the node, replaces the
    state of its own node with the merged state, waits until its own node
@@ -264,7 +264,7 @@ pub fn test(env: TestEnv) {
 
 /// Step 2: run the subnet merging tool on `d_node`, with `s_node` as the node
 /// of `S`, through all its steps but `Cleanup` and without prompts. `Cleanup`
-/// is skipped because it would delete the working directory of the tool, which
+/// is skipped because it would empty the recovery directory of the tool, which
 /// the later steps inspect.
 fn run_tool_on_node(
     env: &TestEnv,

@@ -177,8 +177,9 @@ Runbook::
    deleting `S`, and `CheckRegistryForSourceSubnetDeletion`, which waits until
    the registry no longer holds `S`.
 27. After `CheckRegistryForSourceSubnetDeletion`: check that the registry the
-   test driver observes no longer holds `S` either. The tool's last step,
-   `Cleanup`, then deletes its working directory.
+   test driver observes no longer holds `S` either.
+28. After the tool's last step, `Cleanup`: check that the recovery directory of
+   the tool is still there, but empty.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -191,7 +192,7 @@ routes the canister ID ranges of `S` to `D`; and the registry holds the
 recovery CUP contents of `D` at the merged state, with `D` halted; the replica
 on `D`'s node runs on the merged state the tool uploaded to it; and once `D` is
 unhalted, the call loops of `UDS` and `UOS` advance again; finally, `S` is
-deleted.
+deleted and the recovery directory of the tool is empty.
 
 end::catalog[] */
 
@@ -364,9 +365,9 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 /// so that a stuck step fails with its own error. The sum is dominated by
 /// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
 /// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
-/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and the three waits of
-/// `REGISTRY_TIMEOUT` once `D` is unhalted (`CheckRegistryVersionOnAllSubnets`,
-/// `CheckRegistryForSourceSubnetDeletion` and step 27), about 2785s together.
+/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and the two waits of
+/// `REGISTRY_TIMEOUT` once `D` is unhalted (`CheckRegistryVersionOnAllSubnets`
+/// and `CheckRegistryForSourceSubnetDeletion`), about 2665s together.
 /// `HALT_TIMEOUT` is counted once although it applies to each of the two
 /// subnets: both are scheduled to halt before either is waited for, so the two
 /// waits overlap. The overall timeout additionally covers the setup (booting
@@ -706,7 +707,7 @@ async fn prepare<'a>(
     }
 }
 
-/// Steps 8 to 27: hand the scenario over to the subnet merging tool, and make
+/// Steps 8 to 28: hand the scenario over to the subnet merging tool, and make
 /// the checks of the steps in between its steps.
 ///
 /// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
@@ -864,7 +865,13 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                 ));
                 info!(logger, "Step 27 done: subnet S is gone from the registry");
             }
-            StepType::Cleanup => {}
+            StepType::Cleanup => {
+                check_recovery_dir_empty(env);
+                info!(
+                    logger,
+                    "Step 28 done: the recovery directory of the tool is empty"
+                );
+            }
         }
     }
     assert_eq!(
@@ -878,6 +885,21 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
         "Subnet S has been drained and halted, the states of S and D downloaded, validated and \
          merged, the canister ID ranges of S rerouted to D, D recovered at the merged state and \
          unhalted, and S deleted, by the subnet merging tool"
+    );
+}
+
+/// Step 28: check that `Cleanup` deleted everything in the recovery directory
+/// of the tool, but not the directory itself.
+fn check_recovery_dir_empty(env: &TestEnv) {
+    let recovery_dir = env.get_path(MERGING_DIR).join(RECOVERY_DIRECTORY_NAME);
+    let left_over: Vec<_> = std::fs::read_dir(&recovery_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", recovery_dir.display()))
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert!(
+        left_over.is_empty(),
+        "{} still holds {left_over:?} after Cleanup",
+        recovery_dir.display(),
     );
 }
 
