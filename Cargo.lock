@@ -19068,6 +19068,7 @@ dependencies = [
  "nested",
  "registry-canister",
  "slog",
+ "tempfile",
  "tokio",
 ]
 
