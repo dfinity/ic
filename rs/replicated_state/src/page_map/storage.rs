@@ -1903,6 +1903,7 @@ impl MergeInput<'_> {
 
 /// Opens `file` again, for reading with `O_DIRECT`. `None` if that fails, e.g.
 /// because the file system doesn't support `O_DIRECT`.
+#[cfg(target_os = "linux")]
 fn reopen_direct(file: &File) -> Option<File> {
     use std::os::unix::{fs::OpenOptionsExt, io::AsRawFd};
     OpenOptions::new()
@@ -1910,6 +1911,12 @@ fn reopen_direct(file: &File) -> Option<File> {
         .custom_flags(libc::O_DIRECT)
         .open(format!("/proc/self/fd/{}", file.as_raw_fd()))
         .ok()
+}
+
+/// `None`: only Linux has `O_DIRECT`.
+#[cfg(not(target_os = "linux"))]
+fn reopen_direct(_file: &File) -> Option<File> {
+    None
 }
 
 /// Writes an overlay file to `path`.
