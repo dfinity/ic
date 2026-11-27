@@ -1,5 +1,6 @@
 use super::*;
-use rand::rngs::OsRng;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
 
 pub struct LocalCspVaultBuilder<R, S, C, P> {
     csprng: Box<dyn FnOnce() -> R>,
@@ -18,10 +19,14 @@ impl ProdLocalCspVault {
         public_key_store: ProtoPublicKeyStore,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
-    ) -> LocalCspVaultBuilder<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>
-    {
+    ) -> LocalCspVaultBuilder<
+        UnwrapErr<SysRng>,
+        ProtoSecretKeyStore,
+        InMemorySecretKeyStore,
+        ProtoPublicKeyStore,
+    > {
         LocalCspVaultBuilder {
-            csprng: Box::new(|| OsRng),
+            csprng: Box::new(|| UnwrapErr(SysRng)),
             node_secret_key_store: Box::new(|| node_secret_key_store),
             canister_secret_key_store: Box::new(|| canister_secret_key_store),
             public_key_store: Box::new(|| public_key_store),
@@ -35,8 +40,12 @@ impl ProdLocalCspVault {
         key_store_dir: &Path,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
-    ) -> LocalCspVaultBuilder<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>
-    {
+    ) -> LocalCspVaultBuilder<
+        UnwrapErr<SysRng>,
+        ProtoSecretKeyStore,
+        InMemorySecretKeyStore,
+        ProtoPublicKeyStore,
+    > {
         const SKS_DATA_FILENAME: &str = "sks_data.pb";
         const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
 

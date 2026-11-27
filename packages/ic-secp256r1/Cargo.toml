@@ -25,6 +25,9 @@ sha2 = { workspace = true }
 simple_asn1 = { workspace = true }
 zeroize = { workspace = true }
 
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+rand = { workspace = true, features = ["thread_rng"] }
+
 [dev-dependencies]
 hex = { workspace = true }
 ic_principal = { workspace = true, features = ["convert"] }

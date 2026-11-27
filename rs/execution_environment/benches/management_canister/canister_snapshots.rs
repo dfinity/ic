@@ -11,7 +11,7 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, SnapshotId};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
-use rand::Rng;
+use rand::RngExt;
 
 const MIB: u64 = 1024 * 1024;
 const GIB: u64 = 1024 * MIB;
@@ -263,8 +263,8 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_canister_snapshot(canister_size),
             |(env, canister_id, snapshot_id)| {
-                let mut rng = rand::thread_rng();
-                let offset = rng.gen_range(0..canister_size - 1);
+                let mut rng = rand::rng();
+                let offset = rng.random_range(0..canister_size - 1);
                 let args = ReadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
@@ -282,8 +282,8 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_canister_snapshot(canister_size),
             |(env, canister_id, snapshot_id)| {
-                let mut rng = rand::thread_rng();
-                let offset = rng.gen_range(0..canister_size - 1);
+                let mut rng = rand::rng();
+                let offset = rng.random_range(0..canister_size - 1);
                 let args = ReadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
@@ -309,8 +309,8 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_writeable_canister_snapshot(canister_size),
             |(env, canister_id, snapshot_id)| {
-                let mut rng = rand::thread_rng();
-                let offset = rng.gen_range(0..canister_size - 1);
+                let mut rng = rand::rng();
+                let offset = rng.random_range(0..canister_size - 1);
                 let args = UploadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
@@ -328,8 +328,8 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_writeable_canister_snapshot(canister_size),
             |(env, canister_id, snapshot_id)| {
-                let mut rng = rand::thread_rng();
-                let offset = rng.gen_range(0..canister_size - 1);
+                let mut rng = rand::rng();
+                let offset = rng.random_range(0..canister_size - 1);
                 let args = UploadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,

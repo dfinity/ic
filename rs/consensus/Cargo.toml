@@ -31,8 +31,6 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 num-traits = { workspace = true }
 prometheus = { workspace = true }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
 rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
@@ -76,6 +74,8 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 mockall = { workspace = true }
 proptest = { workspace = true }
 prost = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
+rand_chacha = { workspace = true }
 rstest = { workspace = true }
 serde_cbor = { workspace = true }
 slog-async = { workspace = true }

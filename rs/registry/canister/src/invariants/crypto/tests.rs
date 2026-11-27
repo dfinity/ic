@@ -22,7 +22,7 @@ use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2, SUBNET_3};
 use prost::Message;
-use rand::RngCore;
+use rand::Rng;
 use std::collections::BTreeSet;
 
 fn insert_node_crypto_keys(
@@ -676,7 +676,7 @@ mod chain_key_enabled_subnet_lists {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::PrincipalId;
     use prost::Message;
-    use rand::Rng;
+    use rand::RngExt;
 
     fn invariant_compliant_chain_key_config() -> ChainKeyConfigPb {
         ChainKeyConfigPb {
@@ -904,9 +904,9 @@ mod chain_key_enabled_subnet_lists {
         const NUM_KEY_IDS: usize = 100;
         let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
         for _ in 0..NUM_KEY_IDS {
-            let len = rng.gen_range(1..100);
+            let len = rng.random_range(1..100);
             let key_id: String = rng
-                .sample_iter::<char, _>(rand::distributions::Standard)
+                .sample_iter::<char, _>(rand::distr::StandardUniform)
                 .take(len)
                 .collect();
             let ecdsa_key_id = format!("ecdsa:{:?}:{:?}", EcdsaCurve::Secp256k1, key_id);

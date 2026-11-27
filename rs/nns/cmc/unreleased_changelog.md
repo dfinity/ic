@@ -11,6 +11,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+* When several subnets are eligible for a new canister, `create_canister` and
+  `notify_create_canister` still pick one uniformly at random, but the same
+  `raw_rand` randomness can now pick a different subnet than before.
+
 ## Deprecated
 
 ## Removed

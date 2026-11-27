@@ -1,11 +1,11 @@
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Gt, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::dlog_recovery::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 // Returns a random element of Gt
 fn gt_rand<R: Rng>(rng: &mut R) -> Gt {
-    let g1 = G1Affine::hash("ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
+    let g1 = G1Affine::hash("ic-crypto-test-gt-random", &rng.random::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
 }
@@ -120,7 +120,7 @@ fn baby_giant_big_range() {
 
     for _trial in 0..30 {
         let x =
-            Scalar::from_isize((rng.r#gen::<u64>() % upper_bound as u64) as isize + lower_bound);
+            Scalar::from_isize((rng.random::<u64>() % upper_bound as u64) as isize + lower_bound);
         let tgt = &base * &x;
         assert_eq!(baby_giant.solve(&tgt), Some(x));
     }
@@ -133,7 +133,7 @@ fn honest_dealer_search_works_randomized_test() {
 
     let rng = &mut reproducible_rng();
 
-    let mut dlogs = (0..500).map(|_| rng.r#gen::<u16>()).collect::<Vec<_>>();
+    let mut dlogs = (0..500).map(|_| rng.random::<u16>()).collect::<Vec<_>>();
 
     // also explicitly test the very begin and end elements
     dlogs.push(0);

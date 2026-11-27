@@ -27,7 +27,7 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 nix = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
 serde = { workspace = true }

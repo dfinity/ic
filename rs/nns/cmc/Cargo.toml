@@ -46,6 +46,7 @@ candid_parser = { workspace = true }
 maplit = { workspace = true }
 futures = { workspace = true }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
+rand = { workspace = true, features = ["thread_rng"] }
 serde_bytes = { workspace = true }
 
 [[bin]]

@@ -8,7 +8,6 @@ use config_types::GuestOSConfig;
 use ic_device::mount::{
     FileSystem, MountOptions, MountedPartition, PartitionProvider, PartitionSelector,
 };
-use rand::prelude::thread_rng;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
@@ -65,7 +64,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         &trusted_execution_environment_config,
         &SevCustomData::random(
             SevCustomDataNamespace::VerifyAlternativeGuestOsProposal,
-            &mut thread_rng(),
+            &mut rand::rng(),
         ),
     )
     .context("Failed to generate attestation package")?;

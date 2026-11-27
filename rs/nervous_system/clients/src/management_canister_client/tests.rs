@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types_private::{
     CanisterSnapshotResponse, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
 };
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 use std::time::Duration;
 
 /// Five canister_status calls are made via LimitedOutstandingCallsManagementCanisterClient with a
@@ -117,7 +117,7 @@ async fn test_limit_outstanding_calls() {
 
         // Generate a random CanisterIdRecord.
         let canister_id_record = {
-            let result = PrincipalId::new_user_test_id(thread_rng().r#gen());
+            let result = PrincipalId::new_user_test_id(rand::rng().random());
             let result = CanisterId::try_from(result).unwrap();
             CanisterIdRecord::from(result)
         };

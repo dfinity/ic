@@ -41,8 +41,7 @@ ic-sys = { path = "../../../sys" }
 ic-types = { path = "../../../types/types" }
 parking_lot = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
+rand = { workspace = true, features = ["sys_rng"] }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -86,7 +85,7 @@ ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
-rand_0_10 = { workspace = true }
+rand_chacha = { workspace = true }
 rsa = { workspace = true }
 slog-async = { workspace = true }
 tracing = { workspace = true }

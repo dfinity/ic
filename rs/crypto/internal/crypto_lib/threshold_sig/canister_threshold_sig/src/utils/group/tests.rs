@@ -1,6 +1,6 @@
 use super::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
     let get_bit = |bytes: &[u8]| {
@@ -37,9 +37,9 @@ fn test_range_to_i8_is_correct() -> CanisterThresholdResult<()> {
             // tests 1000 ranges for each scalar
             for _iteration in 0..1000 {
                 // generate a random position that is in bounds
-                let pos = rng.gen_range(0..naf.bit_len());
+                let pos = rng.random_range(0..naf.bit_len());
                 // generate a random length
-                let len = rng.gen_range(1..std::cmp::min(8, naf.bit_len() - pos + 1));
+                let len = rng.random_range(1..std::cmp::min(8, naf.bit_len() - pos + 1));
                 let computed_result = naf.range_as_i8(pos, len);
                 // compute the expected result by pulling and aggregating single bits
                 let mut expected_result = 0_i8;

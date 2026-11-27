@@ -11,7 +11,8 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
 use ic_types::{Height, batch::BatchContent, crypto::CryptoHash, replica_config::ReplicaConfig};
-use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// Helper type for additional mutations to the registry that a test may want to perform after the

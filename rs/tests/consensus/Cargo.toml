@@ -41,7 +41,7 @@ ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common
 ic_consensus_system_test_utils = { path = "./utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "./tecdsa/utils" }
 prost = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }

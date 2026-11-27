@@ -13,7 +13,7 @@ use ic_cdk_management_canister::{
     provisional_create_canister_with_cycles, update_settings,
 };
 use lazy_static::lazy_static;
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use statesync_test::CanisterCreationStatus;
 use std::sync::Mutex;
 
@@ -37,7 +37,7 @@ async fn change_state(seed: u32) -> Result<u64, String> {
     let mut rng = SmallRng::seed_from_u64(seed as u64);
 
     for index in (0..VECTOR_LENGTH).step_by(1023) {
-        state[index] = rng.r#gen();
+        state[index] = rng.random();
     }
     *num_changed += 1;
     Ok(*num_changed)

@@ -39,7 +39,7 @@ use ic_types::{
     },
     subnet_id_into_protobuf,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -56,7 +56,7 @@ use std::{
 /// Return the registry data provider, registry client, catch-up package, and a list of crypto
 /// components, one for each node.
 #[allow(clippy::type_complexity)]
-pub fn setup_subnet<R: Rng + CryptoRng>(
+pub fn setup_subnet<R: CryptoRng>(
     subnet_id: SubnetId,
     node_ids: &[NodeId],
     dkg_interval_length: u64,
@@ -103,7 +103,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
                 .with_node_id(*node_id)
                 .with_registry_client_and_data(registry_client.clone(), data_provider.clone())
                 .with_keys(NodeKeysToGenerate::all())
-                .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+                .with_rng(ChaCha20Rng::from_seed(rng.random()))
                 .build_arc()
         })
         .collect();
@@ -134,7 +134,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
             )
         })
         .collect();
-    let random_ni_dkg_target_id = NiDkgTargetId::new(rng.r#gen());
+    let random_ni_dkg_target_id = NiDkgTargetId::new(rng.random());
     let node_ids = node_ids.iter().copied().collect::<BTreeSet<_>>();
     let ni_dkg_transcript_low_threshold = initial_dkg_transcript(
         InitialNiDkgConfig::new(

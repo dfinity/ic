@@ -29,7 +29,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-system-test-driver = { path = "../driver" }
 itertools = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["sys_rng"] }
 rand_chacha = { workspace = true }
 rate-limits-api = { path = "../../boundary_node/rate_limits/api" }
 salt-sharing-api = { path = "../../boundary_node/salt_sharing/api" }

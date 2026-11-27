@@ -34,7 +34,7 @@ use ic_tests_ckbtc::{
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
-use rand::{SeedableRng, rngs::OsRng};
+use rand::{SeedableRng, rngs::SysRng};
 use rand_chacha::ChaChaRng;
 use slog::{debug, info};
 
@@ -264,7 +264,7 @@ pub fn test_update_balance(env: TestEnv) {
         // We create a new agent with a different identity
         // to have caller != new_caller
         let mut mutable_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
-        let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
+        let mut rng = ChaChaRng::try_from_rng(&mut SysRng).unwrap();
         let key = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng).serialize_rfc5915_pem();
         let identity = Secp256k1Identity::from_pem(key.as_bytes()).unwrap();
         mutable_agent.set_identity(identity);

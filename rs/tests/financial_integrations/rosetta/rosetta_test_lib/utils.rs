@@ -41,7 +41,7 @@ use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_types::{PrincipalId, time};
 use icp_ledger::{AccountIdentifier, Operation};
-use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom, thread_rng};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use rosetta_core::{
     convert::principal_id_from_public_key,
     models::{RosettaSupportedKeyPair, Secp256k1KeyPair},
@@ -613,7 +613,7 @@ where
         .collect();
 
     // The order of signatures shouldn't matter.
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     signatures.shuffle(&mut rng);
 
     ros.construction_combine(payloads.unsigned_transaction, signatures)

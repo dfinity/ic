@@ -14,7 +14,7 @@ use ic_p2p_test_utils::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, node_test_id};
-use rand::{Rng, rngs::ThreadRng};
+use rand::{RngExt, rngs::ThreadRng};
 use tokio::{sync::Notify, task::JoinSet};
 use tokio_util::time::DelayQueue;
 use turmoil::Builder;
@@ -264,9 +264,9 @@ async fn generate_consensus_events(
         let mut rng = ThreadRng::default();
 
         for _ in 0..num_event {
-            let rand_id = rng.gen_range(id_range.clone());
+            let rand_id = rng.random_range(id_range.clone());
             let insert_time =
-                Duration::from_millis(rng.gen_range(0..test_duration.as_millis()) as u64);
+                Duration::from_millis(rng.random_range(0..test_duration.as_millis()) as u64);
             delay_queue.insert(Event::Insert(rand_id), insert_time);
         }
     }
@@ -277,9 +277,9 @@ async fn generate_consensus_events(
                 processor.push_advert(e);
 
                 let mut rng = ThreadRng::default();
-                let should_purge = rng.gen_bool(purge_fraction);
+                let should_purge = rng.random_bool(purge_fraction);
                 if should_purge {
-                    let purge_delay = rng.gen_range(0..max_purge_delay.as_millis() as u64);
+                    let purge_delay = rng.random_range(0..max_purge_delay.as_millis() as u64);
                     delay_queue.insert(Event::Purge(e), Duration::from_millis(purge_delay));
                 }
             }

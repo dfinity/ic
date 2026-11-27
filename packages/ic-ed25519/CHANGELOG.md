@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade the `ed25519-dalek` dependency from version 2 to 3, `curve25519-dalek` from 4 to 5 and `hkdf` from 0.12 to 0.13. The public API is unchanged, and key generation, signing, key serialization and signature verification produce the same results as before.
 - `PrivateKey::generate_using_rng` takes the next 32 bytes of the RNG output as the key, as `ed25519-dalek` 2 did, so the same RNG state still yields the same key.
 - The details of `PrivateKeyDecodingError::InvalidKeyEncoding` and `PublicKeyDecodingError::InvalidKeyEncoding` for malformed DER input are worded differently, as they come from `der` 0.8, `spki` 0.8 and `pkcs8` 0.11.
+- Upgrade the `rand` dependency from version 0.8 to 0.10 and `rand_chacha` from 0.3 to 0.10. `PrivateKey::generate_using_rng` and `PublicKey::batch_verify` now take an RNG implementing `rand::CryptoRng` from `rand` 0.10 (`rand_core` 0.10). The same RNG output gives the same keys as before.
+- `PrivateKey::generate` is no longer available on `wasm32-unknown-unknown`. Use `PrivateKey::generate_using_rng` or `PrivateKey::generate_from_seed` there.
 
 ## [0.6.0] - 2026-02-04
 

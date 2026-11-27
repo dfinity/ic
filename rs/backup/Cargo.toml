@@ -18,7 +18,7 @@ ic-recovery = { path = "../recovery" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
 ic-types = { path = "../types/types" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

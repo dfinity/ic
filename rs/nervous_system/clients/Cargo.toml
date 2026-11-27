@@ -30,5 +30,5 @@ serde = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 tokio = { workspace = true }

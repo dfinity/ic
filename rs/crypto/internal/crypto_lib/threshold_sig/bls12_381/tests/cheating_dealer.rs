@@ -1,16 +1,16 @@
 use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::dlog_recovery::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::RngExt;
 
-fn cheating_dlog_instance<R: rand::RngCore + rand::CryptoRng>(
+fn cheating_dlog_instance<R: rand::CryptoRng>(
     m: usize,
     rng: &mut R,
     use_max_delta: bool,
 ) -> (Scalar, Gt) {
     let z = 1069531200 * 16 * m as u64;
 
-    let s = Scalar::from_u64(rng.r#gen::<u64>() % z);
+    let s = Scalar::from_u64(rng.random::<u64>() % z);
 
     let delta = if use_max_delta {
         // Instead of maximum delta (255) we use the largest
@@ -19,7 +19,7 @@ fn cheating_dlog_instance<R: rand::RngCore + rand::CryptoRng>(
         // the most pessimal delta.
         251
     } else {
-        std::cmp::max(1, rng.r#gen::<u16>() % 10)
+        std::cmp::max(1, rng.random::<u16>() % 10)
     } as u64;
     let delta = Scalar::from_u64(delta);
 

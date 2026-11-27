@@ -39,7 +39,7 @@ impl<R, T: HttpRequestEnvelopeContent<HttpRequestContentType = R> + Debug> Envel
 mod request_nonce {
     use super::*;
     use crate::RequestValidationError::NonceTooBigError;
-    use rand::RngCore;
+    use rand::RngExt;
 
     #[test]
     fn should_check_request_nonce() {
@@ -48,12 +48,12 @@ mod request_nonce {
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
         let reasonable_nonce = {
-            let random_bytes = rng.r#gen::<[u8; 32]>();
-            let nonce_size = rng.gen_range(0..=32);
+            let random_bytes = rng.random::<[u8; 32]>();
+            let nonce_size = rng.random_range(0..=32);
             random_bytes[..nonce_size].to_vec()
         };
         let unreasonable_nonce = {
-            let nonce_size = rng.gen_range(33..100);
+            let nonce_size = rng.random_range(33..100);
             let mut random_bytes = [0_u8; 100];
             rng.fill_bytes(&mut random_bytes);
             random_bytes[..nonce_size].to_vec()
@@ -137,6 +137,7 @@ mod ingress_expiry {
     use super::*;
     use crate::RequestValidationError::InvalidIngressExpiry;
     use ic_validator_http_request_test_utils::{AuthenticationScheme, HttpRequestBuilder};
+    use rand::RngExt;
     use std::time::Duration;
 
     #[test]
@@ -230,7 +231,7 @@ mod ingress_expiry {
         let verifier = default_verifier()
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
-        let acceptable_expiry = Time::from_nanos_since_unix_epoch(rng.gen_range(
+        let acceptable_expiry = Time::from_nanos_since_unix_epoch(rng.random_range(
             CURRENT_TIME.as_nanos_since_unix_epoch()
                 ..=max_ingress_expiry_at(CURRENT_TIME).as_nanos_since_unix_epoch(),
         ));
@@ -309,6 +310,7 @@ mod read_state_request {
     use super::*;
     use crate::RequestValidationError::{PathTooLongError, TooManyPathsError};
     use ic_crypto_tree_hash::{Label, Path};
+    use rand::RngExt;
     use rand::prelude::SliceRandom;
     use std::ops::RangeInclusive;
 
@@ -448,7 +450,7 @@ mod read_state_request {
         num_paths_range: RangeInclusive<usize>,
         num_labels_range: RangeInclusive<usize>,
     ) -> Vec<Path> {
-        let num_paths = rng.gen_range(num_paths_range);
+        let num_paths = rng.random_range(num_paths_range);
         let mut paths = Vec::with_capacity(num_paths);
         for _ in 0..num_paths {
             paths.push(random_path(rng, num_labels_range.clone()));
@@ -461,7 +463,7 @@ mod read_state_request {
         rng: &mut R,
         num_labels_range: RangeInclusive<usize>,
     ) -> Path {
-        let num_labels = rng.gen_range(num_labels_range);
+        let num_labels = rng.random_range(num_labels_range);
         let mut labels = Vec::with_capacity(num_labels);
         for _ in 0..num_labels {
             labels.push(random_label(rng));
@@ -1089,7 +1091,7 @@ mod authenticated_requests_delegations {
         AuthenticationScheme, DelegationChain, DelegationChainBuilder,
         HttpRequestEnvelopeContentWithCanisterId,
     };
-    use rand::{CryptoRng, Rng};
+    use rand::{CryptoRng, Rng, RngExt};
     use std::time::Duration;
 
     const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!
@@ -1235,7 +1237,7 @@ mod authenticated_requests_delegations {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let number_of_delegations =
-            rng.gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
+            rng.random_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
         let delegation_chain =
             delegation_chain_of_length(number_of_delegations, CURRENT_TIME, rng).build();
 
@@ -1259,7 +1261,7 @@ mod authenticated_requests_delegations {
         let rng1 = &mut reproducible_rng();
         let rng2 = &mut rng1.fork();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+        let expired_delegation_index = rng1.random_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let one_ns = Duration::from_nanos(1);
         let expired = CURRENT_TIME.saturating_sub(one_ns);
         let not_expired = CURRENT_TIME;
@@ -1316,7 +1318,7 @@ mod authenticated_requests_delegations {
         let rng1 = &mut reproducible_rng();
         let rng2 = &mut rng1.fork();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let corrupted_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+        let corrupted_delegation_index = rng1.random_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let mut key_pair_whose_signature_is_corrupted = None;
         let delegation_chain = grow_delegation_chain(
             DelegationChain::rooted_at(random_user_key_pair(rng1)),
@@ -1359,7 +1361,7 @@ mod authenticated_requests_delegations {
         let rng1 = &mut reproducible_rng();
         let rng2 = &mut rng1.fork();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let wrong_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+        let wrong_delegation_index = rng1.random_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let other_key_pair = random_user_key_pair(rng1);
         let delegation_chain = grow_delegation_chain(
             DelegationChain::rooted_at(random_user_key_pair(rng1)),
@@ -1881,7 +1883,7 @@ mod authenticated_requests_delegations {
         root_of_trust: &RootOfTrust,
         rng: &mut R,
     ) -> DelegationChainBuilder {
-        let canister_delegation_index = rng.gen_range(1..=number_of_delegations);
+        let canister_delegation_index = rng.random_range(1..=number_of_delegations);
         grow_delegation_chain(
             DelegationChain::rooted_at(random_user_key_pair(rng)),
             number_of_delegations,

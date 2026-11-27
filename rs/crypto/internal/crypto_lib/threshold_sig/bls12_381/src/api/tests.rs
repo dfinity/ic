@@ -10,7 +10,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::Public
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::NumberOfNodes;
 use proptest::prelude::*;
-use rand::{Rng, RngCore};
+use rand::{Rng, RngExt};
 
 mod util {
     use super::super::super::api as tsig;
@@ -128,7 +128,7 @@ fn test_threshold_sig_api_and_core_match(
     message: &[u8],
 ) {
     let rng = &mut seed.into_rng();
-    let seed_bytes = rng.r#gen::<[u8; 32]>();
+    let seed_bytes = rng.random::<[u8; 32]>();
     let (core_public_coefficients, core_secret_keys) = crypto::tests::util::generate_threshold_key(
         Seed::from_bytes(&seed_bytes),
         threshold,

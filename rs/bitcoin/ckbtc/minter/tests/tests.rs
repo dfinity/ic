@@ -2191,8 +2191,8 @@ fn test_utxo_consolidation_burn_failure() {
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
     let mut rng = reproducible_rng();
     for x in utxo_values.iter_mut() {
-        use rand::Rng;
-        *x = rng.gen_range((CHECK_FEE + 1)..100_000_000);
+        use rand::RngExt;
+        *x = rng.random_range((CHECK_FEE + 1)..100_000_000);
     }
     ckbtc.deposit_utxos_with_value(user, &utxo_values);
     ckbtc
@@ -2259,8 +2259,8 @@ fn test_utxo_consolidation_multiple() {
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
     let mut rng = reproducible_rng();
     for x in utxo_values.iter_mut() {
-        use rand::Rng;
-        *x = rng.gen_range((CHECK_FEE + 1)..100_000_000);
+        use rand::RngExt;
+        *x = rng.random_range((CHECK_FEE + 1)..100_000_000);
     }
     let utxos = ckbtc.deposit_utxos_with_value(user, &utxo_values);
     ckbtc
@@ -2381,8 +2381,8 @@ fn test_utxo_consolidation_resubmit() {
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
     let mut rng = reproducible_rng();
     for x in utxo_values.iter_mut() {
-        use rand::Rng;
-        *x = rng.gen_range((CHECK_FEE + 1)..100_000_000);
+        use rand::RngExt;
+        *x = rng.random_range((CHECK_FEE + 1)..100_000_000);
     }
     ckbtc.deposit_utxos_with_value(user, &utxo_values);
     ckbtc
@@ -2476,8 +2476,8 @@ fn test_utxo_consolidation_upgrade_and_resubmit() {
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
     let mut rng = reproducible_rng();
     for x in utxo_values.iter_mut() {
-        use rand::Rng;
-        *x = rng.gen_range((CHECK_FEE + 1)..100_000_000);
+        use rand::RngExt;
+        *x = rng.random_range((CHECK_FEE + 1)..100_000_000);
     }
     ckbtc.deposit_utxos_with_value(user, &utxo_values);
     ckbtc

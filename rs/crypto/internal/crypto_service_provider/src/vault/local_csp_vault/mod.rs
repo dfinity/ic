@@ -33,8 +33,9 @@ use ic_logger::{ReplicaLogger, new_logger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-use rand::rngs::OsRng;
-use rand::{CryptoRng, Rng};
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
+use rand::{CryptoRng, Rng, RngExt};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
@@ -90,8 +91,12 @@ pub struct LocalCspVault<
     metrics: Arc<CryptoMetrics>,
 }
 
-pub type ProdLocalCspVault =
-    LocalCspVault<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>;
+pub type ProdLocalCspVault = LocalCspVault<
+    UnwrapErr<SysRng>,
+    ProtoSecretKeyStore,
+    InMemorySecretKeyStore,
+    ProtoPublicKeyStore,
+>;
 
 impl ProdLocalCspVault {
     /// Creates a production-grade local CSP vault.
@@ -191,7 +196,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     }
 
     fn generate_seed(&self) -> Seed {
-        let intermediate_seed: [u8; 32] = self.csprng.write().r#gen(); // lock is released after this line
+        let intermediate_seed: [u8; 32] = self.csprng.write().random(); // lock is released after this line
         Seed::from_bytes(&intermediate_seed) // use of intermediate seed minimizes locking time
     }
 

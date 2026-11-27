@@ -39,7 +39,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
 use prost::Message;
-use rand::RngCore;
+use rand::Rng;
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
 use sev_guest::attestation_package::generate_attestation_package;
@@ -468,7 +468,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
 fn sample_luks_header_bytes() -> Vec<u8> {
     let mut bytes = vec![0; LUKS_HEADER_SIZE_BYTES];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     bytes
 }
 

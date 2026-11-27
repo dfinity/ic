@@ -200,8 +200,8 @@ pub fn get_ic_config() -> IcConfig {
     let subnet_index = 0;
 
     // Choose a temporary directory as the working directory for ic-prep.
-    use rand::Rng;
-    let random_suffix = rand::thread_rng().r#gen::<usize>();
+    use rand::RngExt;
+    let random_suffix = rand::rng().random::<u64>();
     let prep_dir = std::env::temp_dir().join(format!("ic_prep_{random_suffix}"));
 
     // Create the secret key store in a node a sub-directory of the ic-prep.

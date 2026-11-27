@@ -2,8 +2,6 @@ use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_local_registry::LocalRegistry;
 use ic_sys::fs::{Clobber, sync_path, write_atomically};
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use slog::{Drain, Logger, info, o, warn};
@@ -248,21 +246,6 @@ impl RequiredHostFeaturesFromCmdLine for TestEnv {
             }
             _ => None,
         }
-    }
-}
-
-pub trait HasDefaultRng {
-    /// Returns a random number generator the seed of which is either constant
-    /// or depends on the state of the underlying object.
-    fn default_rng(&self) -> Box<dyn RngCore>;
-}
-
-impl HasDefaultRng for TestEnv {
-    /// Returns a random number generator based on a constant seed. At a later
-    /// point, the seed will be configured through the underlying test
-    /// environment.
-    fn default_rng(&self) -> Box<dyn RngCore> {
-        Box::new(ChaCha8Rng::seed_from_u64(42))
     }
 }
 

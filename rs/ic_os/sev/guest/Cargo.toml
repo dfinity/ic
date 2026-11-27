@@ -7,7 +7,6 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 hkdf = { workspace = true }
 pem = { workspace = true }
-rand = { workspace = true }
 sev = { workspace = true }
 sha2 = { workspace = true }
 
@@ -17,4 +16,5 @@ linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 sev_guest_firmware = { path = "firmware" }
 
 [dev-dependencies]
+rand = { workspace = true, features = ["thread_rng"] }
 sev_guest_testing = { path = "testing" }

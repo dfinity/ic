@@ -2,7 +2,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     EccCurveType, EccPoint, EccScalar, PedersenCommitment, PolynomialCommitment,
     PolynomialCommitmentType, SimpleCommitment,
 };
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngExt};
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
@@ -161,7 +161,7 @@ impl ProtocolSetup {
         let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
-        let ad = rng.r#gen::<[u8; 32]>().to_vec();
+        let ad = rng.random::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
         let mut pk = Vec::with_capacity(receivers);
@@ -739,14 +739,14 @@ impl ProtocolRound {
 
         let dealings_to_damage = dealings
             .iter_mut()
-            .choose_multiple(rng, number_of_dealings_corrupted);
+            .sample(rng, number_of_dealings_corrupted);
 
         for (dealer_index, dealing) in dealings_to_damage {
             let max_corruptions = setup.threshold.get() as usize;
-            let number_of_corruptions = rng.gen_range(1..=max_corruptions);
+            let number_of_corruptions = rng.random_range(1..=max_corruptions);
 
             let corrupted_recip =
-                (0..setup.receivers as NodeIndex).choose_multiple(rng, number_of_corruptions);
+                (0..setup.receivers as NodeIndex).sample(rng, number_of_corruptions);
 
             let bad_dealing =
                 test_utils::corrupt_dealing(dealing, &corrupted_recip, Seed::from_rng(rng))

@@ -139,8 +139,6 @@ rust_ic_test(
         "@crate_index//:prometheus",
         "@crate_index//:proptest",
         "@crate_index//:prost",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
         "@crate_index//:scoped_threadpool",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

@@ -2559,7 +2559,7 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use maplit::btreemap;
-    use rand::Rng;
+    use rand::RngExt;
     use serde_bytes::ByteBuf;
     use std::str::FromStr;
 
@@ -2824,14 +2824,14 @@ mod tests {
         // Set a timestamp.
         let timestamp: u64 = 1_632_728_342;
         // Get a random number generator.
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         // The sum of all the valid rates, i.e., the rates at midnight.
         let mut valid_rates_sum = 0;
         // Iterate over two intervals (half of which should be ignored), from the oldest
         // to the latest rate.
         for day in (0..2 * NUM_DAYS_FOR_ICP_XDR_AVERAGE).rev() {
             // Generate a valid rate, i.e., the ICP/XDR rate at midnight.
-            let valid_rate: u64 = rng.gen_range(1_000_000..10_000_000);
+            let valid_rate: u64 = rng.random_range(1_000_000..10_000_000);
             // The rate is only counted if it is not older than
             // `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days.
             if day < NUM_DAYS_FOR_ICP_XDR_AVERAGE {
@@ -2843,7 +2843,7 @@ mod tests {
                     state,
                     &IcpXdrConversionRate {
                         timestamp_seconds: ((1_632_700_800 - day * 86_400) - 1) as u64,
-                        xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+                        xdr_permyriad_per_icp: rng.random_range(1_000_000..10_000_000),
                     },
                 );
                 // Add a rate at midnight.
@@ -2859,7 +2859,7 @@ mod tests {
                     state,
                     &IcpXdrConversionRate {
                         timestamp_seconds: ((1_632_700_800 - day * 86_400) + 1) as u64,
-                        xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+                        xdr_permyriad_per_icp: rng.random_range(1_000_000..10_000_000),
                     },
                 );
             });
@@ -2916,7 +2916,7 @@ mod tests {
 
         // Create random start-of-day conversion rates.
         let mut current_rate: i32 = 100_000;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut rates = vec![];
         let mut timestamp = 1658102400;
         for _index in 0..ICP_XDR_CONVERSION_RATE_CACHE_SIZE {
@@ -2924,7 +2924,7 @@ mod tests {
                 timestamp_seconds: timestamp,
                 xdr_permyriad_per_icp: current_rate as u64,
             });
-            current_rate += rng.gen_range(0..20_000) - 10_000;
+            current_rate += rng.random_range(0..20_000) - 10_000;
             if current_rate < 0 {
                 current_rate = 100_000;
             }

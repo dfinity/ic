@@ -11,11 +11,11 @@ use ic_crypto_internal_types::curves::bls12_381::G2Bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use proptest::prelude::*;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 /// Generate a G1 point that is not in the prime-order subgroup (has torsion).
 /// Used to test that malformed inputs are properly rejected.
-fn non_torsion_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Affine {
+fn non_torsion_g1<R: CryptoRng>(rng: &mut R) -> G1Affine {
     let mut buf = [0_u8; G1Affine::BYTES];
 
     loop {
@@ -34,7 +34,7 @@ fn non_torsion_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Affine {
 
 /// Generate a G2 point that is not in the prime-order subgroup (has torsion).
 /// Used to test that malformed inputs are properly rejected.
-fn non_torsion_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Affine {
+fn non_torsion_g2<R: CryptoRng>(rng: &mut R) -> G2Affine {
     let mut buf = [0_u8; G2Affine::BYTES];
 
     loop {

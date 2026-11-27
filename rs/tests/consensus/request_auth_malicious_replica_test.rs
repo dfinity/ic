@@ -51,7 +51,7 @@ use ic_types::{CanisterId, Time};
 use ic_universal_canister::wasm;
 
 use anyhow::Result;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use slog::info;
 use std::convert::TryFrom;
 use url::Url;
@@ -606,7 +606,7 @@ fn sign_delegation(delegation: Delegation, identity: &impl Identity) -> SignedDe
     SignedDelegation::new(delegation, signature.signature.unwrap())
 }
 
-fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
+fn random_ecdsa_identity<R: CryptoRng>(rng: &mut R) -> Secp256k1Identity {
     let pem = ic_secp256k1::PrivateKey::generate_using_rng(rng).serialize_rfc5915_pem();
     Secp256k1Identity::from_pem(pem.as_bytes()).unwrap()
 }

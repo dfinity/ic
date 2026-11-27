@@ -7,7 +7,7 @@ use ic_sns_governance::{
     sns_upgrade::ListUpgradeStepsRequest,
     types::{Environment, HeapGrowthPotential},
 };
-use rand::{RngCore, rngs::StdRng};
+use rand::{Rng, rngs::StdRng};
 use std::sync::{Arc, Mutex};
 
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;

@@ -24,7 +24,7 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"], optional = true }
 rayon = { workspace = true }
 slog = { workspace = true }
 
@@ -48,9 +48,10 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
+rand = { workspace = true, features = ["thread_rng"] }
 strum = { workspace = true }
 
 [features]
 default = []
-malicious_code = ["ic-crypto-test-utils-canister-threshold-sigs"]
+malicious_code = ["ic-crypto-test-utils-canister-threshold-sigs", "dep:rand"]
 proptest = []

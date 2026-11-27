@@ -66,7 +66,6 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
-use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -705,7 +704,7 @@ impl CanisterHttpRequestContext {
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
-        rng: &mut dyn RngCore,
+        rng: &mut dyn rand::Rng,
         pay_as_you_go_enabled: bool,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
@@ -785,7 +784,7 @@ impl CanisterHttpRequestContext {
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
-        rng: &mut dyn RngCore,
+        rng: &mut dyn rand::Rng,
         pricing_version: PricingVersion,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
@@ -863,7 +862,7 @@ impl CanisterHttpRequestContext {
         let committee: BTreeSet<_> = node_ids
             .iter()
             .copied()
-            .choose_multiple(rng, total_requests as usize)
+            .sample(rng, total_requests as usize)
             .into_iter()
             .collect();
 

@@ -25,8 +25,8 @@ use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
-use rand::distributions::Standard;
-use rand::{CryptoRng, Rng};
+use rand::distr::StandardUniform;
+use rand::{CryptoRng, RngExt};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 
@@ -166,7 +166,7 @@ fn should_fail_parsing_extended_derivation_path_proto_with_malformed_caller() {
     assert_matches!(parsing_result, Err(ProxyDecodeError::InvalidPrincipalId(_)));
 }
 
-fn initial_dealings_without_empty_or_default_data<R: Rng + CryptoRng>(
+fn initial_dealings_without_empty_or_default_data<R: CryptoRng>(
     rng: &mut R,
 ) -> InitialIDkgDealings {
     let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
@@ -193,13 +193,17 @@ fn initial_dealings_without_empty_or_default_data<R: Rng + CryptoRng>(
         .expect("Failed creating IDkgInitialDealings for testing")
 }
 
-fn dummy_extended_derivation_path<R: Rng + CryptoRng>(rng: &mut R) -> ExtendedDerivationPath {
+fn dummy_extended_derivation_path<R: CryptoRng>(rng: &mut R) -> ExtendedDerivationPath {
     let path_len = rng.next_u32() % 10;
     let user_id = rng.next_u64();
     let mut derivation_path = vec![];
     for _ in 0..(path_len) {
         let entry_len = rng.next_u32() % 256;
-        derivation_path.push(rng.sample_iter(Standard).take(entry_len as usize).collect())
+        derivation_path.push(
+            rng.sample_iter(StandardUniform)
+                .take(entry_len as usize)
+                .collect(),
+        )
     }
     ExtendedDerivationPath {
         caller: PrincipalId::new_user_test_id(user_id),
@@ -207,7 +211,7 @@ fn dummy_extended_derivation_path<R: Rng + CryptoRng>(rng: &mut R) -> ExtendedDe
     }
 }
 
-fn initial_dealings<R: Rng + CryptoRng>(rng: &mut R) -> InitialIDkgDealings {
+fn initial_dealings<R: CryptoRng>(rng: &mut R) -> InitialIDkgDealings {
     initial_dealings_without_empty_or_default_data(rng)
 }
 
@@ -232,7 +236,7 @@ fn idkg_complaint() -> IDkgComplaint {
     }
 }
 
-fn mock_signed_dealings<R: Rng + CryptoRng>(
+fn mock_signed_dealings<R: CryptoRng>(
     transcript_id: IDkgTranscriptId,
     dealers: &BTreeSet<NodeId>,
     rng: &mut R,
@@ -243,7 +247,7 @@ fn mock_signed_dealings<R: Rng + CryptoRng>(
         .collect()
 }
 
-fn mock_signed_dealing<R: Rng + CryptoRng>(
+fn mock_signed_dealing<R: CryptoRng>(
     transcript_id: IDkgTranscriptId,
     node_id: &NodeId,
     rng: &mut R,
@@ -257,20 +261,20 @@ fn mock_signed_dealing<R: Rng + CryptoRng>(
     }
 }
 
-fn mock_sig<T, R: Rng + CryptoRng>(node_id: NodeId, rng: &mut R) -> BasicSignature<T> {
+fn mock_sig<T, R: CryptoRng>(node_id: NodeId, rng: &mut R) -> BasicSignature<T> {
     BasicSignature {
         signature: BasicSigOf::new(BasicSig(random_bytes(0..100, rng))),
         signer: node_id,
     }
 }
 
-fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport {
+fn dummy_dealing_support<R: CryptoRng>(rng: &mut R) -> IDkgDealingSupport {
     let transcript_id = IDkgTranscriptId::new(
-        SubnetId::new(PrincipalId::new_subnet_test_id(rng.r#gen())),
-        rng.r#gen(),
-        Height::from(rng.r#gen::<u64>()),
+        SubnetId::new(PrincipalId::new_subnet_test_id(rng.random())),
+        rng.random(),
+        Height::from(rng.random::<u64>()),
     );
-    let dealer_id = NodeId::new(PrincipalId::new_user_test_id(rng.r#gen()));
+    let dealer_id = NodeId::new(PrincipalId::new_user_test_id(rng.random()));
     let sig_share = mock_sig(dealer_id, rng);
     IDkgDealingSupport {
         transcript_id,
@@ -280,7 +284,7 @@ fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport 
     }
 }
 
-fn random_bytes<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
-    let len = rng.gen_range(range);
-    rng.sample_iter(Standard).take(len).collect()
+fn random_bytes<R: CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
+    let len = rng.random_range(range);
+    rng.sample_iter(StandardUniform).take(len).collect()
 }

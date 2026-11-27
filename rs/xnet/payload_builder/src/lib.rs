@@ -41,7 +41,6 @@ use ic_types::{Height, NodeId, NumBytes, SubnetId};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
@@ -775,10 +774,10 @@ impl XNetPayloadBuilderImpl {
     }
 
     /// Shuffles the provided `Vec` using `self.deterministic_rng_for_testing` when
-    /// set, `thread_rng()` otherwise.
+    /// set, `rand::rng()` otherwise.
     fn random_shuffle<T>(&self, vec: &mut [T]) {
         match self.deterministic_rng_for_testing {
-            None => vec.shuffle(&mut thread_rng()),
+            None => vec.shuffle(&mut rand::rng()),
             Some(ref rng) => vec.shuffle(rng.lock().unwrap().deref_mut()),
         }
     }
@@ -1234,7 +1233,7 @@ pub mod testing {
         fn with_slice_byte_size_min(self, slice_byte_size_min: usize) -> Self;
 
         /// Shuffles stream positions using the provided RNG instead of
-        /// `thread_rng()`.
+        /// `rand::rng()`.
         fn with_deterministic_rng(self, rng: StdRng) -> Self;
     }
 

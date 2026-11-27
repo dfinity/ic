@@ -489,7 +489,7 @@ fn patch_subnet_list(env: &TestEnv) {
 }
 
 fn setup_test_neuron(env: &TestEnv) -> (NeuronId, String) {
-    let neuron_identity = Ed25519KeyPair::generate(&mut rand::thread_rng());
+    let neuron_identity = Ed25519KeyPair::generate(&mut rand::rng());
     let neuron_principal = Sender::SigKeys(SigKeys::Ed25519(neuron_identity)).get_principal_id();
     let neuron_id = with_neuron_for_tests(env, neuron_principal);
     with_trusted_neurons_following_neuron_for_tests(env, neuron_id, neuron_principal);

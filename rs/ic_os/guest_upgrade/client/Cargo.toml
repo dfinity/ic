@@ -49,4 +49,4 @@ ic-nervous-system-integration-tests = { path = "../../../nervous_system/integrat
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }

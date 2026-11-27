@@ -13,7 +13,7 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 candid = { workspace = true }
 pem = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 sev = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }

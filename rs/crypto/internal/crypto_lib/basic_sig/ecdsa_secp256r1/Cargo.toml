@@ -12,7 +12,6 @@ ic-secp256r1 = { path = "../../../../../../packages/ic-secp256r1" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
-rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 zeroize = { workspace = true }
@@ -22,4 +21,5 @@ assert_matches = { workspace = true }
 hex = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+rand = { workspace = true }
 wycheproof = { workspace = true, features = ["ecdsa"] }

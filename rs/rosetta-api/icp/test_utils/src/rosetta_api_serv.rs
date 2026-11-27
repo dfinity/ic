@@ -9,7 +9,7 @@ use slog::{info, warn};
 use crate::store_threshold_sig_pk;
 use ic_rosetta_api::models::Operation;
 use ic_types::messages::Blob;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
 use rosetta_core::request_types::MetadataRequest;
@@ -351,7 +351,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionSubmitResponse, RosettaError>, String> {
         // Shuffle the messages to check whether the server picks a
         // valid one to send to the IC.
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         for request in signed_transaction.requests.iter_mut() {
             request.1.shuffle(&mut rng);
         }

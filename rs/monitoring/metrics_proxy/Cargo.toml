@@ -24,7 +24,7 @@ opentelemetry_sdk = { workspace = true, features = ["metrics"] }
 pin-project-lite = { workspace = true }
 prometheus = { workspace = true }
 prometheus-parse = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }

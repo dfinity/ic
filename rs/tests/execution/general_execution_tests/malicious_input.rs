@@ -13,7 +13,7 @@ use ic_system_test_driver::driver::{
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
-use rand::RngCore;
+use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use reqwest::StatusCode;
 use std::time::{Duration, SystemTime};

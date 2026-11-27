@@ -97,7 +97,7 @@ use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
-use rand::RngCore;
+use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::{Into, TryFrom};
 use std::fmt;
@@ -762,7 +762,7 @@ impl ExecutionEnvironment {
         msg: SubnetMessage,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
-        rng: &mut dyn RngCore,
+        rng: &mut dyn Rng,
         chain_key_data: &ChainKeyData,
         replica_version: &ReplicaVersion,
         registry_settings: &RegistryExecutionSettings,
@@ -3835,7 +3835,7 @@ impl ExecutionEnvironment {
         payload: &[u8],
         request: &Request,
         state: &mut ReplicatedState,
-        rng: &mut dyn RngCore,
+        rng: &mut dyn Rng,
     ) -> Result<(), UserError> {
         match SetupInitialDKGArgs::decode(payload) {
             Err(err) => Err(err),
@@ -4112,7 +4112,7 @@ impl ExecutionEnvironment {
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
-        rng: &mut dyn RngCore,
+        rng: &mut dyn Rng,
         chain_key_data: &ChainKeyData,
         request: &Request,
     ) -> Result<(), UserError> {

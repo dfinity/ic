@@ -5,7 +5,7 @@
 //! a random number generator (ChaCha20).
 
 use core::fmt::{self, Debug};
-use rand::{CryptoRng, RngCore, SeedableRng};
+use rand::{CryptoRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -54,7 +54,7 @@ impl Seed {
     /// Create a Seed from a random number generator
     ///
     /// The security of the Seed depends on the security of the RNG
-    pub fn from_rng<R: CryptoRng + RngCore>(rng: &mut R) -> Self {
+    pub fn from_rng<R: CryptoRng>(rng: &mut R) -> Self {
         let mut rng_output = [0_u8; SEED_LEN];
         rng.fill_bytes(&mut rng_output);
         Self::new(&rng_output, "ic-crypto-seed-from-rng")

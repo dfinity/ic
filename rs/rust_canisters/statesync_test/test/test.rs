@@ -53,8 +53,8 @@ fn test_statesync_test_canisters() {
     let val = Decode!(&res, Result<u8, String>).unwrap();
     assert_eq!(
         val,
-        Ok(42),
-        "Queried 0th element of state vector, should be 42 for seed 33, was {:?}",
+        Ok(144),
+        "Queried 0th element of state vector, should be 144 for seed 33, was {:?}",
         res
     );
 }

@@ -3,7 +3,7 @@ use ic_secp256k1::{
     DerivationPath, KeyDecodingError, MasterPublicKeyId, PocketIcMasterPublicKeyId, PrivateKey,
     PublicKey,
 };
-use rand::Rng;
+use rand::RngExt;
 use rand_chacha::ChaCha20Rng;
 
 fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
@@ -12,7 +12,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
+    let seed = rand::rng().random::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));
@@ -45,28 +45,27 @@ impl ScriptedRng {
     }
 }
 
-impl rand::RngCore for ScriptedRng {
-    fn next_u32(&mut self) -> u32 {
+impl rand::TryRng for ScriptedRng {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
         panic!("ScriptedRng hands out bytes only through fill_bytes")
     }
 
-    fn next_u64(&mut self) -> u64 {
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
         panic!("ScriptedRng hands out bytes only through fill_bytes")
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         let end = self.consumed + dest.len();
         assert!(end <= self.bytes.len(), "ScriptedRng ran out of bytes");
         dest.copy_from_slice(&self.bytes[self.consumed..end]);
         self.consumed = end;
-    }
-
-    fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
-        panic!("ScriptedRng hands out bytes only through fill_bytes")
+        Ok(())
     }
 }
 
-impl rand::CryptoRng for ScriptedRng {}
+impl rand::TryCryptoRng for ScriptedRng {}
 
 #[test]
 fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), KeyDecodingError> {
@@ -115,7 +114,7 @@ fn should_handle_short_digests_like_zero_prefixed_ones_except_in_recovery() {
     let pk = sk.public_key();
 
     for len in (0..=17).chain([32]) {
-        let bytes = rng.r#gen::<[u8; 32]>();
+        let bytes = rng.random::<[u8; 32]>();
         let digest = &bytes[..len];
         let mut zero_prefixed = [0_u8; 32];
         zero_prefixed[32 - len..].copy_from_slice(digest);
@@ -298,7 +297,7 @@ fn generate_using_rng_draws_32_bytes_until_they_encode_a_scalar_in_range() {
 
 #[test]
 fn should_accept_ecdsa_signatures_that_we_generate() {
-    use rand::RngCore;
+    use rand::Rng;
 
     let rng = &mut test_rng();
 
@@ -335,8 +334,8 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
     for _trial in 0..1024 {
         let sk = PrivateKey::generate_using_rng(&mut rng);
 
-        let msg = rng.r#gen::<[u8; 32]>();
-        let ttr = rng.r#gen::<[u8; 32]>();
+        let msg = rng.random::<[u8; 32]>();
+        let ttr = rng.random::<[u8; 32]>();
 
         let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
 
@@ -354,7 +353,7 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
 
 #[test]
 fn should_accept_bip340_signatures_that_we_generate() {
-    use rand::RngCore;
+    use rand::Rng;
 
     let mut rng = test_rng();
 
@@ -373,7 +372,7 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
 #[test]
 fn should_accept_bip341_signatures_that_we_generate() {
-    use rand::RngCore;
+    use rand::Rng;
 
     let mut rng = test_rng();
 
@@ -396,14 +395,14 @@ fn should_accept_bip341_signatures_that_we_generate() {
 
 #[test]
 fn should_reject_truncated_bip340_and_bip341_signatures() {
-    use rand::RngCore;
+    use rand::Rng;
 
     let mut rng = test_rng();
 
     let sk = PrivateKey::generate_using_rng(&mut rng);
     let pk = sk.public_key();
 
-    let msg = rng.r#gen::<[u8; 32]>();
+    let msg = rng.random::<[u8; 32]>();
 
     // Every proper prefix of a valid signature is rejected, including those
     // shorter than the 32-byte encoding of r.
@@ -789,7 +788,7 @@ fn key_derivation_matches_bip32() {
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support
     let path = (0..255)
-        .map(|_| rng.r#gen::<u32>() & 0x7FFFFFFF)
+        .map(|_| rng.random::<u32>() & 0x7FFFFFFF)
         .collect::<Vec<u32>>();
 
     let master_key = PrivateKey::generate_using_rng(rng).public_key();
@@ -839,7 +838,7 @@ mod try_recovery_from_digest {
     use crate::test_rng;
     use ic_secp256k1::{PrivateKey, PublicKey, RecoveryError};
     use k256::ecdsa::{Signature, VerifyingKey};
-    use rand::Rng;
+    use rand::RngExt;
 
     #[test]
     fn should_fail_when_signature_not_parsable() {
@@ -861,7 +860,7 @@ mod try_recovery_from_digest {
         let rng = &mut test_rng();
         let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
-        let digest = rng.r#gen::<[u8; 32]>();
+        let digest = rng.random::<[u8; 32]>();
         let signature = private_key.sign_digest_with_ecdsa(&digest);
 
         let recid = public_key

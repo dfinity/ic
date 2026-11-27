@@ -21,7 +21,7 @@ use ic_crypto_internal_types::sign::threshold_sig::{
     public_coefficients::bls12_381::PublicCoefficientsBytes,
 };
 use ic_types::{NumberOfNodes, crypto::AlgorithmId, crypto::error::InvalidArgumentError};
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -254,7 +254,7 @@ pub fn decrypt(
 ///
 /// Note: The crypto::nizk API data types are inconsistent with those used in
 /// crypto::forward_secure so we need a thin wrapper to convert.
-fn prove_chunking<R: RngCore + CryptoRng>(
+fn prove_chunking<R: CryptoRng>(
     public_keys: &[G1Affine],
     ciphertext: &crypto::FsEncryptionCiphertext,
     plaintext_chunks: &[crypto::PlaintextChunks],
@@ -279,7 +279,7 @@ fn prove_chunking<R: RngCore + CryptoRng>(
 }
 
 /// Zero knowledge proof of correct sharing
-fn prove_sharing<R: RngCore + CryptoRng>(
+fn prove_sharing<R: CryptoRng>(
     receiver_fs_public_keys: &[G1Affine],
     public_coefficients: &[G2Affine],
     ciphertext: &crypto::FsEncryptionCiphertext,

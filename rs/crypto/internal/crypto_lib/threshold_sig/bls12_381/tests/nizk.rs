@@ -12,10 +12,10 @@ use dkg::random_oracles::UniqueHash;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::G1Bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, RngCore, SeedableRng};
+use rand::{CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-fn setup_sharing_instance_and_witness<R: RngCore + CryptoRng>(
+fn setup_sharing_instance_and_witness<R: CryptoRng>(
     rng: &mut R,
 ) -> (
     Vec<G1Affine>,
@@ -212,7 +212,7 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     );
 }
 
-fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
+fn setup_chunking_instance_and_witness<R: CryptoRng>(
     rng: &mut R,
 ) -> (ChunkingInstance, ChunkingWitness) {
     const NODE_COUNT: usize = 28;

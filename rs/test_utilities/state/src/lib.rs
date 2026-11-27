@@ -1246,7 +1246,7 @@ prop_compose! {
         request_queues in prop::collection::vec(prop::collection::vec(arbitrary::request(), 0..=max_requests_per_canister), 0..=max_canisters),
         num_receivers in arb_num_receivers(max_receivers)
     ) -> (ReplicatedState, VecDeque<VecDeque<RequestOrResponse>>, usize) {
-        use rand::{Rng, SeedableRng};
+        use rand::{RngExt, SeedableRng};
         use rand_chacha::ChaChaRng;
 
         let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_with_output_queues(own_subnet_id, request_queues, num_receivers);
@@ -1259,7 +1259,7 @@ prop_compose! {
 
         replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(time);
         let mut rng = ChaChaRng::seed_from_u64(time);
-        let rotation = rng.gen_range(0..raw_requests.len().max(1));
+        let rotation = rng.random_range(0..raw_requests.len().max(1));
         raw_requests.rotate_left(rotation);
 
         if let Some(requests) = subnet_queue_requests {

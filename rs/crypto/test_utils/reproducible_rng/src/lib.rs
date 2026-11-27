@@ -1,5 +1,6 @@
-use rand::{CryptoRng, Error, Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng, TryCryptoRng, TryRng};
 use rand_chacha::ChaCha20Rng;
+use std::convert::Infallible;
 
 /// Byte length of the seed type used in [`ReproducibleRng`].
 const SEED_LEN: usize = 32;
@@ -24,7 +25,7 @@ impl ReproducibleRng {
     /// Randomly generates a seed and prints it to `stdout`.
     pub fn new() -> Self {
         let mut seed = [0_u8; SEED_LEN];
-        rand::thread_rng().fill(&mut seed);
+        rand::rng().fill(&mut seed);
         let rng = Self::from_seed_internal(seed);
         println!("{rng:?}");
         rng
@@ -65,22 +66,23 @@ impl Default for ReproducibleRng {
     }
 }
 
-impl RngCore for ReproducibleRng {
-    fn next_u32(&mut self) -> u32 {
-        self.rng.next_u32()
+// Implementing `TryRng` with an infallible error type automatically implements
+// `Rng` and its extension trait `RngExt`, and `TryCryptoRng` adds `CryptoRng`.
+impl TryRng for ReproducibleRng {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        Ok(self.rng.next_u32())
     }
 
-    fn next_u64(&mut self) -> u64 {
-        self.rng.next_u64()
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        Ok(self.rng.next_u64())
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.rng.fill(dest)
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        self.rng.try_fill_bytes(dest)
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Infallible> {
+        self.rng.fill_bytes(dst);
+        Ok(())
     }
 }
 
-impl CryptoRng for ReproducibleRng {}
+impl TryCryptoRng for ReproducibleRng {}

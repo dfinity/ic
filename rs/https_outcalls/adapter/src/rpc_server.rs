@@ -27,7 +27,7 @@ use ic_https_outcalls_service::{
 use ic_logger::{ReplicaLogger, debug, info};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -172,7 +172,7 @@ impl CanisterHttp {
     ) -> Result<http::Response<Incoming>, String> {
         let mut socks_proxy_addrs = socks_proxy_addrs.to_owned();
 
-        socks_proxy_addrs.shuffle(&mut thread_rng());
+        socks_proxy_addrs.shuffle(&mut rand::rng());
 
         let mut last_error = None;
 
@@ -537,20 +537,20 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::distributions::Alphanumeric;
-    use rand::{Rng, thread_rng};
+    use rand::RngExt;
+    use rand::distr::Alphanumeric;
 
     #[test]
     // Verify that hyper does not panic within header limits.
     fn test_max_headers() {
         let mut header_vec = Vec::new();
         for _ in 0..HEADERS_LIMIT {
-            let name: String = thread_rng()
+            let name: String = rand::rng()
                 .sample_iter(&Alphanumeric)
                 .take(HEADER_NAME_VALUE_LIMIT)
                 .map(char::from)
                 .collect();
-            let value: String = thread_rng()
+            let value: String = rand::rng()
                 .sample_iter(&Alphanumeric)
                 .take(HEADER_NAME_VALUE_LIMIT)
                 .map(char::from)

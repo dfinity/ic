@@ -1316,12 +1316,12 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_protobuf::proxy::ProxyDecodeError;
     use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
-    use rand::Rng;
+    use rand::RngExt;
 
     fn random_transcript_id(rng: &mut ReproducibleRng) -> IDkgTranscriptId {
-        let id = rng.r#gen();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
-        let height = Height::from(rng.r#gen::<u64>());
+        let id = rng.random();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.random::<u64>()));
+        let height = Height::from(rng.random::<u64>());
 
         IDkgTranscriptId::new(subnet, id, height)
     }

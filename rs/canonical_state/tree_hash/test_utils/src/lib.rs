@@ -9,7 +9,7 @@ use ic_crypto_tree_hash::{
 use ic_crypto_tree_hash_test_utils::{
     merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
 };
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -24,7 +24,7 @@ const EMPTY_HASH: Digest = Digest([
 /// with the old way of generating witnesses.
 ///
 /// Also check that the new and old way of computing hash trees are equivalent.
-pub fn test_membership_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
+pub fn test_membership_witness<R: CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
     let hash_tree = hash_lazy_tree(&as_lazy(full_tree), None).unwrap();
     let witness_gen = build_witness_gen(full_tree);
 

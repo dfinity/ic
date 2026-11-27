@@ -20,7 +20,7 @@ use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::crypto::AlgorithmId;
 use ic_types::time::GENESIS;
 use mockall::Sequence;
-use rand::Rng;
+use rand::RngExt;
 use strum::IntoEnumIterator;
 
 #[test]
@@ -210,8 +210,8 @@ fn should_multi_sign_and_verify_with_generated_key() {
         .expect("failed to generate keys");
     let key_id = KeyId::from(&csp_pub_key);
 
-    let msg_len: usize = rng.gen_range(0..1024);
-    let msg: Vec<u8> = (0..msg_len).map(|_| rng.r#gen::<u8>()).collect();
+    let msg_len: usize = rng.random_range(0..1024);
+    let msg: Vec<u8> = (0..msg_len).map(|_| rng.random::<u8>()).collect();
 
     let verifier = Csp::builder_for_test()
         .with_vault(

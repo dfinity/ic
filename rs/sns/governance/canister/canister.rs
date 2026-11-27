@@ -58,7 +58,7 @@ use ic_sns_governance_api::pb::v1::{
     governance_error::ErrorType,
     topics::{ListTopicsRequest, ListTopicsResponse},
 };
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,

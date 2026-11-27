@@ -27,8 +27,7 @@ use ic_types::messages::{
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
-use rand::{CryptoRng, Rng, SeedableRng, rngs::StdRng};
-use rand_0_10::SeedableRng as _;
+use rand::{CryptoRng, RngExt, SeedableRng, rngs::StdRng};
 use reqwest::{StatusCode, Url};
 use slog::debug;
 
@@ -84,11 +83,11 @@ enum GenericIdentityType<'a> {
 }
 
 impl<'a> GenericIdentityType<'a> {
-    fn random_incl_canister<R: Rng + CryptoRng>(
+    fn random_incl_canister<R: CryptoRng>(
         canister: &'a UniversalCanister<'a>,
         rng: &mut R,
     ) -> Self {
-        match rng.r#gen::<usize>() % 7 {
+        match rng.random::<u64>() % 7 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
@@ -99,8 +98,8 @@ impl<'a> GenericIdentityType<'a> {
         }
     }
 
-    fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        match rng.r#gen::<usize>() % 6 {
+    fn random<R: CryptoRng>(rng: &mut R) -> Self {
+        match rng.random::<u64>() % 6 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::WebAuthnEcdsaSecp256r1,
@@ -130,7 +129,7 @@ struct GenericIdentity<'a> {
 }
 
 impl<'a> GenericIdentity<'a> {
-    fn new<R: Rng + CryptoRng>(typ: GenericIdentityType<'a>, rng: &mut R) -> Self {
+    fn new<R: CryptoRng>(typ: GenericIdentityType<'a>, rng: &mut R) -> Self {
         let (inner, public_key_der) = match typ {
             GenericIdentityType::Ed25519 => {
                 let sk = ic_ed25519::PrivateKey::generate_using_rng(rng);
@@ -159,8 +158,7 @@ impl<'a> GenericIdentity<'a> {
                 (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
             GenericIdentityType::WebAuthnRsaPkcs1 => {
-                // `rsa` takes a rand 0.10 RNG.
-                let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
+                let mut rsa_rng = StdRng::from_seed(rng.random());
                 let sk = rsa::PrivateKey::new(&mut rsa_rng, 2048).expect("RSA keygen failed");
                 let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::PublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
@@ -1520,7 +1518,7 @@ pub fn requests_with_canister_signature(env: TestEnv) {
 
             ///////////////////////////////////////////////////////////////////
             // Empty and non-empty seeds should work
-            for seed in [vec![], random_n_bytes(rng.gen_range(1..=32), rng)] {
+            for seed in [vec![], random_n_bytes(rng.random_range(1..=32), rng)] {
                 // Single canister identity for sender and signer, no delegations
                 let id = GenericIdentity::new_canister(CanisterSigner::new(&c1, seed.clone()));
                 let test_info = TestInformation {
@@ -1629,7 +1627,7 @@ pub fn requests_with_canister_signature(env: TestEnv) {
             // signed by an invalid root key
             let id = GenericIdentity::new_canister(
                 CanisterSigner::new(&c1, b"seed".to_vec())
-                    .with_random_certificate_signature(rng.r#gen()),
+                    .with_random_certificate_signature(rng.random()),
             );
             let test_info = TestInformation {
                 url: node_url.clone(),
@@ -1746,11 +1744,11 @@ fn create_delegations_with_permissions(
     delegations
 }
 
-fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> CanisterId {
-    CanisterId::from_u64(rng.r#gen::<u64>())
+fn random_canister_id<R: CryptoRng>(rng: &mut R) -> CanisterId {
+    CanisterId::from_u64(rng.random::<u64>())
 }
 
-fn random_canister_ids<R: Rng + CryptoRng>(cnt: usize, rng: &mut R) -> Vec<CanisterId> {
+fn random_canister_ids<R: CryptoRng>(cnt: usize, rng: &mut R) -> Vec<CanisterId> {
     let mut result = Vec::with_capacity(cnt);
 
     for _ in 0..cnt {
@@ -1760,7 +1758,7 @@ fn random_canister_ids<R: Rng + CryptoRng>(cnt: usize, rng: &mut R) -> Vec<Canis
     result
 }
 
-fn random_canister_ids_including<R: Rng + CryptoRng>(
+fn random_canister_ids_including<R: CryptoRng>(
     canister_id: &CanisterId,
     total_cnt: usize,
     include_cnt: usize,
@@ -2529,11 +2527,11 @@ async fn perform_read_state_call_with_expiry(
     .await
 }
 
-fn random_n_bytes<R: Rng + CryptoRng>(n: u32, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.r#gen::<u8>()).collect()
+fn random_n_bytes<R: CryptoRng>(n: u32, rng: &mut R) -> Vec<u8> {
+    (0..n).map(|_| rng.random::<u8>()).collect()
 }
 
-fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
+fn resign_certificate_with_random_signature<R: CryptoRng>(
     certificate_cbor: &[u8],
     rng: &mut R,
 ) -> Vec<u8> {
@@ -2550,7 +2548,7 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
     let previous_signature = certificate.signature.clone();
     assert_eq!(previous_signature.len(), 48);
 
-    let random_g1 = G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>());
+    let random_g1 = G1Affine::hash("bls_signature", &rng.random::<[u8; 32]>());
     certificate.signature = random_g1.serialize().to_vec();
     assert_eq!(certificate.signature.len(), 48);
     assert_ne!(certificate.signature, previous_signature);

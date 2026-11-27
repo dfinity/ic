@@ -3,7 +3,7 @@ use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::{api::*, types::*};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, RngExt};
 
 const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &str = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
@@ -12,12 +12,12 @@ fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
     G1Projective::hash(DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG, msg)
 }
 
-fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
+fn valid_bls_12_381_signature<R: CryptoRng>(
     rng: &mut R,
 ) -> (Vec<u8>, CombinedSignatureBytes, PublicKeyBytes) {
     let secret_key = Scalar::random(rng);
     let public_key = G2Affine::generator() * &secret_key;
-    let msg = rng.r#gen::<[u8; 32]>().to_vec();
+    let msg = rng.random::<[u8; 32]>().to_vec();
     let msg_hash = hash_message_to_g1(&msg);
     let signature = msg_hash * secret_key;
 
@@ -27,7 +27,7 @@ fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
     (msg, signature, public_key)
 }
 
-fn invalid_bls_12_381_signature<R: RngCore + CryptoRng>(
+fn invalid_bls_12_381_signature<R: CryptoRng>(
     rng: &mut R,
 ) -> (Vec<u8>, CombinedSignatureBytes, PublicKeyBytes) {
     let (mut msg, sig, pk) = valid_bls_12_381_signature(rng);

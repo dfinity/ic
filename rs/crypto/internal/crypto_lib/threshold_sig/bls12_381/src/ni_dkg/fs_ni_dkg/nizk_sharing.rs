@@ -5,7 +5,7 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofShare;
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 use std::vec::Vec;
 
 /// Domain separators for the zk proof of sharing
@@ -185,7 +185,7 @@ fn sharing_proof_challenge(hashed_instance: &Scalar, first_move: &FirstMoveShari
 /// Create a proof of correct sharing
 ///
 /// See section 6.4 of <https://eprint.iacr.org/2021/339.pdf>
-pub fn prove_sharing<R: RngCore + CryptoRng>(
+pub fn prove_sharing<R: CryptoRng>(
     instance: &SharingInstance,
     witness: &SharingWitness,
     rng: &mut R,

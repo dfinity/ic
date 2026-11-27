@@ -44,7 +44,7 @@ use icrc_ledger_types::{
     icrc1::account::Account,
     icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
 };
-use rand::{RngCore, SeedableRng, prelude::StdRng};
+use rand::{Rng, SeedableRng, prelude::StdRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},

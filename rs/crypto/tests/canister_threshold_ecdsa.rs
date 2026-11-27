@@ -33,7 +33,7 @@ mod sign_share {
     #[test]
     fn should_create_signature_share_successfully_with_new_key() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -51,8 +51,8 @@ mod sign_share {
 
             let caller = PrincipalId::new_user_test_id(1);
             let derivation_path = vec![];
-            let hashed_message = rng.r#gen::<[u8; 32]>();
-            let seed = rng.r#gen::<[u8; 32]>();
+            let hashed_message = rng.random::<[u8; 32]>();
+            let seed = rng.random::<[u8; 32]>();
 
             let inputs = ThresholdEcdsaSigInputs::new(
                 &caller,
@@ -78,7 +78,7 @@ mod sign_share {
         let rng = &mut reproducible_rng();
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) = env
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -95,8 +95,8 @@ mod sign_share {
 
             let caller = PrincipalId::new_user_test_id(1);
             let derivation_path = vec![];
-            let hashed_message = rng.r#gen::<[u8; 32]>();
-            let seed = rng.r#gen::<[u8; 32]>();
+            let hashed_message = rng.random::<[u8; 32]>();
+            let seed = rng.random::<[u8; 32]>();
 
             let inputs = ThresholdEcdsaSigInputs::new(
                 &caller,
@@ -124,7 +124,7 @@ mod sign_share {
     #[test]
     fn should_fail_to_sign_when_input_transcripts_not_retained() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -142,8 +142,8 @@ mod sign_share {
 
             let caller = PrincipalId::new_user_test_id(1);
             let derivation_path = vec![];
-            let hashed_message = rng.r#gen::<[u8; 32]>();
-            let seed = rng.r#gen::<[u8; 32]>();
+            let hashed_message = rng.random::<[u8; 32]>();
+            let seed = rng.random::<[u8; 32]>();
 
             let inputs = ThresholdEcdsaSigInputs::new(
                 &caller,
@@ -263,13 +263,13 @@ mod sign_share {
         let derivation_path = vec![];
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let hashed_message = rng.r#gen::<[u8; 32]>();
-            let seed = rng.r#gen::<[u8; 32]>();
+            let hashed_message = rng.random::<[u8; 32]>();
+            let seed = rng.random::<[u8; 32]>();
 
             const CHACHA_SEED_LEN: usize = 32;
             let mut runner = TestRunner::new_with_rng(
                 Config::with_cases(10),
-                TestRng::from_seed(RngAlgorithm::ChaCha, &rng.r#gen::<[u8; CHACHA_SEED_LEN]>()),
+                TestRng::from_seed(RngAlgorithm::ChaCha, &rng.random::<[u8; CHACHA_SEED_LEN]>()),
             );
             // retain_active_transcripts is a no-op when the parameter active_transcripts is empty
             let result = runner.run(
@@ -575,7 +575,7 @@ mod verify_sig_share {
         }
     }
 
-    fn signature_share_from_random_receiver<R: RngCore + CryptoRng>(
+    fn signature_share_from_random_receiver<R: Rng + CryptoRng>(
         env: &CanisterThresholdSigTestEnvironment,
         inputs: &ThresholdEcdsaSigInputs,
         rng: &mut R,
@@ -850,7 +850,7 @@ mod get_tecdsa_master_public_key {
     #[test]
     fn should_return_ecdsa_public_key() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -878,7 +878,7 @@ mod get_tecdsa_master_public_key {
     #[test]
     fn should_derive_equal_ecdsa_public_keys() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -909,7 +909,7 @@ mod get_tecdsa_master_public_key {
     #[test]
     fn should_derive_differing_ecdsa_public_keys() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);

@@ -5,7 +5,7 @@ mod tests;
 use ic_base_types::PrincipalId;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{error::Error, sync::Arc};
 
@@ -31,8 +31,8 @@ pub struct Ed25519KeyPair {
 }
 
 impl Ed25519KeyPair {
-    pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let mut rng = ChaCha20Rng::from_seed(rng.r#gen());
+    pub fn generate<R: CryptoRng>(rng: &mut R) -> Self {
+        let mut rng = ChaCha20Rng::from_seed(rng.random());
         let key = ic_ed25519::PrivateKey::generate_using_rng(&mut rng);
         Self {
             secret_key: key.serialize_raw(),
@@ -64,8 +64,8 @@ impl Secp256k1KeyPair {
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
         self.sk.sign_message_with_ecdsa(msg).to_vec()
     }
-    pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let mut rng = ChaCha20Rng::from_seed(rng.r#gen());
+    pub fn generate<R: CryptoRng>(rng: &mut R) -> Self {
+        let mut rng = ChaCha20Rng::from_seed(rng.random());
         let sk = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
         Self { sk, pk }

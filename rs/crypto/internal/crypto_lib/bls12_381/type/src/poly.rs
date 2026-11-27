@@ -1,5 +1,5 @@
 use crate::Scalar;
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 
 /// A Polynomial whose coefficients are scalars in an elliptic curve group
 ///
@@ -37,7 +37,7 @@ impl Polynomial {
     }
 
     /// Creates a random polynomial with the specified number of coefficients
-    pub fn random<R: CryptoRng + RngCore>(num_coefficients: usize, rng: &mut R) -> Self {
+    pub fn random<R: CryptoRng>(num_coefficients: usize, rng: &mut R) -> Self {
         let mut coefficients = Vec::with_capacity(num_coefficients);
 
         for _ in 0..num_coefficients {

@@ -25,7 +25,7 @@ use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{DEFAULT_TOKEN_SYMBOL, convert, errors, errors::ApiError};
 use ic_types::{PrincipalId, messages::Blob, time};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 use rosetta_api_serv::RosettaApiHandle;
 use rosetta_core::convert::principal_id_from_public_key;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
@@ -311,7 +311,7 @@ where
         .collect();
 
     // The order of signatures shouldn't matter.
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     signatures.shuffle(&mut rng);
 
     ros.construction_combine(payloads.unsigned_transaction, signatures)

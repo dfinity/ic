@@ -44,7 +44,7 @@ use ic_types::{Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -1548,5 +1548,5 @@ fn pass_log_sampling() -> bool {
     /// sample them.
     const LOG_PASS_THROUGH_RATE: f64 = 0.05;
 
-    thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
+    rand::rng().random_bool(LOG_PASS_THROUGH_RATE)
 }

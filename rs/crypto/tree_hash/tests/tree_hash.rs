@@ -3,8 +3,7 @@ use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::*;
 use ic_crypto_tree_hash_test_utils::*;
-use rand::Rng;
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngExt};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -1757,7 +1756,7 @@ fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
     let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 1];
 
     let rng = &mut reproducible_rng();
-    let target_index = rng.gen_range(0..TREE_WIDTH);
+    let target_index = rng.random_range(0..TREE_WIDTH);
 
     let mut paths = Vec::with_capacity(TREE_WIDTH);
 
@@ -2936,7 +2935,7 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data() {
     }
 }
 
-fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + CryptoRng>(
+fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: CryptoRng>(
     labeled_tree: &LabeledTree<Vec<u8>>,
     rng: &mut R,
 ) {
@@ -2992,7 +2991,7 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + Cr
         );
 
         // `NUMBER_OF_RANDOM_LEAVES` *consecutive* random indexes
-        let start: usize = rng.gen_range(0..num_selected_leaves);
+        let start: usize = rng.random_range(0..num_selected_leaves);
         let indexes: Vec<_> = (start..start + num_selected_leaves).collect();
         witness_for_a_labeled_tree_does_not_contain_private_data_multileaf(
             labeled_tree,
@@ -3007,7 +3006,7 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + Cr
 }
 
 /// Combines paths to multiple leaves/empty subtrees in the test.
-fn witness_for_a_labeled_tree_does_not_contain_private_data_multileaf<R: RngCore + CryptoRng>(
+fn witness_for_a_labeled_tree_does_not_contain_private_data_multileaf<R: CryptoRng>(
     labeled_tree: &LabeledTree<Vec<u8>>,
     leaf_indexes: &[usize],
     leaf_partial_trees: &[LabeledTree<Vec<u8>>],
@@ -3109,7 +3108,7 @@ fn pruning_depth_0_tree_works_correctly() {
             (LabeledTree::SubTree(FlatMap::new()), empty_subtree_hash()),
         ]
     }
-    use rand::Rng;
+    use rand::RngExt;
     let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
 
@@ -3127,8 +3126,8 @@ fn pruning_depth_0_tree_works_correctly() {
         // generate 10 random invalid trees and check that we cannot 1) generate
         // a witness and 2) recompute the hash using the wrong tree
         for _ in 0..10 {
-            let random_tree_desired_size: u32 = rng.gen_range(1..100);
-            let min_leaves = rng.gen_range(0..10);
+            let random_tree_desired_size: u32 = rng.random_range(1..100);
+            let min_leaves = rng.random_range(0..10);
             let other_labeled_tree = new_random_labeled_tree(
                 rng,
                 RANDOM_TREE_MAX_DEPTH,
@@ -3182,11 +3181,11 @@ fn pruning_depth_0_tree_works_correctly() {
 
 #[test]
 fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
-    use rand::Rng;
+    use rand::RngExt;
     let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
-    let random_tree_desired_size: u32 = rng.gen_range(1..100);
-    let min_leaves = rng.gen_range(0..10);
+    let random_tree_desired_size: u32 = rng.random_range(1..100);
+    let min_leaves = rng.random_range(0..10);
     const WITNESS: Witness = Witness::Pruned {
         digest: Digest([0_u8; Sha256::DIGEST_LEN]),
     };

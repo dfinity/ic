@@ -150,21 +150,21 @@ struct VetKDTestClient {
 
 impl VetKDTestClient {
     fn new<R: Rng + CryptoRng>(rng: &mut R, server: &VetKDTestServer) -> Self {
-        let caller = canister_test_id(rng.r#gen::<u64>());
-        let context = rng.r#gen::<[u8; 16]>().to_vec();
-        let input = rng.r#gen::<[u8; 32]>().to_vec();
+        let caller = canister_test_id(rng.random::<u64>());
+        let context = rng.random::<[u8; 16]>().to_vec();
+        let input = rng.random::<[u8; 32]>().to_vec();
 
         let dk = server.derive_key(&caller, &context);
 
-        let tsk = ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
+        let tsk = ic_vetkeys::TransportSecretKey::from_seed(rng.random::<[u8; 32]>().to_vec())
             .expect("failed to create transport secret key");
 
         let tpk = tsk.public_key();
 
         Self {
             request_id: RequestId {
-                callback_id: CallbackId::from(rng.r#gen::<u64>()),
-                height: Height::new(rng.r#gen::<u64>()),
+                callback_id: CallbackId::from(rng.random::<u64>()),
+                height: Height::new(rng.random::<u64>()),
             },
             caller,
             context,
@@ -282,8 +282,8 @@ mod create_encrypted_key_share {
 }
 
 fn flip_random_bit<R: Rng + CryptoRng>(v: &mut [u8], rng: &mut R) {
-    let idx = rng.gen_range(0..v.len());
-    v[idx] ^= 1 << (rng.r#gen::<usize>() % 8);
+    let idx = rng.random_range(0..v.len());
+    v[idx] ^= 1 << (rng.random::<u64>() as usize % 8);
 }
 
 fn corrupt_share_contents<R: Rng + CryptoRng>(share: &mut VetKdEncryptedKeyShare, rng: &mut R) {
@@ -306,7 +306,7 @@ fn modify_random_share<R: Rng + CryptoRng, F: FnOnce(&mut VetKdEncryptedKeyShare
     rng: &mut R,
     modify: F,
 ) {
-    let idx = rng.gen_range(0..shares.len());
+    let idx = rng.random_range(0..shares.len());
 
     modify(shares.iter_mut().nth(idx).expect("Missing share").1, rng);
 }
@@ -319,7 +319,7 @@ fn modify_n_random_shares<R: Rng + CryptoRng, F: Fn(&mut VetKdEncryptedKeyShare,
 ) {
     assert!(shares.len() >= n);
 
-    for node_id in shares.keys().copied().choose_multiple(rng, n) {
+    for node_id in shares.keys().copied().sample(rng, n) {
         let share = shares.get_mut(&node_id).expect("Missing share");
         modify(share, rng);
     }
@@ -569,7 +569,7 @@ mod combine_shares {
         // must work together, so we need two shares to spare.
         let threshold = server.config.threshold().get().get() as usize;
         assert!(shares.len() >= threshold + 2);
-        let victims = shares.keys().copied().choose_multiple(&mut rng, 2);
+        let victims = shares.keys().copied().sample(&mut rng, 2);
         let [malformed, invalid] = victims.as_slice() else {
             panic!("Missing shares");
         };

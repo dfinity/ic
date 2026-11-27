@@ -21,7 +21,7 @@ use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
 use rand::Rng;
-use rand::RngCore;
+use rand::RngExt;
 use rand::SeedableRng;
 use rosetta_core::models::Secp256k1KeyPair;
 use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
@@ -140,7 +140,7 @@ fn operation_strategy<Tokens: TokensType>(
             prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
             prop::option::of(Just({
                 (SystemTime::now()
-                    + Duration::from_secs(rand::thread_rng().gen_range(0..=u32::MAX as u64)))
+                    + Duration::from_secs(rand::rng().random_range(0..=u32::MAX as u64)))
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64
@@ -251,8 +251,8 @@ pub fn transaction_strategy<Tokens: TokensType>(
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
         let day_in_sec = 24 * 60 * 60 - 60 * 5;
         let start = end - Duration::from_secs(day_in_sec);
-        let mut rng = rand::thread_rng(); // initialize random number generator
-        let random_duration = Duration::from_secs(rng.gen_range(0..=day_in_sec));
+        let mut rng = rand::rng(); // initialize random number generator
+        let random_duration = Duration::from_secs(rng.random_range(0..=day_in_sec));
         let random_time = start + random_duration; // calculate the random time
         random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
     }));
@@ -279,8 +279,8 @@ pub fn blocks_strategy<Tokens: TokensType>(
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
         let day_in_sec = 24 * 60 * 60 - 60 * 5;
         let start = end - Duration::from_secs(day_in_sec);
-        let mut rng = rand::thread_rng(); // initialize random number generator
-        let random_duration = Duration::from_secs(rng.gen_range(0..=day_in_sec));
+        let mut rng = rand::rng(); // initialize random number generator
+        let random_duration = Duration::from_secs(rng.random_range(0..=day_in_sec));
         let random_time = start + random_duration; // calculate the random time
         random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
     });
@@ -1737,7 +1737,7 @@ mod tests {
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
-    use rand::RngCore;
+    use rand::Rng;
     use rosetta_core::models::Ed25519KeyPair;
     use rosetta_core::models::RosettaSupportedKeyPair;
     use rosetta_core::objects::PublicKey;

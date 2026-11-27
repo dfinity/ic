@@ -8,7 +8,6 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-rand = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
 attestation = { path = "../../sev/attestation" }
@@ -19,4 +18,5 @@ sev_guest = { path = "../../sev/guest" }
 sev = { workspace = true }
 
 [dev-dependencies]
+rand = { workspace = true }
 sev_guest_testing = { path = "../../sev/guest/testing" }

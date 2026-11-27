@@ -9,7 +9,7 @@ use ic_types::CanisterId;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::crypto::{AlgorithmId, CanisterSig, CanisterSigOf, SignableMock, UserPublicKey};
 use ic_types::messages::Blob;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 const GLOBAL_CANISTER_ID: CanisterId = canister_id(1);
@@ -24,13 +24,13 @@ pub struct CanisterSigTestData {
 
 /// Initializes an environment for benchmarking or testing canister signature verification.
 /// The message, seed and keys are randomly generated based on the randomness from `rng`.
-pub fn new_valid_sig_and_crypto_component<R: Rng + RngCore + CryptoRng>(
+pub fn new_valid_sig_and_crypto_component<R: Rng + CryptoRng>(
     rng: &mut R,
     with_delegation: bool,
 ) -> CanisterSigTestData {
     let cert = new_random_cert(rng, with_delegation);
     let temp_crypto = TempCryptoComponent::builder()
-        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
 
     let signable_msg = SignableMock {

@@ -1,7 +1,7 @@
 use hex_literal::hex;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{Rng, RngCore};
+use rand::{Rng, RngExt};
 
 #[test]
 fn not_affected_by_point_serialization_bug() -> CanisterThresholdResult<()> {
@@ -391,7 +391,7 @@ fn test_point_mul_by_node_index() -> CanisterThresholdResult<()> {
         node_indices.push(u32::MAX - 1);
         node_indices.push(u32::MAX);
         for _ in 0..100 {
-            node_indices.push(rng.r#gen());
+            node_indices.push(rng.random());
         }
 
         for node_index in node_indices {
@@ -537,9 +537,9 @@ fn test_mul_3_is_correct() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let p = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-p")?;
-        let q = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-q")?;
-        let r = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-r")?;
+        let p = EccPoint::hash_to_point(curve_type, &rng.random::<[u8; 32]>(), b"mul3-p")?;
+        let q = EccPoint::hash_to_point(curve_type, &rng.random::<[u8; 32]>(), b"mul3-q")?;
+        let r = EccPoint::hash_to_point(curve_type, &rng.random::<[u8; 32]>(), b"mul3-r")?;
 
         for _iteration in 0..100 {
             let s0 = EccScalar::random(curve_type, rng);

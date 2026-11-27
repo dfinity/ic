@@ -4,10 +4,10 @@
 //!
 //!     use ic_nervous_system_temporary::Temporary;
 //!     use std::cell::Cell;
-//!     use rand::Rng;
+//!     use rand::RngExt;
 //!
 //!     thread_local! {
-//!         static IS_FOO_ENABLED: Cell<bool> = Cell::new(rand::thread_rng().r#gen());
+//!         static IS_FOO_ENABLED: Cell<bool> = Cell::new(rand::rng().random());
 //!     }
 //!
 //!     pub fn is_foo_enabled() -> bool {

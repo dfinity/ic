@@ -353,14 +353,14 @@ fn changelog_entry_to_protobuf(ce: ChangelogEntry) -> PbChangelogEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::prelude::*;
+    use rand::{Rng, RngExt, rngs::ThreadRng};
     use tempfile::TempDir;
 
     #[test]
     fn empty_changelog_after_clear() {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let changelog = get_random_changelog(1, &mut rng);
 
         store
@@ -394,7 +394,7 @@ mod tests {
     fn storing_at_version_0_fails() {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let changelog = get_random_changelog(1, &mut rng);
 
         store
@@ -406,7 +406,7 @@ mod tests {
     fn can_extend_and_restore() {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let mut changelog = get_random_changelog(200, &mut rng);
         changelog.iter().enumerate().for_each(|(i, c)| {
@@ -442,7 +442,7 @@ mod tests {
         // some pseudo random entries
         (0..n)
             .map(|_i| {
-                let k = rng.r#gen::<usize>() % 64 + 2;
+                let k = rng.random::<u64>() as usize % 64 + 2;
                 (0..(k + 2)).map(|k| key_mutation(k, rng)).collect()
             })
             .collect()
@@ -450,7 +450,7 @@ mod tests {
 
     fn key_mutation(k: usize, rng: &mut ThreadRng) -> KeyMutation {
         let s = rng.next_u64() & 64;
-        let set: bool = rng.r#gen();
+        let set: bool = rng.random();
         KeyMutation {
             key: k.to_string(),
             value: if set {

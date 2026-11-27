@@ -34,7 +34,7 @@ use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use qrcode::{QrCode, render::unicode};
-use rand::prelude::*;
+use rand::seq::SliceRandom;
 use std::{
     net::Ipv6Addr,
     sync::Arc,
@@ -616,7 +616,7 @@ impl NodeRegistration {
                 .collect::<Vec<Url>>()
         })?;
 
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         urls.shuffle(&mut rng);
         urls.pop()
     }
@@ -662,7 +662,7 @@ impl NodeRegistration {
             })
             .collect();
 
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         urls_and_configs.shuffle(&mut rng);
         urls_and_configs.pop()
     }

@@ -17,7 +17,7 @@ prost = { workspace = true }
 tokio = { workspace = true }
 
 [target.'cfg(target_family = "unix")'.dependencies]
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 thiserror = { workspace = true }

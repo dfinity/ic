@@ -11,7 +11,7 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::AlgorithmId;
 use proptest::prelude::*;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng, RngExt, SeedableRng};
 use rand_chacha::ChaChaRng;
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
@@ -60,7 +60,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     .iter()
                     .map(|secret_key| {
                         loop {
-                            let key_id = KeyId::from(self.rng_write_lock().r#gen::<[u8; 32]>());
+                            let key_id = KeyId::from(self.rng_write_lock().random::<[u8; 32]>());
                             let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
                             let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
                             if result.is_ok() {
@@ -90,7 +90,7 @@ proptest! {
     fn test_threshold_scheme_with_basic_keygen(seed: [u8;32], message in proptest::collection::vec(any::<u8>(), 0..100)) {
         let rng = &mut ChaChaRng::from_seed(seed);
         let csp_vault  = {
-            let csprng = ChaChaRng::from_seed(rng.r#gen::<[u8; 32]>());
+            let csprng = ChaChaRng::from_seed(rng.random::<[u8; 32]>());
             LocalCspVault::builder_for_test().with_rng(csprng).build_into_arc()
         };
         test_utils::threshold_sig::test_threshold_scheme_with_basic_keygen(Seed::from_rng(rng), csp_vault, &message);

@@ -51,7 +51,7 @@ itertools = { workspace = true }
 leb128 = { workspace = true }
 maplit = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rejoin-test-lib = { path = "../message_routing/rejoin_test_lib" }

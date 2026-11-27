@@ -40,7 +40,6 @@ rust_test(
         "//rs/registry/helpers",
         "//rs/validator/http_request_test_utils",
         "@crate_index//:assert_matches",
-        "@crate_index//:rand",
         "@crate_index//:strum",
     ],
 )

@@ -16,7 +16,7 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng, RngExt};
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
@@ -47,7 +47,7 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
     }
 }
 
-fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_sign_share<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -96,7 +96,7 @@ fn sign_share(signer: &Node, inputs: &ThresholdEcdsaSigInputs) -> ThresholdEcdsa
     })
 }
 
-fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_sig_share<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -163,7 +163,7 @@ fn verify_sig_share(
     })
 }
 
-fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_combine_sig_shares<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -221,7 +221,7 @@ fn combine_sig_shares<R: Rng + CryptoRng + Sync + Send + 'static>(
     })
 }
 
-fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_combined_sig<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -288,8 +288,8 @@ fn random_sig_inputs<R: Rng>(rng: &mut R) -> (ExtendedDerivationPath, Vec<u8>, R
         caller: PrincipalId::new_user_test_id(1),
         derivation_path: vec![],
     };
-    let hashed_message = rng.r#gen::<[u8; 32]>();
-    let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
+    let hashed_message = rng.random::<[u8; 32]>();
+    let seed = Randomness::from(rng.random::<[u8; 32]>());
     (derivation_path, hashed_message.to_vec(), seed)
 }
 

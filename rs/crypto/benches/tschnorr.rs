@@ -12,7 +12,7 @@ use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner}
 use ic_types::Randomness;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::ExtendedDerivationPath;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng, RngExt};
 use strum::IntoEnumIterator;
 
 const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
@@ -42,7 +42,7 @@ fn crypto_tschnorr_benchmarks(criterion: &mut Criterion) {
     }
 }
 
-fn bench_create_sig_share<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_create_sig_share<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -85,7 +85,7 @@ fn bench_create_sig_share<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_sig_share<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -139,7 +139,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_combine_sig_shares<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -180,7 +180,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
     });
 }
 
-fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
+fn bench_verify_combined_sig<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     vault_type: VaultType,
@@ -230,8 +230,8 @@ fn random_sig_inputs<R: Rng>(rng: &mut R) -> (ExtendedDerivationPath, Vec<u8>, R
         caller: PrincipalId::new_user_test_id(1),
         derivation_path: vec![],
     };
-    let message = rng.r#gen::<[u8; 32]>();
-    let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
+    let message = rng.random::<[u8; 32]>();
+    let seed = Randomness::from(rng.random::<[u8; 32]>());
     (derivation_path, message.to_vec(), seed)
 }
 

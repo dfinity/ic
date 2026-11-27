@@ -8,15 +8,16 @@ use ic_protobuf::types::v1 as pb_types;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, SubnetId};
-use rand::rngs::OsRng;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
 use rand::{CryptoRng, Rng};
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// A crypto component set up in a temporary directory and using [`OsRng`]. The
+/// A crypto component set up in a temporary directory and using [`SysRng`]. The
 /// directory is automatically deleted when this component goes out of scope.
-pub type TempCryptoComponent = TempCryptoComponentGeneric<OsRng>;
+pub type TempCryptoComponent = TempCryptoComponentGeneric<UnwrapErr<SysRng>>;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
@@ -105,8 +106,9 @@ pub mod internal {
     };
     use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
     use ic_types::{NodeId, RegistryVersion, SubnetId};
-    use rand::SeedableRng;
-    use rand::rngs::OsRng;
+    use rand::rand_core::UnwrapErr;
+    use rand::rngs::SysRng;
+    use rand::{RngExt, SeedableRng};
     use rustls::{ClientConfig, ServerConfig};
     use std::collections::{BTreeMap, BTreeSet, HashSet};
     use std::ops::Deref;
@@ -284,7 +286,7 @@ pub mod internal {
             // so that a deterministic builder RNG produces a deterministic
             // crypto component.
             let mut builder_rng = self.rng;
-            let crypto_component_rng = ChaCha20Rng::from_seed(builder_rng.r#gen());
+            let crypto_component_rng = ChaCha20Rng::from_seed(builder_rng.random());
             let (vault, opt_remote_vault_environment) = match self.vault_type {
                 VaultType::InReplica => {
                     let vault = ProdLocalCspVault::builder_in_dir(
@@ -468,7 +470,7 @@ pub mod internal {
     }
 
     impl<R: CryptoComponentRng> TempCryptoComponentGeneric<Csp, R> {
-        pub fn builder() -> TempCryptoBuilder<OsRng> {
+        pub fn builder() -> TempCryptoBuilder<UnwrapErr<SysRng>> {
             TempCryptoBuilder {
                 node_id: None,
                 vault_type: VaultType::InReplica,
@@ -482,7 +484,7 @@ pub mod internal {
                 metrics: None,
                 time_source: None,
                 ecdsa_subnet_config: None,
-                rng: OsRng,
+                rng: UnwrapErr(SysRng),
             }
         }
 

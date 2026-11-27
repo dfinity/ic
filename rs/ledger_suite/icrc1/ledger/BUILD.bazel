@@ -312,7 +312,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:leb128",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
-            "@crate_index//:rand",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )

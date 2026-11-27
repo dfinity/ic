@@ -48,7 +48,7 @@ impl SevCustomData {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn random(namespace: SevCustomDataNamespace, rng: &mut impl rand::Rng) -> Self {
         let mut data = [0_u8; 32];
-        rng.fill(&mut data[..]);
+        rng.fill_bytes(&mut data);
         Self { namespace, data }
     }
 

@@ -1,5 +1,5 @@
 use ic_crypto_internal_seed::Seed;
-use rand::RngCore;
+use rand::Rng;
 
 #[test]
 fn seed_fixed_output() {

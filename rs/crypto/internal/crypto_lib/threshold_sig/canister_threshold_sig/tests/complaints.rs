@@ -1,6 +1,6 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::RngExt;
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
@@ -97,7 +97,7 @@ fn complaint_system_works() -> CanisterThresholdResult<()> {
                         dealer_index,
                         corruption_target,
                         &pk0,
-                        &rng.r#gen::<[u8; 32]>(),
+                        &rng.random::<[u8; 32]>(),
                     )
                     .unwrap_err(),
                 CanisterThresholdError::InvalidProof

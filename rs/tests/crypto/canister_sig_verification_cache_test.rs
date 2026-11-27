@@ -40,7 +40,7 @@ use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
     MetricsFetcher, agent_with_identity, block_on, random_ed25519_identity,
 };
-use rand::Rng;
+use rand::RngExt;
 use serde_bytes::ByteBuf;
 use slog::info;
 use std::env;
@@ -101,8 +101,8 @@ pub fn test(env: TestEnv) {
     let mut rng = ReproducibleRng::new();
     info!(env.logger(), "Generated a ReproducibleRng\n{rng:?}");
 
-    let num_users = rng.gen_range(NUM_USERS_RANGE);
-    let num_calls_per_user = rng.gen_range(NUM_CALLS_PER_USER_RANGE);
+    let num_users = rng.random_range(NUM_USERS_RANGE);
+    let num_calls_per_user = rng.random_range(NUM_CALLS_PER_USER_RANGE);
     info!(
         env.logger(),
         "Randomly generated num_users={num_users} and num_calls_per_user={num_calls_per_user}"

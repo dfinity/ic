@@ -3100,9 +3100,10 @@ impl TryFrom<SnsVersion> for Version {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod test_helpers {
     use super::*;
-    use rand::Rng;
+    use rand::RngExt;
     use std::{
         borrow::BorrowMut,
         collections::HashMap,
@@ -3247,7 +3248,7 @@ pub mod test_helpers {
         }
 
         fn insecure_random_u64(&mut self) -> u64 {
-            rand::thread_rng().r#gen()
+            rand::rng().random()
         }
 
         async fn call_canister(

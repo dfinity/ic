@@ -19,7 +19,7 @@ ic-types = { path = "../../../types/types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 proptest = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rand_chacha = { workspace = true }
 rosetta-core = { path = "../../../rosetta-api/common/rosetta_core" }
 serde_bytes = { workspace = true }

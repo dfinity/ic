@@ -23,7 +23,7 @@ use ic_types::{
     registry::RegistryClientError, time::current_time,
 };
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
-use rand::{Rng, RngCore};
+use rand::{Rng, RngExt};
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -121,7 +121,7 @@ impl PocketIcHelper {
 fn random_init(local_store_path: &Path, n: usize, rng: &mut ReproducibleRng) {
     fn key_mutation(k: usize, rng: &mut ReproducibleRng) -> KeyMutation {
         let s = rng.next_u64() & 64;
-        let set: bool = rng.r#gen();
+        let set: bool = rng.random();
         KeyMutation {
             key: k.to_string(),
             value: if set {
@@ -134,7 +134,7 @@ fn random_init(local_store_path: &Path, n: usize, rng: &mut ReproducibleRng) {
 
     let random_changelog = (0..n)
         .map(|_i| {
-            let k = rng.r#gen::<usize>() % 64 + 1;
+            let k = rng.random::<u64>() as usize % 64 + 1;
             (0..k).map(|k| key_mutation(k, rng)).collect()
         })
         .collect::<Changelog>();

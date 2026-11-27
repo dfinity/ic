@@ -10,7 +10,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::{api_boundary_node::ApiBoundaryNodeRegistry, node::NodeRegistry};
 use ic_types::RegistryVersion;
-use rand::prelude::*;
+use rand::seq::SliceRandom;
 use std::sync::Arc;
 use url::Url;
 
@@ -49,7 +49,7 @@ fn random_api_boundary_node_url(
         CloudEngineError::failed(format!("could not list the API boundary nodes: {err:?}"))
     })?;
 
-    node_ids.shuffle(&mut thread_rng());
+    node_ids.shuffle(&mut rand::rng());
     node_ids
         .iter()
         .find_map(|node_id| {

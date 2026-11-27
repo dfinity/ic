@@ -22,7 +22,7 @@ use ic_rosetta_api::{
 };
 use ic_system_test_driver::driver::resource::AllocatedVm;
 use icp_ledger::AccountIdentifier;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 use reqwest::{Client as HttpClient, StatusCode as HttpStatusCode};
 use rosetta_core::{
     identifiers::NetworkIdentifier, objects::ObjectMap, request_types::MetadataRequest,
@@ -301,7 +301,7 @@ impl RosettaApiClient {
     ) -> Result<Result<ConstructionSubmitResponse, Error>, String> {
         // Shuffle the messages to check whether the server picks a
         // valid one to send to the IC.
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         for request in signed_transaction.requests.iter_mut() {
             request.1.shuffle(&mut rng);
         }

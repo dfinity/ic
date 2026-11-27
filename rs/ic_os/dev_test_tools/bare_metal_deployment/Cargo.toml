@@ -15,7 +15,7 @@ configparser = { workspace = true }
 grub = { path = "../../boot/grub" }
 http = { workspace = true }
 macaddr = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rexpect = { workspace = true }
 thiserror = { workspace = true }
 ssh2 = { workspace = true }

@@ -14,7 +14,7 @@ use ic_types::{
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
 };
 use more_asserts::debug_unreachable;
-use rand::RngCore;
+use rand::Rng;
 
 use super::SchedulerMetrics;
 

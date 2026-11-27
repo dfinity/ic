@@ -72,8 +72,8 @@ use ic_types::{
     time::{CoarseTime, UNIX_EPOCH},
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
-use rand::Rng;
-use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
+use rand::{RngExt, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::DerefMut,

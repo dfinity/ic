@@ -33,7 +33,7 @@ use icrc_ledger_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, hash_map::Entry},

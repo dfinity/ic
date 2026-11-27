@@ -1249,35 +1249,23 @@ crate.spec(
     version = "^1.0.37",
 )
 crate.spec(
-    features = [
-        "small_rng",
-    ],
-    package = "rand",
-    version = "^0.8.6",
-)
-crate.spec(
     default_features = False,
     features = [
+        "std",
         "std_rng",
         "sys_rng",
+        "thread_rng",
     ],
     package = "rand",
-    package_alias = "rand_0_10",
     version = "^0.10.4",
 )
 crate.spec(
     package = "rand_chacha",
-    version = "^0.3.1",
-)
-crate.spec(
-    default_features = False,
-    package = "rand_chacha",
-    package_alias = "rand_chacha_0_10",
     version = "^0.10.0",
 )
 crate.spec(
     package = "rand_distr",
-    version = "^0.4",
+    version = "^0.6.0",
 )
 crate.spec(
     package = "ratelimit",

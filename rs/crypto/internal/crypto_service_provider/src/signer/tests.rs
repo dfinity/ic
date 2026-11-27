@@ -22,7 +22,7 @@ use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use rand::Rng;
+use rand::RngExt;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
@@ -332,7 +332,7 @@ mod verify_ed25519 {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     use super::*;
-    use rand::{CryptoRng, Rng};
+    use rand::{CryptoRng, Rng, RngExt};
 
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
@@ -458,7 +458,7 @@ mod verify_ed25519 {
         }
 
         pub fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-            let mut msg = vec![0_u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
+            let mut msg = vec![0_u8; rng.random_range(0..RANDOM_MSG_MAX_LEN)];
             rng.fill_bytes(&mut msg[..]);
             msg
         }
@@ -827,7 +827,7 @@ fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder
     let mut vault_builders = Vec::with_capacity(N);
     let mut seeds = HashSet::with_capacity(N);
     for _ in 0..N {
-        let seed: [u8; 32] = rng.r#gen();
+        let seed: [u8; 32] = rng.random();
         vault_builders
             .push(LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()));
         assert!(seeds.insert(seed));

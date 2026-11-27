@@ -28,7 +28,7 @@ mod verify_dealing_public {
     use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
     use ic_types::crypto::{AlgorithmId, CryptoError, Signable};
     use ic_types::registry::RegistryClientError;
-    use rand::Rng;
+    use rand::RngExt;
 
     #[test]
     fn should_fail_on_reproducible_registry_error() {
@@ -72,7 +72,7 @@ mod verify_dealing_public {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let registry_client_error = RegistryClientError::VersionNotAvailable {
-                version: RegistryVersion::from(rng.r#gen::<u32>() as u64),
+                version: RegistryVersion::from(rng.random::<u32>() as u64),
             };
 
             let setup = Setup::new_with_registry_client_get_value_error(

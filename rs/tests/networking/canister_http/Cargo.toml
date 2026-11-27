@@ -23,7 +23,7 @@ ic-test-utilities-types = { path = "../../../test_utilities/types" }
 ic-types = { path = "../../../types/types" }
 ic-types-cycles = { path = "../../../types/cycles" }
 proxy_canister = { path = "../../../rust_canisters/proxy_canister" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 serde = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

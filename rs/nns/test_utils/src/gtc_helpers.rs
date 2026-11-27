@@ -5,7 +5,7 @@ use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_nns_gtc::pb::v1::{AccountState, Gtc};
 use icp_ledger::Tokens;
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::{collections::HashMap, time::SystemTime};
 
 // The age that GTC neurons will be created with

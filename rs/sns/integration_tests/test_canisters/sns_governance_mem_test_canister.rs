@@ -34,7 +34,7 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use icrc_ledger_types::icrc1::account::Subaccount;
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::{cell::RefCell, collections::BTreeMap};
 
 const LOG_PREFIX: &str = "[Governance mem test] ";

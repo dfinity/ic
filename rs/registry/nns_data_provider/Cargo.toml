@@ -20,7 +20,7 @@ ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
 url = { workspace = true }

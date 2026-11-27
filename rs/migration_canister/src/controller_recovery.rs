@@ -163,7 +163,7 @@ mod test {
     use ic_cdk_management_canister::CanisterInfoResult;
     use ic_nns_constants::MIGRATION_CANISTER_ID;
     use rand::rngs::StdRng;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
     use std::collections::BTreeMap;
 
     /// The canister ID to test recovery of.
@@ -225,7 +225,7 @@ mod test {
             &mut self,
             canister_id: Principal,
         ) -> ProcessingResult<CanisterInfoResult, ()> {
-            if self.rng.r#gen() {
+            if self.rng.random() {
                 return ProcessingResult::NoProgress;
             }
             match self.controllers.get(&canister_id) {
@@ -248,7 +248,7 @@ mod test {
             new_controllers: Vec<Principal>,
             new_memory_allocation: Option<u64>,
         ) -> ProcessingResult<(), ()> {
-            if self.rng.r#gen() {
+            if self.rng.random() {
                 return ProcessingResult::NoProgress;
             }
             match self.controllers.get_mut(&canister_id) {
@@ -259,7 +259,7 @@ mod test {
                             .insert(canister_id, new_memory_allocation);
                     }
                     *self.total_num_changes.get_mut(&canister_id).unwrap() += 1;
-                    if self.rng.r#gen() {
+                    if self.rng.random() {
                         return ProcessingResult::NoProgress;
                     }
                     ProcessingResult::Success(())

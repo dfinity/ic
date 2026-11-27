@@ -25,11 +25,9 @@ use ic_system_test_driver::{
     util::{block_on, create_agent_mapping, spawn_round_robin_workload_engine},
 };
 use rand::Rng;
-use rand::RngCore;
-use rand::SeedableRng;
+use rand::RngExt;
 use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::seq::IndexedRandom;
 use slog::info;
 use tokio::runtime::{Builder, Runtime};
 
@@ -336,9 +334,9 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
         canister_agents
     });
 
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     let http_requests = weighted_http_requests
-        .choose_multiple_weighted(&mut rng, 100, |item| item.1)
+        .sample_weighted(&mut rng, 100, |item| item.1)
         .unwrap()
         .map(|item| item.0.clone())
         .collect::<Vec<String>>();
@@ -363,8 +361,8 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
             let canister_agent = canister_agents[idx % canister_agents.len()].clone();
 
             async move {
-                let mut rng = StdRng::from_entropy();
-                let prob = rng.r#gen::<f64>() * 100.0;
+                let mut rng = rand::make_rng::<StdRng>();
+                let prob = rng.random::<f64>() * 100.0;
 
                 let mut payload = [0_u8; 8];
                 rng.fill_bytes(&mut payload);

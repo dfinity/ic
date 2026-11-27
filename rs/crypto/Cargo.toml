@@ -43,8 +43,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-vetkeys = { workspace = true }
 parking_lot = { workspace = true }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
+rand = { workspace = true, features = ["sys_rng"] }
 rustls = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
@@ -91,7 +90,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 maplit = { workspace = true }
 proptest = { workspace = true }
 prost = { workspace = true }
-rand_0_10 = { workspace = true }
+rand_chacha = { workspace = true }
 rsa = { workspace = true }
 
 [[bench]]

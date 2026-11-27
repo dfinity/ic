@@ -16,7 +16,7 @@ use crate::tx::{
 };
 use crate::withdraw::estimate_gas_limit;
 use ic_ethereum_types::Address;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
 const DEFAULT_PRINCIPAL: &str = "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
@@ -141,7 +141,7 @@ mod withdrawal_transactions {
         };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use proptest::{prop_assert_eq, proptest};
-        use rand::Rng;
+        use rand::RngExt;
 
         #[test]
         fn should_be_empty_when_no_withdrawal_requests() {
@@ -193,7 +193,7 @@ mod withdrawal_transactions {
                     create_and_record_pending_transaction(
                         &mut transactions,
                         withdrawal_request.clone(),
-                        rng.r#gen(),
+                        rng.random(),
                     )
                 });
 
@@ -205,7 +205,7 @@ mod withdrawal_transactions {
             create_and_record_pending_transaction(
                 &mut transactions,
                 withdrawal_requests[997].clone(),
-                rng.r#gen(),
+                rng.random(),
             );
             assert_eq!(
                 transactions.requests_batch(3).as_slice(),
@@ -215,7 +215,7 @@ mod withdrawal_transactions {
             create_and_record_pending_transaction(
                 &mut transactions,
                 withdrawal_requests[998].clone(),
-                rng.r#gen(),
+                rng.random(),
             );
             assert_eq!(
                 transactions.requests_batch(3).as_slice(),
@@ -225,7 +225,7 @@ mod withdrawal_transactions {
             create_and_record_pending_transaction(
                 &mut transactions,
                 withdrawal_requests[999].clone(),
-                rng.r#gen(),
+                rng.random(),
             );
             assert_eq!(transactions.requests_batch(3), vec![]);
         }
@@ -3694,8 +3694,7 @@ fn create_and_record_ckerc20_withdrawal_requests<const N: usize>(
 /// Create a mix of ckETH and ckERC20 withdrawal requests.
 fn create_ck_withdrawal_requests<const N: usize, R: Rng>(rng: &mut R) -> [WithdrawalRequest; N] {
     let mut requests = Vec::with_capacity(N);
-    let mut is_cketh_withdrawals: [bool; N] = [false; N];
-    rng.fill(&mut is_cketh_withdrawals[..]);
+    let is_cketh_withdrawals: [bool; N] = rng.random();
     for (i, is_cketh_withdrawal) in is_cketh_withdrawals.into_iter().enumerate() {
         let cketh_ledger_burn_index = LedgerBurnIndex::from(3 * (i as u64));
         let request: WithdrawalRequest = if is_cketh_withdrawal {

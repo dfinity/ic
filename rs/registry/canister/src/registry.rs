@@ -523,7 +523,7 @@ mod tests {
         pb::v1::{high_capacity_registry_mutation, registry_mutation},
         update, upsert,
     };
-    use rand::{Rng, SeedableRng};
+    use rand::{Rng, RngExt, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
 
     const DELETION_MARKER: Option<high_capacity_registry_value::Content> =
@@ -1054,8 +1054,8 @@ mod tests {
         {
             let mut val = Vec::<u8>::new();
             let p = 1.0 / (self.mean_length + 1.0);
-            while rng.r#gen::<f32>() > p {
-                val.push(rng.r#gen());
+            while rng.random::<f32>() > p {
+                val.push(rng.random());
             }
             val
         }
@@ -1086,14 +1086,14 @@ mod tests {
 
     #[test]
     fn test_icsup_2589() {
-        let mut rng = rand::rngs::SmallRng::from_entropy();
+        let mut rng = rand::make_rng::<rand::rngs::SmallRng>();
         let registry = initialize_random_registry(3, 1000, 13.0, 150);
 
         let mut serializable_form = registry.serializable_form();
         // Remove half of the entries, but retain the first and the last entry.
         let initial_len = registry.changelog().iter().count();
         serializable_form.changelog.retain(|entry| {
-            entry.version == 1 || rng.r#gen() || entry.version == initial_len as u64
+            entry.version == 1 || rng.random() || entry.version == initial_len as u64
         });
         let len_after_random_trim = serializable_form.changelog.len();
         assert!(len_after_random_trim < initial_len);
@@ -1476,7 +1476,7 @@ mod tests {
         // Now let's do some mutations.
         // Each mutation will be on a random key, so that not all keys have the same
         // number of RegistryValues.
-        let key_index_distr = Uniform::new(0, keys.len());
+        let key_index_distr = Uniform::new(0, keys.len()).unwrap();
         for _ in 0..num_updates {
             apply_mutations_skip_invariant_checks(
                 &mut registry,

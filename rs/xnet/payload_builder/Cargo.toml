@@ -32,7 +32,7 @@ ic-types = { path = "../../types/types" }
 ic-xnet-hyper = { path = "../hyper" }
 ic-xnet-uri = { path = "../uri" }
 prometheus = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 slog = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

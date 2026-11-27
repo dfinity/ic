@@ -1,7 +1,7 @@
 use crate::*;
 use core::fmt::{self, Debug};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgOpening;
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -64,7 +64,7 @@ impl Polynomial {
     }
 
     /// Creates a random polynomial with the specified number of coefficients
-    pub fn random<R: CryptoRng + RngCore>(
+    pub fn random<R: CryptoRng + Rng>(
         curve: EccCurveType,
         num_coefficients: usize,
         rng: &mut R,
@@ -88,7 +88,7 @@ impl Polynomial {
 
     /// Creates a random polynomial with the specified number of coefficients,
     /// one of which is the specified constant
-    pub fn random_with_constant<R: CryptoRng + RngCore>(
+    pub fn random_with_constant<R: CryptoRng + Rng>(
         constant: &EccScalar,
         num_coefficients: usize,
         rng: &mut R,

@@ -18,7 +18,7 @@ use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
 use maplit::hashmap;
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::collections::BTreeSet;
 
 /// Whether the neuron should be stored in heap or stable storage.
@@ -99,7 +99,7 @@ fn subaccount_from_id(id: u64) -> Subaccount {
 }
 
 fn new_neuron_builder(
-    rng: &mut impl RngCore,
+    rng: &mut impl Rng,
     location: NeuronActiveness,
     size: NeuronSize,
 ) -> NeuronBuilder {
@@ -134,11 +134,7 @@ fn new_neuron_builder(
     .with_recent_ballots(recent_ballots)
 }
 
-fn set_up_neuron_store(
-    rng: &mut impl RngCore,
-    active_count: u64,
-    inactive_count: u64,
-) -> NeuronStore {
+fn set_up_neuron_store(rng: &mut impl Rng, active_count: u64, inactive_count: u64) -> NeuronStore {
     // We insert 200 inactive neurons and 100 active neurons. They are not very realistic sizes, but
     // it would take too long to prepare those neurons for each benchmark.
     let inactive_neurons: Vec<_> = (0..inactive_count)
@@ -348,11 +344,7 @@ fn neuron_metrics_calculation() -> BenchResult {
     neuron_metrics_benchmark()
 }
 
-fn add_neuron_ready_to_spawn(
-    now_seconds: u64,
-    rng: &mut impl RngCore,
-    neuron_store: &mut NeuronStore,
-) {
+fn add_neuron_ready_to_spawn(now_seconds: u64, rng: &mut impl Rng, neuron_store: &mut NeuronStore) {
     let id = rng.next_u64();
     let subaccount = subaccount_from_id(id);
     let neuron = NeuronBuilder::new(
@@ -395,7 +387,7 @@ fn list_ready_to_spawn_neuron_ids() -> BenchResult {
 
 fn add_neuron_ready_to_unstake_maturity(
     now_seconds: u64,
-    rng: &mut impl RngCore,
+    rng: &mut impl Rng,
     neuron_store: &mut NeuronStore,
 ) {
     let id = rng.next_u64();

@@ -29,7 +29,6 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:prometheus",
-        "@crate_index//:rand",
         "@crate_index//:rayon",
         "@crate_index//:slog",
     ],

@@ -43,7 +43,7 @@ use ic_types_cycles::{
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
@@ -176,7 +176,7 @@ impl<'a> OutputIterator<'a> {
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
-        let rotation = rng.gen_range(0..canister_iterators.len().max(1));
+        let rotation = rng.random_range(0..canister_iterators.len().max(1));
         canister_iterators.rotate_left(rotation);
 
         // Push the subnet queues in front in order to make sure that at least one

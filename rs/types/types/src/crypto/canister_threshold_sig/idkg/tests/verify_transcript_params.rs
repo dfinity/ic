@@ -10,7 +10,7 @@ use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use maplit::{btreemap, btreeset};
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -258,7 +258,7 @@ fn should_fail_on_ineligible_signer() {
     );
 }
 
-fn valid_transcript_and_params<R: Rng + CryptoRng>(
+fn valid_transcript_and_params<R: CryptoRng>(
     rng: &mut R,
 ) -> (IDkgTranscript, IDkgTranscriptParams) {
     let transcript_id = random_transcript_id(rng);

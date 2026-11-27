@@ -8,7 +8,7 @@ use http::HeaderName;
 use hyper::body::Bytes;
 use itertools::Itertools;
 use prometheus_parse::{self, Sample, Value};
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::iter::zip;
@@ -352,9 +352,9 @@ impl MetricsProxier {
                                     // then the cache returns nothing.
                                     // Below, we insert it into the cache if nothing was returned
                                     // into the cache at all.
-                                    let mut rng = rand::thread_rng();
+                                    let mut rng = rand::rng();
                                     let wnd = *amplitude;
-                                    let randomness: f64 = rng.gen_range(-wnd..wnd);
+                                    let randomness: f64 = rng.random_range(-wnd..wnd);
                                     let quantized =
                                         (randomness * (1.0 / quantum)).round() * quantum;
                                     let new_value = match sample.value {

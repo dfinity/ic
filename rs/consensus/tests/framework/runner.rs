@@ -9,8 +9,8 @@ use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource}
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{Height, Time, malicious_flags::MaliciousFlags};
-use rand::{Rng, RngCore, thread_rng};
-use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
+use rand_chacha::ChaChaRng;
 use slog::Drain;
 use std::{
     cell::{RefCell, RefMut},
@@ -326,7 +326,7 @@ impl ConsensusRunnerConfig {
         for (key, value) in std::env::vars() {
             if key.eq_ignore_ascii_case("random_seed") {
                 if value.eq_ignore_ascii_case("random") {
-                    random_seed = thread_rng().next_u64();
+                    random_seed = rand::rng().next_u64();
                 } else {
                     random_seed = value
                         .parse()
@@ -338,7 +338,7 @@ impl ConsensusRunnerConfig {
         for (key, value) in std::env::vars() {
             if key.eq_ignore_ascii_case("num_nodes") {
                 if value.eq_ignore_ascii_case("random") {
-                    num_nodes = rng.gen_range(1..7) * 3 + 1;
+                    num_nodes = rng.random_range(1..7) * 3 + 1;
                 } else {
                     num_nodes = value
                         .parse()
@@ -355,10 +355,11 @@ impl ConsensusRunnerConfig {
         let mut config = Self::default();
         config.num_nodes = num_nodes;
         config.random_seed = random_seed;
-        config.num_rounds = rng.gen_range(10..101);
-        config.degree = rng
-            .gen_range(std::cmp::min(5, config.num_nodes / 2)..std::cmp::min(config.num_nodes, 20));
-        config.use_priority_fn = rng.gen_bool(0.5);
+        config.num_rounds = rng.random_range(10..101);
+        config.degree = rng.random_range(
+            std::cmp::min(5, config.num_nodes / 2)..std::cmp::min(config.num_nodes, 20),
+        );
+        config.use_priority_fn = rng.random_bool(0.5);
         config.reset_strategies();
         config
     }
@@ -367,8 +368,8 @@ impl ConsensusRunnerConfig {
     fn reset_strategies(&mut self) {
         let mut rng = ChaChaRng::seed_from_u64(self.random_seed);
         let (mut executions, mut deliveries) = self.strategies(&mut rng);
-        self.execution = executions.remove(rng.gen_range(0..executions.len()));
-        self.delivery = deliveries.remove(rng.gen_range(0..deliveries.len()));
+        self.execution = executions.remove(rng.random_range(0..executions.len()));
+        self.delivery = deliveries.remove(rng.random_range(0..deliveries.len()));
     }
 
     fn strategies<R: Rng>(&self, rng: &mut R) -> Strategies {

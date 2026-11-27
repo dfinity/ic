@@ -91,7 +91,6 @@ rust_test_suite(
         "@crate_index//:http-body-util",
         "@crate_index//:mockall",
         "@crate_index//:prometheus",
-        "@crate_index//:rand",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tower",

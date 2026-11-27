@@ -8,7 +8,7 @@ use ic_crypto_tree_hash::{LabeledTree, flatmap};
 use ic_crypto_tree_hash_fuzz_check_witness_equality_utils::*;
 use ic_protobuf::messaging::xnet::v1::LabeledTree as ProtobufLabeledTree;
 use ic_protobuf::proxy::ProtoProxy;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 const CHACHA_SEED_LEN: usize = 32;
@@ -52,7 +52,7 @@ pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) ->
 
     let rng = &mut rng_from_u32(seed);
 
-    let data_size_changed = match rng.gen_range(0..9) {
+    let data_size_changed = match rng.random_range(0..9) {
         0 => try_remove_leaf(&mut tree, rng),
         1 => try_remove_empty_subtree(&mut tree, rng),
         // actions that increase the tree's size have twice the probability of those

@@ -66,7 +66,6 @@ rust_test(
         "@crate_index//:base64",
         "@crate_index//:hex",
         "@crate_index//:mockall",
-        "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:serde_json",

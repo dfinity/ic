@@ -85,8 +85,7 @@ network = { path = "../../ic_os/networking/network" }
 nix = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rcgen = { workspace = true }
 regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }

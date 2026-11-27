@@ -1,13 +1,13 @@
 use criterion::*;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::RngExt;
 
 fn zk_proofs(c: &mut Criterion) {
     let alg = IdkgProtocolAlgorithm::EcdsaSecp256k1;
     let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let ad = rng.r#gen::<[u8; 32]>();
+    let ad = rng.random::<[u8; 32]>();
 
     let seed = Seed::from_rng(rng);
 
@@ -73,8 +73,8 @@ fn zk_proofs(c: &mut Criterion) {
     });
 
     let secret = EccScalar::random(curve, rng);
-    let base1 = EccPoint::hash_to_point(curve, &rng.r#gen::<[u8; 32]>(), b"domain").unwrap();
-    let base2 = EccPoint::hash_to_point(curve, &rng.r#gen::<[u8; 32]>(), b"domain").unwrap();
+    let base1 = EccPoint::hash_to_point(curve, &rng.random::<[u8; 32]>(), b"domain").unwrap();
+    let base2 = EccPoint::hash_to_point(curve, &rng.random::<[u8; 32]>(), b"domain").unwrap();
 
     c.bench_function("ProofOfDLogEquivalence::create", |b| {
         b.iter(|| {

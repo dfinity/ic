@@ -174,7 +174,7 @@ fn impl_product_type<T: ToTokens>(
 
     quote! {
         impl #gen_impl crate::exhaustive::ExhaustiveSet for #ident #gen_ty #gen_where {
-            fn exhaustive_set<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
+            fn exhaustive_set<R: rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
                 #(let mut #var_names = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
 
                 // compute maximum number of elements of all exhaustive sets
@@ -229,7 +229,7 @@ fn parse_enum(ident: Ident, input: DataEnum, mut generics: Generics) -> TokenStr
 
     quote! {
         impl #gen_impl crate::exhaustive::ExhaustiveSet for #ident #gen_ty #gen_where {
-            fn exhaustive_set<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
+            fn exhaustive_set<R: rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
                 let mut result = vec![#(Self::#unit_variants),*];
                 #(
                 result.append(&mut {

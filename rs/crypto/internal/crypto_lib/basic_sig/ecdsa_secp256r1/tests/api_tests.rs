@@ -23,7 +23,7 @@ mod test_utils {
     /// # Returns
     /// A tuple of the secret key bytes and public key bytes
     pub(crate) fn new_keypair(
-        rng: &mut (impl rand::RngCore + rand::CryptoRng),
+        rng: &mut impl rand::CryptoRng,
     ) -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyBytes)> {
         let (sk, pk) = {
             let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);

@@ -197,7 +197,7 @@ fn crypto_ed25519_basicsig_batch_verify<M: Measurement, R: Rng + CryptoRng>(
     let crypto = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&registry) as Arc<_>)
         .with_node_id(NODE_1)
-        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
 
     let msg = random_signable_message_of_size(32, rng);
@@ -264,7 +264,7 @@ fn temp_crypto<R: Rng + CryptoRng>(
         .with_registry(Arc::clone(&registry) as Arc<_>)
         .with_node_id(node_id)
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
-        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
+        .with_rng(ChaCha20Rng::from_seed(rng.random()));
     if vault_type == VaultType::Remote {
         crypto_builder = crypto_builder.with_remote_vault();
     }
@@ -363,15 +363,12 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
 ) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha2::Sha256;
-    use rand_0_10::SeedableRng as _;
     use rsa::traits::PublicKeyParts;
     use rsa::{Pkcs1v15Sign, PrivateKey};
 
     let bitlength = 2048; // minimum allowed
 
-    // `rsa` takes a rand 0.10 RNG.
-    let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
-    let priv_key = PrivateKey::new(&mut rsa_rng, bitlength).expect("failed to generate RSA key");
+    let priv_key = PrivateKey::new(rng, bitlength).expect("failed to generate RSA key");
 
     let pub_key_bytes =
         basic_sig_rsa::RsaPublicKey::from_components(&priv_key.e_bytes(), &priv_key.n_bytes())

@@ -1,5 +1,5 @@
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::RngCore;
+use rand::Rng;
 
 #[test]
 fn no_trivial_output() {

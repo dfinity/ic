@@ -109,8 +109,7 @@ async fn test_get_value_with_update_verifies_certificate() {
         .await
         .expect("PocketIc has no root key");
     let root_public_key = parse_threshold_sig_key_from_der(&root_key_der).unwrap();
-    let (unrelated_public_key, _unrelated_secret_key) =
-        generate_root_of_trust(&mut rand::thread_rng());
+    let (unrelated_public_key, _unrelated_secret_key) = generate_root_of_trust(&mut rand::rng());
 
     let registry_canister_with_root_key =
         RegistryCanister::new_with_agent_transformer(vec![endpoint.clone()], |agent| {

@@ -7,7 +7,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::node::NodeRecord;
 use prometheus::{GaugeVec, IntCounter, IntGauge, Opts};
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
@@ -72,7 +72,7 @@ pub struct ProximityMap {
 }
 
 impl ProximityMap {
-    /// Creates a new `ProximityMap` for `node` using `thread_rng()` as RNG.
+    /// Creates a new `ProximityMap` for `node` using `rand::rng()` as RNG.
     pub fn new(
         node: NodeId,
         registry: Arc<dyn RegistryClient>,
@@ -80,7 +80,7 @@ impl ProximityMap {
         log: ReplicaLogger,
     ) -> ProximityMap {
         fn thread_rng_gen_range(low: u64, high: u64) -> u64 {
-            thread_rng().gen_range(low..high)
+            rand::rng().random_range(low..high)
         }
 
         Self::with_rng(

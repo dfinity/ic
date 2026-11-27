@@ -61,7 +61,6 @@ rust_binary(
         "@crate_index//:hex",
         "@crate_index//:http",
         "@crate_index//:prometheus",
-        "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:static_assertions",

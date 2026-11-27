@@ -7,7 +7,7 @@ use ic_crypto_internal_threshold_sig_bls12381::types::{
     PublicCoefficients, PublicKey, ThresholdError,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::RngExt;
 use std::ops::MulAssign;
 
 fn uint_to_g2(num: u32) -> G2Affine {
@@ -177,12 +177,12 @@ mod public_coefficients {
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
 
-            let dup_r = rng.r#gen::<NodeIndex>();
+            let dup_r = rng.random::<NodeIndex>();
 
             inputs.push(dup_r);
 
             for _i in 0..=num_coefficients {
-                let r = rng.r#gen::<NodeIndex>();
+                let r = rng.random::<NodeIndex>();
                 inputs.push(r);
             }
             inputs.push(dup_r);

@@ -31,7 +31,7 @@ use ic_state_layout::{
 };
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
 use ic_utils::thread::parallel_map;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsStr;
@@ -896,7 +896,7 @@ fn hash_plan(
     // rehash_every_nth checkpoints in expectation.
     let mut rng = ChaChaRng::seed_from_u64(seed);
     let rehash_every_nth = rehash_every_nth.max(1); // 0 will behave like 1
-    let offset = rng.gen_range(0..rehash_every_nth);
+    let offset = rng.random_range(0..rehash_every_nth);
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 

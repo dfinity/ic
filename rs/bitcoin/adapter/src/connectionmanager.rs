@@ -12,7 +12,7 @@ use bitcoin::p2p::{
     message_network::VersionMessage,
 };
 use ic_logger::{ReplicaLogger, error, info, trace, warn};
-use rand::prelude::*;
+use rand::{RngExt, rngs::StdRng};
 use thiserror::Error;
 use tokio::{
     sync::mpsc::{Receiver, unbounded_channel},
@@ -141,7 +141,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             min_connections,
             current_height: 0,
             connections: HashMap::with_capacity(max_connections),
-            rng: StdRng::from_entropy(),
+            rng: rand::make_rng::<StdRng>(),
             socks_proxy: config.socks_proxy.clone(),
             stream_event_sender,
             network_message_sender,
@@ -366,7 +366,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         // The node address that will be receiving this message.
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
-        let nonce: u64 = self.rng.r#gen();
+        let nonce: u64 = self.rng.random();
         let user_agent = String::from(USER_AGENT);
         let message = <NetworkMessageOf<Network>>::Version(VersionMessage::new(
             self.p2p_protocol_version,
@@ -395,7 +395,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        let nonce = self.rng.r#gen();
+        let nonce = self.rng.random();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
         self.send_to(addr, NetworkMessage::Ping(nonce))

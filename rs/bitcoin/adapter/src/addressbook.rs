@@ -2,10 +2,7 @@ use crate::{common::BlockchainNetwork, config::Config};
 use bitcoin::p2p::Address;
 use bitcoin::p2p::ServiceFlags;
 use ic_logger::{ReplicaLogger, info};
-use rand::{
-    SeedableRng,
-    prelude::{IteratorRandom, SliceRandom, StdRng},
-};
+use rand::prelude::{IteratorRandom, SliceRandom, StdRng};
 use std::{
     collections::{HashSet, VecDeque},
     net::{SocketAddr, ToSocketAddrs},
@@ -125,7 +122,7 @@ impl AddressBook {
     /// for the address discovery process. It is made async because `to_socket_addrs` is a blocking
     /// operation that may involve DNS lookup.
     async fn build_seed_queue(&mut self) -> Result<(), tokio::task::JoinError> {
-        let mut rng = StdRng::from_entropy();
+        let mut rng = rand::make_rng::<StdRng>();
         let ipv6_only = self.ipv6_only;
         let tasks = self.dns_seeds.iter().map(|seed| {
             let addr = format_addr(seed, self.port);
@@ -238,7 +235,7 @@ impl AddressBook {
     /// [AddressBookError::AddressesDepleted](AddressBookError::AddressesDepleted)
     /// error is returned.
     pub fn pop(&mut self) -> AddressBookResult<AddressEntry> {
-        let mut rng = StdRng::from_entropy();
+        let mut rng = rand::make_rng::<StdRng>();
         let maybe_address = self.known_addresses.iter().choose(&mut rng).cloned();
         if let Some(addr) = maybe_address {
             self.mark_as_active(&addr);

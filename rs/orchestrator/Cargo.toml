@@ -59,7 +59,7 @@ mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

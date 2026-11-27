@@ -11,7 +11,7 @@ use ic_types::crypto::canister_threshold_sig::{
     error::ThresholdSchnorrVerifySigShareError, idkg::IDkgTranscript,
 };
 use ic_types::{NodeId, crypto::AlgorithmId};
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng};
 
 #[test]
 fn should_verify_sig_share_successfully() {
@@ -223,7 +223,7 @@ fn should_fail_when_key_internal_transcript_raw_switched() {
     }
 }
 
-fn signature_share_from_random_receiver<R: RngCore + CryptoRng>(
+fn signature_share_from_random_receiver<R: Rng + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     inputs: &ThresholdSchnorrSigInputs,
     rng: &mut R,

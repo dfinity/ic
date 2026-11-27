@@ -9,7 +9,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use ic_types::messages::Blob;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::CryptoRng;
 
 #[test]
 fn should_verify_valid_signature() {
@@ -206,7 +206,7 @@ fn should_fail_to_verify_on_wrong_root_pubkey() {
     }
 }
 
-fn new_test_data<R: Rng + RngCore + CryptoRng>(
+fn new_test_data<R: CryptoRng>(
     rng: &mut R,
     with_delegation: bool,
 ) -> (

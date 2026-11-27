@@ -1016,7 +1016,7 @@ pub fn fees_for(
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
         RegistryVersion::from(1),
         CanisterCyclesCostSchedule::Normal,
-        &mut rand::thread_rng(),
+        &mut rand::rng(),
         /* pay_as_you_go_enabled = */ true,
     )
     .expect("the request should be valid enough to price");

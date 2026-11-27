@@ -9,7 +9,7 @@ use ic_registry_keys::make_canister_id_allocation_key;
 use ic_registry_routing_table::CANISTER_IDS_PER_SUBNET;
 use ic_registry_transport::delete;
 use prost::Message;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 /// Currently there are 37 subnets. We will use 100 subnets for the benchmark.
@@ -33,7 +33,7 @@ fn migrate_canisters_to_subnets(registry: &mut Registry, num_migrations: u64, rn
 
     for subnet_id in 0..NUM_SUBNETS {
         let canister_ids = (0..num_canisters_per_subnet)
-            .map(|_| CanisterId::from_u64(rng.gen_range(0..MAX_CANISTER_ID_U64)))
+            .map(|_| CanisterId::from_u64(rng.random_range(0..MAX_CANISTER_ID_U64)))
             .collect::<Vec<_>>();
 
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(subnet_id));
@@ -55,7 +55,7 @@ fn migrate_canisters(num_existing_migrations: u64, num_calls: u64) -> BenchResul
 
     bench_fn(|| {
         for _ in 0..num_calls {
-            let canister_id = CanisterId::from_u64(rng.gen_range(0..MAX_CANISTER_ID_U64));
+            let canister_id = CanisterId::from_u64(rng.random_range(0..MAX_CANISTER_ID_U64));
             let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
             let migration_mutation = registry.migrate_canisters_to_subnet(
                 registry.latest_version(),
@@ -161,7 +161,7 @@ fn get_subnet_for_canister(num_canisters: u64, num_calls: u64) -> BenchResult {
 
     bench_fn(|| {
         for _ in 0..num_calls {
-            let canister_id = CanisterId::from_u64(rng.gen_range(0..MAX_CANISTER_ID_U64));
+            let canister_id = CanisterId::from_u64(rng.random_range(0..MAX_CANISTER_ID_U64));
             let _subnet_id = registry
                 .get_subnet_for_canister(canister_id.get_ref())
                 .unwrap();

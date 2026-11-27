@@ -29,7 +29,6 @@ ic-types = { path = "../../types/types" }
 ic-types-cycles = { path = "../../types/cycles" }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
 rayon = { workspace = true }
 
 [dev-dependencies]
@@ -52,6 +51,7 @@ assert_matches = { workspace = true }
 criterion = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
+rand = { workspace = true }
 rand_chacha = { workspace = true }
 
 [features]

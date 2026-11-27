@@ -64,7 +64,7 @@ use ic_types::{
 use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
-use rand::RngCore;
+use rand::Rng;
 use registry_canister::mutations::node_management::{
     common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
 };

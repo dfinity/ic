@@ -6,7 +6,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, RngExt};
 
 pub struct CanisterCertificate {
     pub root_pk: ThresholdSigPublicKey,
@@ -22,10 +22,7 @@ pub struct CanisterCertificate {
 /// Returns a random certificate generated using using `rng`.
 /// Depending on the `with_delegation` flag, the certificate
 /// will contain a subnet delegation.
-pub fn new_random_cert<R: Rng + RngCore + CryptoRng>(
-    rng: &mut R,
-    with_delegation: bool,
-) -> CanisterCertificate {
+pub fn new_random_cert<R: CryptoRng>(rng: &mut R, with_delegation: bool) -> CanisterCertificate {
     let canister_state = new_random_canister_state(rng);
     const CANISTER_ID: CanisterId = canister_id(1);
     let cert_builder = CertificateBuilder::new_with_rng(
@@ -49,7 +46,7 @@ pub fn new_random_cert<R: Rng + RngCore + CryptoRng>(
     }
 }
 
-fn conditionally_add_delegation_cert<R: Rng + CryptoRng>(
+fn conditionally_add_delegation_cert<R: CryptoRng>(
     cert_builder: CertificateBuilder,
     with_delegation: bool,
     rng: &mut R,
@@ -84,7 +81,7 @@ pub struct CanisterState {
 /// Creates a canister state with a valid path `/sig/<seed_hash>/<msg_hash>`, where
 /// <seed_hash> is SHA256 of a randomly generated seed and <msg_hash> of a randomly
 /// generated message.
-fn new_random_canister_state<R: Rng + RngCore + CryptoRng>(rng: &mut R) -> CanisterState {
+fn new_random_canister_state<R: CryptoRng>(rng: &mut R) -> CanisterState {
     let canister_sig_seed = random_bytes(rng, 32);
     let canister_sig_message = random_bytes(rng, 32);
     let canister_state_tree =
@@ -107,7 +104,7 @@ pub fn witness_from_tree(tree: LabeledTree<Vec<u8>>) -> MixedHashTree {
     witness_gen.mixed_hash_tree(&tree).unwrap()
 }
 
-fn random_bytes<R: Rng + RngCore + CryptoRng>(rng: &mut R, size: usize) -> Vec<u8> {
+fn random_bytes<R: CryptoRng>(rng: &mut R, size: usize) -> Vec<u8> {
     let mut buffer = vec![0; size];
     rng.fill(&mut buffer[..]);
     buffer

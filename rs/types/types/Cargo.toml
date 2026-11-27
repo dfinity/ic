@@ -52,6 +52,7 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reprod
 ic-exhaustive-derive = { path = "../exhaustive_derive" }
 ic-types-test-utils = { path = "../types_test_utils" }
 pretty_assertions = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 rand_chacha = { workspace = true }
 rstest = { workspace = true }
 

@@ -3463,7 +3463,7 @@ fn expected_cycle_cost(
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
         RegistryVersion::from(1),
         CanisterCyclesCostSchedule::Normal,
-        &mut rand::thread_rng(),
+        &mut rand::rng(),
         // Only the request size is read off this context, so the pricing model it
         // would be charged with does not matter.
         /* pay_as_you_go_enabled = */

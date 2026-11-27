@@ -19,7 +19,7 @@ ic-system-test-driver = { path = "../../driver" }
 ic-testnet-mainnet-nns = { path = "../../testnets/mainnet_nns" }
 ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
-rand = { workspace = true }
+rand = { workspace = true, features = ["thread_rng"] }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

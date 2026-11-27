@@ -29,7 +29,7 @@ use ic_types::{
     crypto::canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing},
     messages::{SignedIngress, SignedRequestBytes},
 };
-use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
+use rand::{rngs::SmallRng, seq::IteratorRandom};
 use tokio::time::{Instant, sleep_until, timeout_at};
 
 use crate::fetch_stripped_artifact::{
@@ -422,7 +422,7 @@ pub(crate) async fn download_stripped_message<P: Peers>(
         .without_max_times()
         .build();
 
-    let mut rng = SmallRng::from_entropy();
+    let mut rng = rand::make_rng::<SmallRng>();
 
     let request = match &stripped_message_id {
         StrippedMessageId::Ingress(signed_ingress_id) => {

@@ -1056,9 +1056,9 @@ pub async fn agent_with_client_identity(
 
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
-    use rand::RngCore;
+    use rand::Rng;
     let mut raw_key = [0_u8; 32];
-    rand::thread_rng().fill_bytes(&mut raw_key);
+    rand::rng().fill_bytes(&mut raw_key);
     BasicIdentity::from_raw_key(&raw_key)
 }
 
