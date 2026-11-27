@@ -121,6 +121,31 @@ class TestCsvLoading(unittest.TestCase):
         self.assertEqual(result["loads"], {CANISTERS_INSTALLED: [1] * 20}, msg=f"`load_subnet_data` returned {result}")
         self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
 
+    def test_canisters_are_indexed_by_number(self):
+        header, *rows = Path(FAKE_LOAD_SAMPLE_CSV_PATH).read_text().splitlines()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            shuffled_load_path = Path(tmp_dir) / "load.csv"
+            # Sorting the textual canister IDs shuffles the canisters, e.g. canister 1 comes first.
+            shuffled_load_path.write_text("\n".join([header, *sorted(rows)]) + "\n")
+            result = load_subnet_data(
+                shuffled_load_path,
+                FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+                ["ingress_messages_executed"],
+                FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+                FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            )
+        expected = load_subnet_data(
+            FAKE_LOAD_SAMPLE_CSV_PATH,
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            ["ingress_messages_executed"],
+            FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+        )
+
+        self.assertEqual(result["index_to_canister_id"], {k: number_to_canister_id(k) for k in range(20)})
+        # The rows of "fake_load_sample.csv" are in increasing order.
+        self.assertEqual(result, expected, msg=f"`load_subnet_data` returned {result}")
+
     def test_communication_with_unknown_canisters_is_ignored(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             communication_path = Path(tmp_dir) / "communication.csv"
@@ -336,9 +361,6 @@ class TestCanisterIdRanges(unittest.TestCase):
             ([5, 10], [(0, 9)]),
             # The ranges overlap.
             ([0, 5], [(0, 5), (5, 9)]),
-            # The canisters are not in increasing order.
-            ([5, 0], [(0, 9)]),
-            ([5, 5], [(0, 9)]),
         ]:
             with self.subTest(canister_numbers=canister_numbers, ranges=ranges), self.assertRaises(ValueError):
                 assign_canisters_to_ranges(canister_numbers, ranges)

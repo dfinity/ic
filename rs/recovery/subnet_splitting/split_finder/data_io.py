@@ -47,7 +47,8 @@ def load_subnet_data(
     """
     Load canister metadata and communication edges for a subnet.
     Returns a mapping between canister edges and their weights: (i, j) => weight, a mapping from
-    each load type to its load vector, and index mappings.
+    each load type to its load vector, and index mappings. The canisters are indexed in increasing
+    order of their numbers (see `canister_id_to_number`), whatever the order of the load data.
 
     Arguments:
     load_path -- path to a file in the csv format which contains load metrics for each canister.
@@ -82,6 +83,11 @@ def load_subnet_data(
     # baseline was collected, so the fresh count is a lower bound on the number of messages
     # exchanged in the meantime. Use it instead of the delta.
     communication_data = communication_delta.where(communication_delta >= 0, communication_data).reset_index()
+    # Index the canisters in the routing table's order, i.e. by number: the textual canister IDs
+    # start with a checksum, so sorting them as strings would shuffle the canisters.
+    canister_data = canister_data.sort_values(
+        "canister_id", key=lambda canister_ids: canister_ids.map(canister_id_to_number)
+    ).reset_index(drop=True)
     canister_data["index"] = range(len(canister_data))
     canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
     index_to_canister_id = dict(zip(canister_data["index"], canister_data["canister_id"]))

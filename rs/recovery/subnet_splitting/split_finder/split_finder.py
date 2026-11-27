@@ -43,8 +43,7 @@ def assign_canisters_to_ranges(canister_numbers: List[int], ranges: List[Tuple[i
     Returns, for each canister, the index in `sorted(ranges)` of the range of canister numbers which
     contains it.
 
-    Raises a `ValueError` if the canisters are not in increasing order, if the ranges overlap, or if
-    a canister lies outside all the ranges.
+    Raises a `ValueError` if the ranges overlap or if a canister lies outside all the ranges.
     """
     ranges = sorted(ranges)
     for (_, last), (next_first, _) in zip(ranges, ranges[1:]):
@@ -55,9 +54,7 @@ def assign_canisters_to_ranges(canister_numbers: List[int], ranges: List[Tuple[i
     range_starts = [first for first, _ in ranges]
 
     range_indices = []
-    for k, number in enumerate(canister_numbers):
-        if k > 0 and number <= canister_numbers[k - 1]:
-            raise ValueError(f"The canisters are not in increasing order at {number_to_canister_id(number)}")
+    for number in canister_numbers:
         range_index = bisect.bisect_right(range_starts, number) - 1
         if range_index < 0 or number > ranges[range_index][1]:
             raise ValueError(f"Canister {number_to_canister_id(number)} lies outside the subnet's canister ID ranges")
