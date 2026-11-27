@@ -518,15 +518,80 @@ fn test_test_spawning_proc_gets_stopped() {
     // The process started by the test print a string magicchild1 at second 1, magicchild2 at
     // second 2, etc. The per test timeout is 5 seconds, so, 'magicchild1' should be visible, but
     // not 'magicchild10'.
-    // Further, we test that the test returns even though the child process of the test keeps
-    // stdout/err open.
     assert!(err_str.contains("magicchild1"));
     assert!(!err_str.contains("magicchild10"));
+    // On the timeout, the driver describes the processes of the test, including the shell that
+    // the test started, and then kills the shell along with the test. Since the shell no longer
+    // holds on to the test's stdout and stderr, both are read to the end instead of the driver
+    // giving up on them. Whether the end is reached while draining after the kill or before
+    // depends on the scheduling.
+    assert!(
+        err_str.contains("Killing task 'spawning_process' (pid "),
+        "{err_str}"
+    );
+    assert!(
+        err_str.contains("because it failed: Timeout after 5s."),
+        "{err_str}"
+    );
+    assert!(err_str.contains(" (sh): state "), "{err_str}");
+    assert!(
+        err_str.contains("Killed the descendants of task 'spawning_process' (pid "),
+        "{err_str}"
+    );
+    for channel in ["StdOut", "StdErr"] {
+        assert!(
+            err_str.contains(&format!("(spawning_process|{channel}): Drain complete."))
+                || err_str.contains(&format!(
+                    "(spawning_process|{channel}): Channel has closed."
+                )),
+            "{err_str}"
+        );
+        assert!(
+            !err_str.contains(&format!("(spawning_process|{channel}): Drain timed out.")),
+            "{err_str}"
+        );
+    }
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(&summary, 2, 1, 0);
     assert_name_and_message_eq(
         &summary.failure[0],
         "spawning_process",
+        Some("Timeout after 5s"),
+    );
+}
+
+#[test]
+fn test_test_spawning_escaped_proc_gets_stopped() {
+    let result = execute_test_scenario_with_default_cmd("test_escaped_child_process");
+    assert!(
+        !result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let err_str = String::from_utf8_lossy(&result.stderr);
+    // The loop that prints 'escapedchild' every second left the process tree of the test, so it
+    // isn't killed with the test and keeps the test's stdout and stderr open. The driver gives
+    // up on reading stdout shortly after the kill instead of waiting for the loop. The loop then
+    // dies of SIGPIPE on its next write to stdout, which closes stderr too, so the driver may
+    // read stderr to the end before it gives up on it.
+    assert!(err_str.contains("escapedchild"), "{err_str}");
+    assert!(
+        err_str.contains("(spawning_escaped_process|StdOut): Drain timed out."),
+        "{err_str}"
+    );
+    assert!(
+        ["Drain timed out.", "Drain complete.", "Channel has closed."]
+            .iter()
+            .any(|end| err_str.contains(&format!("(spawning_escaped_process|StdErr): {end}"))),
+        "{err_str}"
+    );
+    assert!(!err_str.contains("did not finish within"), "{err_str}");
+    let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
+    assert_test_summary_size(&summary, 2, 1, 0);
+    assert_name_and_message_eq(
+        &summary.failure[0],
+        "spawning_escaped_process",
         Some("Timeout after 5s"),
     );
 }

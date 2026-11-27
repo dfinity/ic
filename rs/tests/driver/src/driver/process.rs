@@ -1,7 +1,5 @@
-use nix::{
-    sys::signal::{Signal, kill},
-    unistd::Pid,
-};
+use itertools::Itertools;
+use nix::unistd::Pid;
 use slog::{Logger, info};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
@@ -14,18 +12,21 @@ use tokio::{
     time::timeout,
 };
 
-pub trait KillFn: FnOnce() + Send + Sync {}
-impl<T: FnOnce() + Send + Sync> KillFn for T {}
+/// Kills a [`Process`] and its descendants and returns the descendants together
+/// with their `comm`.
+pub trait KillFn: FnOnce() -> Vec<(Pid, String)> + Send + Sync {}
+impl<T: FnOnce() -> Vec<(Pid, String)> + Send + Sync> KillFn for T {}
 
-use crate::driver::event::TaskId;
+use crate::driver::{event::TaskId, process_tree};
 pub struct Process {
     child: Child,
+    pid: Pid,
     stdout_jh: JoinHandle<()>,
     stderr_jh: JoinHandle<()>,
 }
 
 impl Process {
-    pub async fn new(task_id: TaskId, cmd: Command, log: Logger) -> (Self, impl FnOnce()) {
+    pub async fn new(task_id: TaskId, cmd: Command, log: Logger) -> (Self, impl KillFn) {
         let mut cmd: AsyncCommand = cmd.into();
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -36,6 +37,11 @@ impl Process {
         cmd.kill_on_drop(true);
 
         let mut child = cmd.spawn().expect("Spawning subprocess should succeed");
+        let pid = Pid::from_raw(
+            child
+                .id()
+                .expect("A child that wasn't awaited yet should have a pid") as i32,
+        );
 
         let stdout = child.stdout.take().unwrap();
         let (kill_tx, kill_watch) = channel::<bool>(false);
@@ -50,7 +56,7 @@ impl Process {
         let stderr = child.stderr.take().unwrap();
         let stderr_jh = task::spawn(Self::listen_on_channel(
             kill_watch,
-            task_id,
+            task_id.clone(),
             log.clone(),
             ChannelName::StdErr,
             stderr,
@@ -58,19 +64,35 @@ impl Process {
 
         let self_ = Self {
             child,
+            pid,
             stdout_jh,
             stderr_jh,
         };
 
-        let kill_signal = {
-            let pid = Pid::from_raw(self_.child.id().unwrap() as i32);
-            move || {
-                let _ = kill(pid, Signal::SIGKILL);
-                let _ = kill_tx.send(true);
+        // Kill the descendants too, i.e. the processes that are still in the
+        // child's process tree: they would otherwise outlive the task and keep
+        // the child's stdout and stderr open.
+        let kill_signal = move || {
+            let descendants = process_tree::kill_tree(pid);
+            if !descendants.is_empty() {
+                info!(
+                    log,
+                    "Killed the descendants of task '{task_id}' (pid {pid}) along with it: {}",
+                    descendants
+                        .iter()
+                        .map(|(pid, comm)| format!("{comm} (pid {pid})"))
+                        .join(", ")
+                );
             }
+            let _ = kill_tx.send(true);
+            descendants
         };
 
         (self_, kill_signal)
+    }
+
+    pub fn pid(&self) -> Pid {
+        self.pid
     }
 
     /// Waits for stdout/err to be closed. Then waits for the child process to
@@ -111,8 +133,11 @@ impl Process {
                 _ = kill_watch.changed() => {
                     info!(log, "({}|{:?}): Kill received. Draining remaining output ...", task_id, channel_tag);
                     // Drain any remaining buffered lines before returning.
-                    // Use a short timeout to avoid blocking on grandchild
-                    // processes that keep the pipe open after the child is killed.
+                    // Use a short timeout to avoid blocking on processes that
+                    // keep the pipe open after the child is killed: processes
+                    // that left the child's process tree (e.g. by daemonizing)
+                    // and processes that don't die from `SIGKILL` because they
+                    // wait uninterruptibly in the kernel.
                     let drain_timeout = Duration::from_secs(1);
                     match timeout(drain_timeout, async {
                         loop {

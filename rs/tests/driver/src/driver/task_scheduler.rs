@@ -86,7 +86,7 @@ impl TaskScheduler {
                             self.running_tasks.insert(task_id, (th, node_index));
                         }
                     }
-                    Node::Failed { .. } => {
+                    Node::Failed { reason } => {
                         if let Some(task_id) = maybe_task_id {
                             let (th, _node_handle) = match self.running_tasks.remove(&task_id) {
                                 Some(item) => {
@@ -98,7 +98,7 @@ impl TaskScheduler {
                                 }
                             };
                             // debug!(log, "ag: Failing node {:?} task {}", &node, &task_id);
-                            th.cancel();
+                            th.cancel_after_failure(reason.as_deref().unwrap_or("unknown reason"));
                         }
                     }
                     _ => {}

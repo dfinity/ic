@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::driver::{
     action_graph::ActionGraph,
+    constants::GROUP_SETUP_DIR,
     context::{GroupContext, ProcessContext},
     dsl::{SubprocessFn, TestFunction},
     event::TaskId,
@@ -1433,7 +1434,19 @@ impl SystemTestGroup {
     }
 
     fn delete_farm_group(ctx: GroupContext) {
-        let env = ensure_setup_env(ctx);
+        // Opening the setup env takes an exclusive lock on its `test.log`, which a
+        // setup process holds for as long as it lives, also when it didn't exit after
+        // being killed.
+        let env = ctx.ensure_setup_env().unwrap_or_else(|err| {
+            slog::warn!(
+                ctx.log(),
+                "Reading the setup env without logging to its test.log: {err:?}"
+            );
+            TestEnv::new_without_duplicating_logger(
+                ctx.group_dir.join(GROUP_SETUP_DIR),
+                ctx.logger(),
+            )
+        });
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
         match SystemTestBackend::read_attribute(&env) {

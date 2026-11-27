@@ -27,6 +27,7 @@ pub mod plan;
 pub mod port_allocator;
 pub mod pot_dsl;
 pub mod process;
+pub mod process_tree;
 pub mod prometheus_vm;
 pub mod report;
 pub mod resource;

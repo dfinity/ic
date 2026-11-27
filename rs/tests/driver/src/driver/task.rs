@@ -44,6 +44,13 @@ pub trait TaskHandle: Send {
     /// Fail a running task. If the task has already finished, this call has no
     /// effect on the task.
     fn cancel(&self);
+
+    /// Like [`cancel`](Self::cancel), for a task that is cancelled because it
+    /// failed for `reason`, e.g. because it timed out. A task that runs in a
+    /// subprocess first logs what its processes are doing.
+    fn cancel_after_failure(&self, _reason: &str) {
+        self.cancel();
+    }
 }
 
 /// An EmptyTask is a virtual task that, after being spawned, does nothing and
