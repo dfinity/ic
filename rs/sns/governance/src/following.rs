@@ -152,7 +152,7 @@ fn get_duplicate_followee_groups(followees: &BTreeSet<ValidatedFollowee>) -> Fol
     followees
         .iter()
         .sorted_by_key(|followee| followee.neuron_id.clone())
-        .group_by(|followee| followee.neuron_id.clone())
+        .chunk_by(|followee| followee.neuron_id.clone())
         .into_iter()
         .filter_map(|(neuron_id, group)| {
             let followees_with_this_neuron_id = group.into_iter().cloned().collect::<Vec<_>>();
@@ -210,7 +210,7 @@ fn get_inconsistent_aliases(followees: &BTreeSet<ValidatedFollowee>) -> Followee
     followees
         .iter()
         .sorted_by_key(|followee| followee.neuron_id.clone())
-        .group_by(|followee| followee.neuron_id.clone())
+        .chunk_by(|followee| followee.neuron_id.clone())
         .into_iter()
         .filter_map(|(neuron_id, group)| {
             // Since aliases are optional, filter out the ones that are not set (since they cannot
@@ -403,7 +403,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
         let duplicate_topics = topic_following
             .iter()
             .sorted_by_key(|followee| followee.topic)
-            .group_by(|topic_following| topic_following.topic)
+            .chunk_by(|topic_following| topic_following.topic)
             .into_iter()
             .filter_map(
                 |(topic, group)| {

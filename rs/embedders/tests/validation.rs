@@ -2,14 +2,14 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use assert_matches::assert_matches;
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::embedders::{Config as EmbeddersConfig, MAX_FUNCTIONS};
 use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::{
         Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
         validation::{
-            MAX_RAW_CUSTOM_SECTIONS, MAX_WASM_FUNCTION_NAME_LENGTH, MAX_WASM_FUNCTION_NUM_LOCALS,
-            RESERVED_SYMBOLS, extract_custom_section_name,
+            MAX_NUMBER_IMPORTS, MAX_RAW_CUSTOM_SECTIONS, MAX_WASM_FUNCTION_NAME_LENGTH,
+            MAX_WASM_FUNCTION_NUM_LOCALS, RESERVED_SYMBOLS, extract_custom_section_name,
         },
     },
 };
@@ -593,29 +593,39 @@ fn can_validate_too_many_exported_functions() {
 }
 
 #[test]
-fn can_validate_too_many_total_exports() {
-    // One global exported three times: a single global, but three exports. This
-    // is the shape that evades the function-export limit, so the total number of
-    // exports is bounded on its own.
-    let wasm = wat2wasm(
-        r#"(module
-                (global i32 (i32.const 0))
-                (export "a" (global 0))
-                (export "b" (global 0))
-                (export "c" (global 0)))"#,
-    )
-    .unwrap();
+fn reject_too_many_imports() {
+    let num_imports = MAX_NUMBER_IMPORTS + 1;
+    let mut wat = String::from("(module\n");
+    for i in 0..num_imports {
+        wat.push_str(&format!("(import \"env\" \"f{i}\" (func))\n"));
+    }
+    wat.push(')');
+    let wasm = wat2wasm(&wat).unwrap();
     assert_eq!(
-        validate_wasm_binary(
-            &wasm,
-            &EmbeddersConfig {
-                max_number_exports: 2,
-                ..Default::default()
-            }
-        ),
-        Err(WasmValidationError::TooManyTotalExports {
-            defined: 3,
-            allowed: 2
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::TooManyImports {
+            allowed: MAX_NUMBER_IMPORTS,
+        })
+    );
+}
+
+#[test]
+fn reject_too_many_name_section_entries() {
+    let num_entries = MAX_FUNCTIONS + 1;
+    let mut names = wasm_encoder::NameMap::new();
+    for i in 0..num_entries {
+        names.append(i as u32, "");
+    }
+    let mut name_section = wasm_encoder::NameSection::new();
+    name_section.functions(&names);
+    let mut module = wasm_encoder::Module::new();
+    module.section(&name_section);
+    let wasm = BinaryEncodedWasm::new(module.finish());
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::TooManyNameSectionEntries {
+            allowed: MAX_FUNCTIONS,
         })
     );
 }

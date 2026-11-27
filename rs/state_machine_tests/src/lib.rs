@@ -2954,11 +2954,7 @@ impl StateMachine {
                 // Unlike `ic_secp256r1`, the IC normalizes `s` for all curves.
                 let signature = p256::ecdsa::Signature::from_slice(&signature)
                     .expect("a freshly produced signature is well-formed");
-                signature
-                    .normalize_s()
-                    .unwrap_or(signature)
-                    .to_bytes()
-                    .to_vec()
+                signature.normalize_s().to_bytes().to_vec()
             }
             _ => {
                 return Err(UserError::new(

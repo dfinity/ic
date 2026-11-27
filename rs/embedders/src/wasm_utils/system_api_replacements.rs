@@ -20,7 +20,11 @@ use crate::{
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
-use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
+use wirm::{
+    DataType,
+    ir::types::Instructions,
+    wasmparser::{BlockType, MemArgTarget},
+};
 
 use ic_types::NumBytes;
 
@@ -40,6 +44,7 @@ fn make_body(
         locals,
         instructions: Instructions::new(instructions_with_offsets, 0, false),
         name: None,
+        local_names: None,
     }
 }
 
@@ -436,7 +441,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
@@ -448,7 +454,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         LocalGet {
@@ -722,7 +729,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         I32Const { value: 2 }, // READ_BIT
@@ -734,7 +742,8 @@ pub(super) fn replacement_functions(
                                 offset: 0,
                                 // We assume the bytemap for stable memory is always
                                 // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                                target: MemArgTarget::Memory(stable_memory_index + 1),
+                                ordering: None,
                             },
                         },
                         LocalGet {

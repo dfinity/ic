@@ -6,7 +6,7 @@ use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode, CheckTransactionArgs,
     CheckTransactionIrrecoverableError, CheckTransactionQueryArgs, CheckTransactionQueryResponse,
     CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
-    CheckTransactionStrArgs, RETRY_MAX_RESPONSE_BYTES, blocklist::is_blocked,
+    CheckTransactionStrArgs, RETRY_MAX_RESPONSE_BYTES, blocklist, blocklist::is_blocked,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
@@ -191,6 +191,7 @@ fn init(arg: Option<CheckArg>) {
             ic_cdk::trap("cannot init canister state without init args");
         }
     }
+    blocklist::init();
 }
 
 #[ic_cdk::post_upgrade]
@@ -216,6 +217,7 @@ fn post_upgrade(arg: Option<CheckArg>) {
         }
         _ => (), // config remains unchanged if no upgrade argument is specified
     }
+    blocklist::init();
 }
 
 #[ic_cdk::query(hidden = true)]

@@ -15,7 +15,6 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-cdk = { workspace = true }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
@@ -38,6 +37,9 @@ ic-xrc-types = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

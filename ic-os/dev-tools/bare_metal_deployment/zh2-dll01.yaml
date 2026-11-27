@@ -10,3 +10,9 @@ inject_image_ipv4_prefix_length: 29
 inject_image_domain: bare-metal-deployment.icp5.io
 inject_image_verbose: false
 inject_enable_trusted_execution_environment: false
+# Production's GuestOS VM size, rather than the dev image's 16 GiB and 16 vCPUs, so that the benchmark
+# measures what production sees. In particular, dm-crypt caps its write buffers at 2% of the VM's
+# memory, shared among its devices: in a 12 GiB GuestOS that is ~119 MiB for the store, and once the
+# benchmark's `fio` write has more than that in flight, encryption stalls on buffer allocation.
+inject_image_memory_gb: 480
+inject_image_nr_of_vcpus: 64

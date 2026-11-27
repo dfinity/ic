@@ -119,7 +119,7 @@
     // ====================================
     http_handler: {
         listen_addr: "[::]:8080",
-        extra_api_boundary_node_trust_anchors_pem: {{ extra_api_boundary_node_trust_anchors_pem }},
+        extra_api_boundary_node_trust_anchors_pem: {{ extra_api_boundary_node_trust_anchors_pem|json }},
     },
 
     // ====================================
@@ -655,8 +655,8 @@ table ip6 filter {\n\
     },
 
     cloud_engine: {
-        engine_management_canister_id: {{ engine_management_canister_id }},
+        engine_management_canister_id: {{ engine_management_canister_id|json }},
     },
 
-    malicious_behavior: {{ malicious_behavior }},
+    malicious_behavior: {{ malicious_behavior|json }},
 }

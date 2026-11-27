@@ -567,18 +567,10 @@ impl LedgerClient {
         let now = ic_types::time::current_time();
         let deadline = start_time + Self::TIMEOUT;
 
-        let EnvelopePair { update, read_state } = request
-            .clone()
-            .into_iter()
-            .find(|EnvelopePair { update, .. }| {
-                let ingress_expiry =
-                    ic_types::Time::from_nanos_since_unix_epoch(update.content.ingress_expiry());
-                let ingress_start = ingress_expiry.saturating_sub(
-                    ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT),
-                );
-                ingress_start <= now && ingress_expiry > now
-            })
-            .ok_or(ApiError::TransactionExpired)?;
+        let EnvelopePair { update, read_state } =
+            crate::signed_target::current_envelope(&request, now)
+                .cloned()
+                .ok_or(ApiError::TransactionExpired)?;
 
         let canister_id = match &update.content {
             HttpCallContent::Call { update } => CanisterId::try_from(update.canister_id.0.clone())

@@ -2,6 +2,7 @@ use super::*;
 use ic_base_types::CanisterId;
 use ic_config::state_manager::lsmt_config_default;
 use ic_metrics::MetricsRegistry;
+use ic_recovery::CHECKPOINTS;
 use ic_replicated_state::{
     PageMap,
     page_map::{
@@ -159,4 +160,46 @@ fn recovery_cup_time_must_be_past_both_halting_times() {
             .to_string();
         assert!(err.contains(&format!("subnet {behind} halted at")), "{err}");
     }
+}
+
+/// The copy of the merged state that is moved into place on the node of the
+/// destination subnet shares no files with the downloaded states, even though
+/// the merged state does.
+#[test]
+fn copy_of_merged_state_shares_no_files() {
+    use std::os::unix::fs::MetadataExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let layout = Layout::for_test(tmp.path().to_path_buf());
+    let downloaded = layout.checkpoint_dir(TargetSubnet::Destination, Height::new(100));
+    let merged = layout.merged_checkpoint_dir(Height::new(101));
+    std::fs::create_dir_all(&downloaded).unwrap();
+    std::fs::create_dir_all(&merged).unwrap();
+    std::fs::write(downloaded.join("system_metadata.pbuf"), "metadata").unwrap();
+    std::fs::hard_link(
+        downloaded.join("system_metadata.pbuf"),
+        merged.join("system_metadata.pbuf"),
+    )
+    .unwrap();
+    // A stale copy from an earlier run of the step is replaced.
+    let stale = layout.merged_ic_state_copy_dir().join("stale");
+    std::fs::create_dir_all(&stale).unwrap();
+
+    let step = UploadMergedStateStep {
+        node: DataLocation::Local,
+        layout: layout.clone(),
+        require_confirmation: false,
+        key_file: None,
+        logger: Logger::root(slog::Discard, slog::o!()),
+    };
+    step.copy_merged_state().unwrap();
+
+    assert!(!stale.exists());
+    let copied = layout
+        .merged_ic_state_copy_dir()
+        .join(CHECKPOINTS)
+        .join(StateLayout::checkpoint_name(Height::new(101)))
+        .join("system_metadata.pbuf");
+    assert_eq!(std::fs::read_to_string(&copied).unwrap(), "metadata");
+    assert_eq!(std::fs::metadata(&copied).unwrap().nlink(), 1);
 }

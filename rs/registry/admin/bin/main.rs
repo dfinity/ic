@@ -489,6 +489,10 @@ enum SubCommand {
     /// the canister ID ranges of the source subnet to the destination subnet.
     ProposeToMergeSubnets(ProposeToMergeSubnetsCmd),
 
+    /// Propose to pause canister migrations: the migration canister then rejects new migration
+    /// requests.
+    ProposeToPauseCanisterMigrations(ProposeToPauseCanisterMigrationsCmd),
+
     /// Propose additions or updates to `canister_migrations`. Step 1 of canister migration.
     ProposeToPrepareCanisterMigration(ProposeToPrepareCanisterMigrationCmd),
 
@@ -564,6 +568,10 @@ enum SubCommand {
 
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
+
+    /// Propose to unpause canister migrations: the migration canister then accepts migration
+    /// requests again.
+    ProposeToUnpauseCanisterMigrations(ProposeToUnpauseCanisterMigrationsCmd),
 
     /// Propose to update the settings of a canister.
     ProposeToUpdateCanisterSettings(ProposeToUpdateCanisterSettingsCmd),
@@ -3706,6 +3714,44 @@ struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
     pub ballot: RootProposalBallot,
 }
 
+/// Sub-command to submit a proposal to pause canister migrations.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToPauseCanisterMigrationsCmd {}
+
+impl ProposalTitle for ProposeToPauseCanisterMigrationsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Pause canister migrations".to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<()> for ProposeToPauseCanisterMigrationsCmd {
+    async fn payload(&self, _: &Agent) -> () {}
+}
+
+/// Sub-command to submit a proposal to unpause canister migrations.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToUnpauseCanisterMigrationsCmd {}
+
+impl ProposalTitle for ProposeToUnpauseCanisterMigrationsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Unpause canister migrations".to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<()> for ProposeToUnpauseCanisterMigrationsCmd {
+    async fn payload(&self, _: &Agent) -> () {}
+}
+
 /// Sub-command to submit a proposal to modify the canister migrations.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
@@ -4856,6 +4902,7 @@ async fn main() {
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
             SubCommand::ProposeToMergeSubnets(_) => (),
+            SubCommand::ProposeToPauseCanisterMigrations(_) => (),
             SubCommand::ProposeToPrepareCanisterMigration(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
             SubCommand::ProposeToRemoveFirewallRules(_) => (),
@@ -4877,6 +4924,7 @@ async fn main() {
             SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
             SubCommand::ProposeToSetDefaultInitialDkgSubnet(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
+            SubCommand::ProposeToUnpauseCanisterMigrations(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             SubCommand::ProposeToUpdateFirewallRules(_) => (),
             SubCommand::ProposeToUpdateNodeOperatorConfig(_) => (),
@@ -5975,6 +6023,36 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RerouteCanisterRanges,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToPauseCanisterMigrations(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::PauseCanisterMigrations,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUnpauseCanisterMigrations(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UnpauseCanisterMigrations,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

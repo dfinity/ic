@@ -1,7 +1,8 @@
 //! Utilities to derive, display, and parse Bitcoin addresses.
 
 use crate::{ECDSAPublicKey, Network};
-use bech32::Variant;
+use bech32::primitives::decode::{CheckedHrpstring, UncheckedHrpstring};
+use bech32::{Bech32, Bech32m, Hrp};
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -162,25 +163,11 @@ pub fn account_to_bitcoin_address(
 }
 
 fn encode_bech32(network: Network, hash: &[u8], version: WitnessVersion) -> String {
-    use bech32::u5;
-
-    let hrp = hrp(network);
-    let witness_version: u5 =
-        u5::try_from_u8(version as u8).expect("bug: witness version must be smaller than 32");
-    let data: Vec<u5> = std::iter::once(witness_version)
-        .chain(
-            bech32::convert_bits(hash, 8, 5, true)
-                .expect("bug: bech32 bit conversion failed on valid inputs")
-                .into_iter()
-                .map(|b| {
-                    u5::try_from_u8(b).expect("bug: bech32 bit conversion produced invalid outputs")
-                }),
-        )
-        .collect();
+    let hrp = bech32_hrp(network);
     match version {
-        WitnessVersion::V0 => bech32::encode(hrp, data, bech32::Variant::Bech32)
+        WitnessVersion::V0 => bech32::segwit::encode_v0(hrp, hash)
             .expect("bug: bech32 encoding failed on valid inputs"),
-        WitnessVersion::V1 => bech32::encode(hrp, data, bech32::Variant::Bech32m)
+        WitnessVersion::V1 => bech32::segwit::encode_v1(hrp, hash)
             .expect("bug: bech32m encoding failed on valid inputs"),
     }
 }
@@ -212,6 +199,24 @@ pub fn hrp(network: Network) -> &'static str {
         Network::Testnet => "tb",
         Network::Regtest => "bcrt",
     }
+}
+
+/// Returns the human-readable part of a bech32 address as an [`Hrp`].
+fn bech32_hrp(network: Network) -> Hrp {
+    match network {
+        Network::Mainnet => bech32::hrp::BC,
+        Network::Testnet => bech32::hrp::TB,
+        Network::Regtest => bech32::hrp::BCRT,
+    }
+}
+
+/// The checksum algorithm of a bech32 string.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Variant {
+    /// The bech32 checksum of BIP-173.
+    Bech32,
+    /// The bech32m checksum of BIP-350.
+    Bech32m,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -337,43 +342,32 @@ fn parse_bip173_address(
     address: &str,
     network: Network,
 ) -> Result<BitcoinAddress, ParseAddressError> {
-    let (found_hrp, five_bit_groups, variant) =
-        bech32::decode(address).map_err(|e| ParseAddressError::MalformedAddress(e.to_string()))?;
+    let (checked, variant) = decode_bech32(address)?;
+    let found_hrp = checked.hrp().to_lowercase();
     let expected_hrp = hrp(network);
 
-    if found_hrp.to_lowercase() != expected_hrp {
+    if found_hrp != expected_hrp {
         return Err(ParseAddressError::UnexpectedHumanReadablePart {
             expected: expected_hrp.to_string(),
             actual: found_hrp,
         });
     }
 
-    if five_bit_groups.is_empty() {
-        return Err(ParseAddressError::NoData);
-    }
-
-    let witness_version = five_bit_groups[0].to_u8();
+    let witness_version = match checked.fe32_iter().next() {
+        Some(witness_version) => witness_version.to_u8(),
+        None => return Err(ParseAddressError::NoData),
+    };
 
     match witness_version {
         0 => {
-            if variant != bech32::Variant::Bech32 {
+            if variant != Variant::Bech32 {
                 return Err(ParseAddressError::InvalidBech32Variant {
-                    expected: bech32::Variant::Bech32,
+                    expected: Variant::Bech32,
                     found: variant,
                 });
             }
 
-            let data = bech32::convert_bits(
-                &five_bit_groups[1..],
-                /*from=*/ 5,
-                /*to=*/ 8,
-                /*pad=*/ false,
-            )
-            .map_err(|e| {
-                ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {address}: {e}"
-                ))
-            })?;
+            let data = witness_program(checked, address)?;
 
             match data.len() {
                 20 => {
@@ -395,23 +389,13 @@ fn parse_bip173_address(
             }
         }
         1 => {
-            if variant != bech32::Variant::Bech32m {
+            if variant != Variant::Bech32m {
                 return Err(ParseAddressError::InvalidBech32Variant {
-                    expected: bech32::Variant::Bech32m,
+                    expected: Variant::Bech32m,
                     found: variant,
                 });
             }
-            let data = bech32::convert_bits(
-                &five_bit_groups[1..],
-                /*from=*/ 5,
-                /*to=*/ 8,
-                /*pad=*/ false,
-            )
-            .map_err(|e| {
-                ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {address}: {e}"
-                ))
-            })?;
+            let data = witness_program(checked, address)?;
 
             if data.len() != 32 {
                 return Err(ParseAddressError::BadWitnessLength {
@@ -430,25 +414,68 @@ fn parse_bip173_address(
     }
 }
 
+/// Validates the checksum of a bech32 string, which can be either a bech32 or a bech32m
+/// checksum, and returns the string without the checksum and the checksum variant.
+fn decode_bech32(address: &str) -> Result<(CheckedHrpstring<'_>, Variant), ParseAddressError> {
+    let unchecked = UncheckedHrpstring::new(address)
+        .map_err(|e| ParseAddressError::MalformedAddress(error_with_sources(&e)))?;
+    if unchecked.has_valid_checksum::<Bech32>() {
+        Ok((unchecked.remove_checksum::<Bech32>(), Variant::Bech32))
+    } else if unchecked.has_valid_checksum::<Bech32m>() {
+        Ok((unchecked.remove_checksum::<Bech32m>(), Variant::Bech32m))
+    } else {
+        Err(ParseAddressError::MalformedAddress(
+            "invalid checksum".to_string(),
+        ))
+    }
+}
+
+/// Returns the witness program of a bech32 string whose data part starts with witness version 0
+/// or 1, rejecting a program whose padding bits are invalid.
+fn witness_program(
+    mut checked: CheckedHrpstring<'_>,
+    address: &str,
+) -> Result<Vec<u8>, ParseAddressError> {
+    checked
+        .remove_witness_version()
+        .expect("bug: witness versions 0 and 1 are valid segwit versions");
+    checked.validate_segwit_padding().map_err(|e| {
+        ParseAddressError::MalformedAddress(format!(
+            "failed to decode witness from address {address}: {e}"
+        ))
+    })?;
+    Ok(checked.byte_iter().collect())
+}
+
+/// Formats an error followed by its chain of sources. The errors of the bech32 crate display
+/// only their own message and leave the cause to `source`.
+fn error_with_sources(error: &dyn std::error::Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        message.push_str(": ");
+        message.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    message
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{BitcoinAddress, ParseAddressError, hrp};
+    use super::{BitcoinAddress, ParseAddressError, Variant, bech32_hrp, parse_bip173_address};
     use crate::Network;
-    use bech32::u5;
+    use assert_matches::assert_matches;
+    use bech32::{Bech32, ByteIterExt, Fe32, Fe32IterExt};
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
-        let data: Vec<u5> = witness_version
-            .iter()
-            .map(|n| u5::try_from_u8(*n).unwrap())
-            .chain(
-                bech32::convert_bits(data, 8, 5, true)
-                    .unwrap()
-                    .into_iter()
-                    .map(|b| u5::try_from_u8(b).unwrap()),
-            )
-            .collect();
-        let hrp = hrp(network);
-        bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap()
+        let hrp = bech32_hrp(network);
+        witness_version
+            .map(|n| Fe32::try_from(n).unwrap())
+            .into_iter()
+            .chain(data.iter().copied().bytes_to_fes())
+            .with_checksum::<Bech32>(&hrp)
+            .chars()
+            .collect()
     }
 
     #[test]
@@ -592,5 +619,413 @@ mod tests {
             )
             .unwrap_err()
         );
+    }
+
+    // Most vectors below come from BIP-173 and BIP-350:
+    // https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#test-vectors
+    // https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki#test-vectors-for-bech32m
+
+    fn p2wpkh_v0(program: &str) -> BitcoinAddress {
+        BitcoinAddress::P2wpkhV0(hex::decode(program).unwrap().try_into().unwrap())
+    }
+
+    fn p2wsh_v0(program: &str) -> BitcoinAddress {
+        BitcoinAddress::P2wshV0(hex::decode(program).unwrap().try_into().unwrap())
+    }
+
+    fn p2tr_v1(program: &str) -> BitcoinAddress {
+        BitcoinAddress::P2trV1(hex::decode(program).unwrap().try_into().unwrap())
+    }
+
+    #[test]
+    fn should_parse_and_display_valid_segwit_addresses() {
+        let addresses = [
+            (
+                "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
+                Network::Mainnet,
+                p2wpkh_v0("751e76e8199196d454941c45d1b3a323f1433bd6"),
+            ),
+            (
+                "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7",
+                Network::Testnet,
+                p2wsh_v0("1863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262"),
+            ),
+            (
+                "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy",
+                Network::Testnet,
+                p2wsh_v0("000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"),
+            ),
+            (
+                "tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c",
+                Network::Testnet,
+                p2tr_v1("000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433"),
+            ),
+            (
+                "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+                Network::Mainnet,
+                p2tr_v1("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"),
+            ),
+            // Regtest encodings of witness programs from the BIP vectors, computed with the
+            // BIP-350 reference implementation.
+            (
+                "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+                Network::Regtest,
+                p2wpkh_v0("751e76e8199196d454941c45d1b3a323f1433bd6"),
+            ),
+            (
+                "bcrt1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qzf4jry",
+                Network::Regtest,
+                p2wsh_v0("1863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262"),
+            ),
+            (
+                "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6",
+                Network::Regtest,
+                p2tr_v1("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"),
+            ),
+        ];
+
+        for (address, network, expected) in addresses {
+            assert_eq!(
+                BitcoinAddress::parse(address, network),
+                Ok(expected.clone()),
+                "{address}"
+            );
+            assert_eq!(expected.display(network), address.to_lowercase());
+        }
+    }
+
+    #[test]
+    fn should_reject_unsupported_and_invalid_segwit_addresses() {
+        use ParseAddressError::*;
+
+        let unexpected_hrp = |expected: &str, actual: &str| UnexpectedHumanReadablePart {
+            expected: expected.to_string(),
+            actual: actual.to_string(),
+        };
+        let addresses = [
+            // Valid segwit addresses that ckBTC does not support.
+            (
+                "bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kt5nd6y",
+                Network::Mainnet,
+                BadWitnessLength {
+                    expected: 32,
+                    actual: 40,
+                },
+            ),
+            (
+                "BC1SW50QGDZ25J",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(16),
+            ),
+            (
+                "bc1zw508d6qejxtdg4y5r3zarvaryvaxxpcs",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(2),
+            ),
+            // Valid segwit addresses for another network.
+            (
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+                Network::Testnet,
+                unexpected_hrp("tb", "bc"),
+            ),
+            (
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+                Network::Regtest,
+                unexpected_hrp("bcrt", "bc"),
+            ),
+            (
+                "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7",
+                Network::Mainnet,
+                unexpected_hrp("bc", "tb"),
+            ),
+            (
+                "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+                Network::Mainnet,
+                unexpected_hrp("bc", "bcrt"),
+            ),
+            // Invalid human-readable part.
+            (
+                "tc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vq5zuyut",
+                Network::Testnet,
+                unexpected_hrp("tb", "tc"),
+            ),
+            (
+                "tc1qw508d6qejxtdg4y5r3zarvary0c5xw7kg3g4ty",
+                Network::Testnet,
+                unexpected_hrp("tb", "tc"),
+            ),
+            // Bech32 instead of bech32m checksum.
+            (
+                "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd",
+                Network::Mainnet,
+                InvalidBech32Variant {
+                    expected: Variant::Bech32m,
+                    found: Variant::Bech32,
+                },
+            ),
+            (
+                "tb1z0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqglt7rf",
+                Network::Testnet,
+                UnsupportedWitnessVersion(2),
+            ),
+            (
+                "BC1S0XLXVLHEMJA6C4DQV22UAPCTQUPFHLXM9H8Z3K2E72Q4K9HCZ7VQ54WELL",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(16),
+            ),
+            // BIP-173 vectors for witness versions 1 and later, which BIP-350 made invalid.
+            (
+                "bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7k7grplx",
+                Network::Mainnet,
+                InvalidBech32Variant {
+                    expected: Variant::Bech32m,
+                    found: Variant::Bech32,
+                },
+            ),
+            (
+                "BC1SW50QA3JX3S",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(16),
+            ),
+            (
+                "bc1zw508d6qejxtdg4y5r3zarvaryvg6kdaj",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(2),
+            ),
+            // Bech32m instead of bech32 checksum.
+            (
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kemeawh",
+                Network::Mainnet,
+                InvalidBech32Variant {
+                    expected: Variant::Bech32,
+                    found: Variant::Bech32m,
+                },
+            ),
+            (
+                "tb1q0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vq24jc47",
+                Network::Testnet,
+                InvalidBech32Variant {
+                    expected: Variant::Bech32,
+                    found: Variant::Bech32m,
+                },
+            ),
+            // Invalid witness version.
+            (
+                "BC130XLXVLHEMJA6C4DQV22UAPCTQUPFHLXM9H8Z3K2E72Q4K9HCZ7VQ7ZWS8R",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(17),
+            ),
+            (
+                "BC13W508D6QEJXTDG4Y5R3ZARVARY0C5XW7KN40WF2",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(17),
+            ),
+            // Invalid program length.
+            (
+                "bc1pw5dgrnzv",
+                Network::Mainnet,
+                BadWitnessLength {
+                    expected: 32,
+                    actual: 1,
+                },
+            ),
+            (
+                "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7v8n0nx0muaewav253zgeav",
+                Network::Mainnet,
+                BadWitnessLength {
+                    expected: 32,
+                    actual: 41,
+                },
+            ),
+            (
+                "BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P",
+                Network::Mainnet,
+                BadWitnessLength {
+                    expected: 20,
+                    actual: 16,
+                },
+            ),
+            (
+                "bc1rw5uspcuh",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(3),
+            ),
+            (
+                "bc10w508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kw5rljs90",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(15),
+            ),
+            // Longer than the 90 characters that BIP-173 allows, with a valid checksum.
+            (
+                "bc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9t4ulp",
+                Network::Mainnet,
+                BadWitnessLength {
+                    expected: 20,
+                    actual: 65,
+                },
+            ),
+            // Zero padding of more than 4 bits, in an address with an unsupported witness
+            // version.
+            (
+                "bc1zw508d6qejxtdg4y5r3zarvaryvqyzf3du",
+                Network::Mainnet,
+                UnsupportedWitnessVersion(2),
+            ),
+            // Empty data section.
+            ("bc1gmk9yu", Network::Mainnet, NoData),
+        ];
+
+        for (address, network, expected) in addresses {
+            assert_eq!(
+                BitcoinAddress::parse(address, network),
+                Err(expected),
+                "{address}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_reject_malformed_segwit_addresses() {
+        let addresses = [
+            // Invalid character in checksum.
+            (
+                "bc1p38j9r5y49hruaue7wxjce0updqjuyyx0kh56v8s25huc6995vvpql3jow4",
+                Network::Mainnet,
+            ),
+            // Invalid checksum.
+            (
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5",
+                Network::Mainnet,
+            ),
+            // Mixed case.
+            (
+                "tb1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vq47Zagq",
+                Network::Testnet,
+            ),
+            (
+                "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sL5k7",
+                Network::Testnet,
+            ),
+            (
+                "BC1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+                Network::Mainnet,
+            ),
+            // Zero padding of more than 4 bits.
+            (
+                "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7v07qwwzcrf",
+                Network::Mainnet,
+            ),
+            // Non-zero padding in 8-to-5 conversion.
+            (
+                "tb1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vpggkg4j",
+                Network::Testnet,
+            ),
+            (
+                "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3pjxtptv",
+                Network::Testnet,
+            ),
+        ];
+
+        for (address, network) in addresses {
+            assert_matches!(
+                BitcoinAddress::parse(address, network),
+                Err(ParseAddressError::MalformedAddress(_)),
+                "{address}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_reject_addresses_longer_than_1023_characters_as_malformed() {
+        // Bech32 checksums are validated only for strings of at most 1,023 characters. An
+        // address of that length with a valid checksum reaches the witness program length
+        // check, while a longer one fails the checksum check.
+        let longest = generate_address(Some(0), &[0; 633], Network::Mainnet);
+        assert_eq!(longest.len(), 1023);
+        assert_eq!(
+            BitcoinAddress::parse(&longest, Network::Mainnet),
+            Err(ParseAddressError::BadWitnessLength {
+                expected: 20,
+                actual: 633,
+            })
+        );
+
+        let too_long = generate_address(Some(0), &[0; 634], Network::Mainnet);
+        assert_eq!(too_long.len(), 1025);
+        assert_matches!(
+            BitcoinAddress::parse(&too_long, Network::Mainnet),
+            Err(ParseAddressError::MalformedAddress(_))
+        );
+    }
+
+    #[test]
+    fn should_check_bech32_and_bech32m_checksums() {
+        let valid = [
+            // Bech32
+            "A12UEL5L",
+            "a12uel5l",
+            "an83characterlonghumanreadablepartthatcontainsthenumber1andtheexcludedcharactersbio1tt5tgs",
+            "abcdef1qpzry9x8gf2tvdw0s3jn54khce6mua7lmqqqxw",
+            "11qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc8247j",
+            "split1checkupstagehandshakeupstreamerranterredcaperred2y9e3w",
+            "?1ezyfcl",
+            // Bech32m
+            "A1LQFN3A",
+            "a1lqfn3a",
+            "an83characterlonghumanreadablepartthatcontainsthetheexcludedcharactersbioandnumber11sg7hg6",
+            "abcdef1l7aum6echk45nj3s0wdvt2fg8x9yrzpqzd3ryx",
+            "11llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllludsr8",
+            "split1checkupstagehandshakeupstreamerranterredcaperredlc445v",
+            "?1v759aa",
+        ];
+        for s in valid {
+            let hrp = s[..s.rfind('1').unwrap()].to_lowercase();
+            assert_eq!(
+                parse_bip173_address(s, Network::Mainnet),
+                Err(ParseAddressError::UnexpectedHumanReadablePart {
+                    expected: "bc".to_string(),
+                    actual: hrp,
+                }),
+                "{s}"
+            );
+        }
+
+        let invalid = [
+            // Bech32
+            "\u{20}1nwldj5",
+            "\u{7f}1axkwrx",
+            "\u{80}1eym55h",
+            "an84characterslonghumanreadablepartthatcontainsthenumber1andtheexcludedcharactersbio1569pvx",
+            "pzry9x0s0muk",
+            "1pzry9x0s0muk",
+            "x1b4n0q5v",
+            "li1dgmt3",
+            "de1lg7wt\u{ff}",
+            "A1G7SGD8",
+            "10a06t8",
+            "1qzzfhee",
+            // Bech32m
+            "\u{20}1xj0phk",
+            "\u{7f}1g6xzxy",
+            "\u{80}1vctc34",
+            "an84characterslonghumanreadablepartthatcontainsthetheexcludedcharactersbioandnumber11d6pts4",
+            "qyrz8wqd2c9m",
+            "1qyrz8wqd2c9m",
+            "y1b0jsk6g",
+            "lt1igcx5c0",
+            "in1muywd",
+            "mm1crxm3i",
+            "au1s5cgom",
+            "M1VUXWEZ",
+            "16plkw9",
+            "1p2gdwpf",
+        ];
+        for s in invalid {
+            assert_matches!(
+                parse_bip173_address(s, Network::Mainnet),
+                Err(ParseAddressError::MalformedAddress(_)),
+                "{s:?}"
+            );
+        }
     }
 }

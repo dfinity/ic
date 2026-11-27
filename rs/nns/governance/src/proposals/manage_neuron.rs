@@ -1,6 +1,6 @@
 use crate::{
     pb::v1::{
-        Empty, ManageNeuron, SelfDescribingValue, Topic, Visibility, Vote,
+        Empty, ManageNeuron, Proposal, SelfDescribingValue, Topic, Visibility, Vote,
         manage_neuron::{
             ClaimOrRefresh, Command, Configure, Disburse, Follow, JoinCommunityFund,
             LeaveCommunityFund, NeuronIdOrSubaccount, RefreshVotingPower, RegisterVote,
@@ -9,6 +9,7 @@ use crate::{
             configure::Operation,
             set_following::FolloweesForTopic,
         },
+        proposal::Action,
     },
     proposals::self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
 };
@@ -105,14 +106,44 @@ impl From<Command> for SelfDescribingValue {
                 );
                 Self::singleton_map("MergeMaturity", Self::NULL)
             }
-            C::MakeProposal(_) => {
-                println!(
-                    "A ManageNeuron proposal is created with a MakeProposal command. This should never happen."
-                );
-                Self::singleton_map("MakeProposal", Self::NULL)
+            C::MakeProposal(nested_proposal) => {
+                Self::singleton_map("MakeProposal", describe_nested_proposal(*nested_proposal))
             }
         }
     }
+}
+
+/// Describes a proposal that is nested in a ManageNeuron proposal (via the MakeProposal command).
+/// Validation only allows the nested proposal to be a ManageNeuron proposal, so other actions are
+/// not described.
+fn describe_nested_proposal(nested_proposal: Proposal) -> SelfDescribingValue {
+    let Proposal {
+        title,
+        summary,
+        url,
+        action,
+        self_describing_action: _,
+    } = nested_proposal;
+
+    let action = match action {
+        Some(Action::ManageNeuron(manage_neuron)) => {
+            SelfDescribingValue::singleton_map("ManageNeuron", *manage_neuron)
+        }
+        Some(_) | None => {
+            println!(
+                "A ManageNeuron proposal is created with a MakeProposal command whose action is \
+                 not ManageNeuron. This should never happen."
+            );
+            SelfDescribingValue::NULL
+        }
+    };
+
+    ValueBuilder::new()
+        .add_field("title", title)
+        .add_field("summary", summary)
+        .add_field("url", url)
+        .add_field("action", action)
+        .build()
 }
 
 impl From<Configure> for SelfDescribingValue {

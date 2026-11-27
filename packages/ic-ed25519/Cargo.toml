@@ -14,7 +14,8 @@ documentation.workspace = true
 curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
 hex-literal = { workspace = true }
-hkdf = { workspace = true }
+# hkdf 0.12 takes the digest 0.10 `Sha512` that ed25519-dalek 2 re-exports.
+hkdf = "0.12"
 ic_principal = { version = "0.1.1", default-features = false }
 pem = { workspace = true }
 rand = { workspace = true, optional = true }

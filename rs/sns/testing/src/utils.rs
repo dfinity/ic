@@ -17,7 +17,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{ListNeurons, Neuron};
 use icp_ledger::{AccountIdBlob, DEFAULT_TRANSFER_FEE, Memo, Tokens, TransferArgs, TransferError};
-use k256::SecretKey;
+use k256::{SecretKey, pkcs8::LineEnding};
 use lazy_static::lazy_static;
 use thiserror::Error;
 
@@ -43,7 +43,8 @@ lazy_static! {
         SecretKey::from_slice(&slice_vec).unwrap()
     };
     pub static ref TREASURY_PRINCIPAL_ID: PrincipalId = {
-        let identity = Secp256k1Identity::from_private_key(TREASURY_SECRET_KEY.clone());
+        let pem = TREASURY_SECRET_KEY.to_sec1_pem(LineEnding::LF).unwrap();
+        let identity = Secp256k1Identity::from_pem(pem.as_bytes()).unwrap();
         identity.sender().unwrap().into()
     };
 }
@@ -58,7 +59,9 @@ pub trait BuildEphemeralAgent {
 
 impl<'a> BuildEphemeralAgent for PocketIcAgent<'a> {
     fn build_ephemeral_agent(&self, secret_key: SecretKey) -> PocketIcAgent<'a> {
-        let principal = Secp256k1Identity::from_private_key(secret_key)
+        let pem = secret_key.to_sec1_pem(LineEnding::LF).unwrap();
+        let principal = Secp256k1Identity::from_pem(pem.as_bytes())
+            .unwrap()
             .sender()
             .unwrap();
         PocketIcAgent::new(self.pocket_ic, principal)
@@ -67,7 +70,8 @@ impl<'a> BuildEphemeralAgent for PocketIcAgent<'a> {
 
 impl BuildEphemeralAgent for Agent {
     fn build_ephemeral_agent(&self, secret_key: SecretKey) -> Agent {
-        let identity = Secp256k1Identity::from_private_key(secret_key);
+        let pem = secret_key.to_sec1_pem(LineEnding::LF).unwrap();
+        let identity = Secp256k1Identity::from_pem(pem.as_bytes()).unwrap();
         let mut agent = self.clone();
         agent.set_identity(identity);
         agent
