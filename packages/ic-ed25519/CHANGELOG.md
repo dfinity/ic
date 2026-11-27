@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Upgrade the `ed25519-dalek` dependency from version 2 to 3, `curve25519-dalek` from 4 to 5 and `hkdf` from 0.12 to 0.13. The public API is unchanged, and key generation, signing, key serialization and signature verification produce the same results as before.
+- `PrivateKey::generate_using_rng` takes the next 32 bytes of the RNG output as the key, as `ed25519-dalek` 2 did, so the same RNG state still yields the same key.
+- The details of `PrivateKeyDecodingError::InvalidKeyEncoding` and `PublicKeyDecodingError::InvalidKeyEncoding` for malformed DER input are worded differently, as they come from `der` 0.8, `spki` 0.8 and `pkcs8` 0.11.
+
 ## [0.6.0] - 2026-02-04
 
 ## Added

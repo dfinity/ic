@@ -671,7 +671,7 @@ crossbeam-channel = "0.5.15"
 crossbeam-utils = "0.8.21"
 crossterm = "0.29.0"
 csv = "^1.1"
-curve25519-dalek = { version = "4.1.3", features = [
+curve25519-dalek = { version = "5.0.0", features = [
     "group",
     "precomputed-tables",
 ] }
@@ -680,13 +680,11 @@ der = { version = "0.8.3", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
 duration-string = { version = "0.5.3", features = ["serde"] }
-ed25519-dalek = { version = "2.2.0", features = [
-    "std",
+ed25519-dalek = { version = "3.0.0", features = [
+    "alloc",
     "zeroize",
     "digest",
-    "batch",
     "pkcs8",
-    "pem",
     "hazmat",
 ] }
 escargot = "1.0.1"

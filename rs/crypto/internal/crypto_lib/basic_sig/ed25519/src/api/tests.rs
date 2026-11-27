@@ -398,16 +398,16 @@ mod non_malleability {
 
     #[test]
     fn should_fail_to_verify_malleable_signature() {
-        #[allow(deprecated)]
-        let basepoint = curve25519_dalek::constants::BASEPOINT_ORDER.as_bytes();
+        // The order L of the Ed25519 base point (RFC 8032, section 5.1)
+        let l: BigUint = (BigUint::from(1_u8) << 252_u32)
+            + BigUint::parse_bytes(b"27742317777372353535851937790883648493", 10).unwrap();
 
         for test_vec in Ed25519TestVector::iter() {
             let (_sk, pk, msg, mut sig) = crypto_lib_testvec(test_vec);
 
             // Add curve order (L) to the S-element of the valid signature (R || S)
             let s = BigUint::from_bytes_le(&sig[32..]); // little-endian according to RFC8032
-            let l = BigUint::from_bytes_le(basepoint);
-            sig[32..].copy_from_slice(&(s + l).to_bytes_le());
+            sig[32..].copy_from_slice(&(s + &l).to_bytes_le());
 
             let result = verify(&SignatureBytes(sig), &msg, &PublicKeyBytes(pk));
 

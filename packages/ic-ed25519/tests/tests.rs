@@ -72,6 +72,26 @@ fn secret_key_generation_from_seed_is_stable() {
 }
 
 #[test]
+#[cfg(feature = "rand")]
+fn secret_key_generation_from_rng_is_stable() {
+    // Each key is the next 32 bytes of the RNG output
+    let mut rng = test_rng_with_seed([42; 32]);
+
+    let keys = (0..3)
+        .map(|_| hex::encode(PrivateKey::generate_using_rng(&mut rng).serialize_raw()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        keys,
+        [
+            "98191f46e5830216445436978803697a5e3ab61b1e8951d4fe9ae67bab614a5f",
+            "7bfcfd7544b1078dda397cef45df2e6de498746805081ebc8fb90ad04eba9d02",
+            "36f00e57d42f871e3987e832d90f56c6940b5937688edf03c4fd3908aec402be",
+        ]
+    );
+}
+
+#[test]
 fn pkcs8_v2_rep_includes_the_public_key() {
     let mut rng = &mut test_rng();
     let sk = random_key(&mut rng);
@@ -98,6 +118,22 @@ fn signatures_we_generate_will_verify() {
 
         assert!(pk.verify_signature(&msg, &sig).is_ok());
     }
+}
+
+#[test]
+fn signature_generation_is_stable() {
+    let sk = PrivateKey::generate_from_seed(b"ic-ed25519 signature stability");
+    let (derived_sk, _chain_code) = sk.derive_subkey(&DerivationPath::new_bip32(&[1, 2, 3]));
+    let msg = b"message";
+
+    assert_eq!(
+        hex::encode(sk.sign_message(msg)),
+        "2e31e594fdcd048cfced4a90863b3dfc414df0a6de167812eb0155fd944c60f5c4a6e1bfa63f4509269c4d71e6f9505aa3fa664af577523fb1a9e98e77649806"
+    );
+    assert_eq!(
+        hex::encode(derived_sk.sign_message(msg)),
+        "2598db51bc9759adb3b6714435a7b3e68d4544c0a61487ccc3b76ba0bae99ac6cd02a92087a0b5e2735c159a44ae24f2da6f98cf3cc8d7b5377647f8d8351803"
+    );
 }
 
 #[test]
@@ -247,6 +283,46 @@ fn test_der_public_key_conversions() {
 }
 
 #[test]
+fn rfc8410_der_encoding_matches_convert_raw32_to_der() {
+    fn check_der_encoding(pk: &PublicKey) {
+        let der = PublicKey::convert_raw32_to_der(pk.serialize_raw());
+        assert_eq!(pk.serialize_rfc8410_der(), der);
+        assert_eq!(PublicKey::deserialize_rfc8410_der(&der).unwrap(), *pk);
+    }
+
+    let rng = &mut test_rng();
+
+    for _ in 0..1000 {
+        check_der_encoding(&random_key(rng).public_key());
+    }
+
+    // The DER encoding keeps the point encoding as given, including for
+    // points with a torsion component and for non-canonical encodings
+    let mut decodable = 0;
+    while decodable < 1000 {
+        if let Ok(pk) = PublicKey::deserialize_raw(&rng.r#gen::<[u8; 32]>()) {
+            check_der_encoding(&pk);
+            decodable += 1;
+        }
+    }
+
+    const NON_CANONICAL: [[u8; 32]; 6] = [
+        hex!("0100000000000000000000000000000000000000000000000000000000000080"),
+        hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+    ];
+
+    for raw in &NON_CANONICAL {
+        let pk = PublicKey::deserialize_raw(raw).unwrap();
+        assert!(!pk.is_canonical());
+        check_der_encoding(&pk);
+    }
+}
+
+#[test]
 fn can_parse_pkcs8_v1_der_secret_key() {
     let pkcs8_v1 = hex!(
         "302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
@@ -257,6 +333,7 @@ fn can_parse_pkcs8_v1_der_secret_key() {
         hex::encode(sk.serialize_raw()),
         "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
     );
+    assert_eq!(sk.serialize_pkcs8(PrivateKeyFormat::Pkcs8v1), pkcs8_v1);
 }
 
 #[test]
@@ -288,6 +365,27 @@ fn can_parse_pkcs8_v2_der_secret_key() {
         hex::encode(sk.serialize_raw()),
         "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
     );
+    assert_eq!(sk.serialize_pkcs8(PrivateKeyFormat::Pkcs8v2), pkcs8_v2);
+}
+
+#[test]
+fn pkcs8_v2_rejects_public_key_bit_string_with_unused_bits() {
+    let rng = &mut test_rng();
+    let sk = random_key(rng);
+    let other_pk = random_key(rng).public_key().serialize_raw();
+
+    let mut der = sk.serialize_pkcs8(PrivateKeyFormat::Pkcs8v2);
+    // The public key is a [1] IMPLICIT BIT STRING of 33 bytes: the number of
+    // unused bits followed by the 32-byte key
+    assert_eq!(der[48..51], hex!("812100"));
+    der[51..].copy_from_slice(&other_pk);
+
+    // A public key that does not match the private key is rejected
+    assert!(PrivateKey::deserialize_pkcs8(&der).is_err());
+
+    // A public key whose BIT STRING has unused bits is rejected
+    der[50] = 1;
+    assert!(PrivateKey::deserialize_pkcs8(&der).is_err());
 }
 
 #[test]
