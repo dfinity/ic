@@ -427,6 +427,17 @@ impl TopologySnapshot {
             .expect("Optional routing table is None in local registry.")
     }
 
+    /// Every node of this IC: the nodes of all subnets, the unassigned nodes
+    /// and the API boundary nodes.
+    pub fn all_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        Box::new(
+            self.subnets()
+                .flat_map(|subnet| subnet.nodes())
+                .chain(self.unassigned_nodes())
+                .chain(self.api_boundary_nodes()),
+        )
+    }
+
     pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
         let assigned_nodes: HashSet<_> = self
             .local_registry
@@ -1259,6 +1270,11 @@ impl<'a> CanisterInstaller<'a> {
 pub trait HasTopologySnapshot {
     fn safe_topology_snapshot(&self) -> Result<TopologySnapshot>;
     fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot>;
+    /// The topology snapshot of every internet computer that has an ic-prep
+    /// directory in this environment (`HasIcPrepDir::ic_names`), named or not,
+    /// as `(ic_name, snapshot)`. One `Result` per IC, so an IC whose registry
+    /// is not written yet does not hide the others.
+    fn safe_topology_snapshots(&self) -> Vec<(String, Result<TopologySnapshot>)>;
     fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
         name: S,
         local_store_path: P,
@@ -1304,6 +1320,16 @@ impl HasTopologySnapshot for TestEnv {
             .ok_or_else(|| anyhow!("No snapshot for internet computer: {name:?}"))?;
         let local_store_path = prep_dir.registry_local_store_path();
         Self::create_topology_snapshot(name, local_store_path, self.clone())
+    }
+
+    fn safe_topology_snapshots(&self) -> Vec<(String, Result<TopologySnapshot>)> {
+        self.ic_names()
+            .into_iter()
+            .map(|name| {
+                let snapshot = self.safe_topology_snapshot_by_name(&name);
+                (name, snapshot)
+            })
+            .collect()
     }
 }
 
