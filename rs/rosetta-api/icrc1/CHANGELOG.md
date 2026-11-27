@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Fixed
-- Bound the cardinality of HTTP metric labels: requests are labelled with their route template, requests to unknown paths are recorded under a single `UNMATCHED` endpoint label and non-standard HTTP methods under a single `OTHER` method label.
-- Record HTTP metrics for requests whose network identifier does not match a configured token under the default token label instead of the raw network identifier.
+- Bound the cardinality of HTTP metric labels: requests are labelled with their route template, requests to unknown paths are recorded under a single `UNMATCHED` endpoint label and non-standard HTTP methods under a single `OTHER` method label ([#12084](https://github.com/dfinity/ic/pull/12084))
+- Record HTTP metrics for requests whose network identifier does not match a configured token under the default token label instead of the raw network identifier ([#12084](https://github.com/dfinity/ic/pull/12084))
 - `/account/balance` no longer answers above the highest block for which account balances have been
   computed. Previously the response was labelled with the highest *stored* block while the balance
   itself was the one computed at the highest *processed* block, so while the balance
