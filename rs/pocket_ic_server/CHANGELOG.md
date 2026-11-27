@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sign_with_ecdsa` derives the RFC 6979 nonce from the message hash reduced modulo the group order of the key's curve,
   as RFC 6979 specifies. For a `message_hash` whose value is at least that order, the signature therefore differs
   from the one returned before (and still verifies); this concerns both secp256k1 and secp256r1 keys.
+- Error responses that the HTTP gateway generates itself carry an `x-ic-error-cause` header with the error type
+  (the `error_type` of a JSON error response), and an `x-ic-error-cause` header in a canister's HTTP response
+  is passed on instead of being removed.
+- The HTTP gateway checks each chunk of a long asset, i.e., of a canister's `206 Partial Content` response to a request
+  without a `Range` header, against the chunk's `Content-Range` header: if the first chunk does not match, the gateway
+  responds with `503 Service Unavailable` (error type `backend_http_gateway`); if a later chunk does not match
+  or reports a different total length, the response body ends with an error.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,

@@ -738,7 +738,7 @@ ic-cdk-timers = "1.0.1"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3.0.3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.12", features = [
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.7.6", features = [
     "acme",
 ] }
 ic-identity-hsm = { version = "0.50.0" }
