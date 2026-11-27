@@ -27,8 +27,9 @@ Runbook::
    state of its own node with the merged state, waits until its own node
    reports the recovery CUP, unhalts `D`, waits until every subnet other than
    `S` routes the canisters of `S` to `D`, deletes `S`, and waits until the
-   registry no longer holds `S`. Then check that the registry the test
-   driver observes no longer holds `S` either.
+   registry no longer holds `S`. It starts the services on the source download
+   node. Check that the driver's registry observes deletion and that the node
+   has wiped its state and local CUP.
 3. Check that the merged state on the node of `D` is a single checkpoint
    holding the canisters of both `S` and `D`, and that the registry holds the
    recovery CUP of `D` at the height of that checkpoint.
@@ -46,6 +47,7 @@ end::catalog[] */
 mod subnet_merging_checks;
 
 use anyhow::Result;
+use ic_consensus_system_test_utils::node::assert_node_is_unassigned;
 use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_recovery::registry_helper::{RegistryHelper, RegistryPollingStrategy};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -122,13 +124,12 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// `CheckRegistryForSourceSubnetDeletion` (`REGISTRY_TIMEOUT` each).
 const TOOL_TIMEOUT: Duration = Duration::from_secs(3000);
 
-/// Timeouts of the test itself, above `TOOL_TIMEOUT` plus the checks after the
-/// tool. These find what they wait for (the recovery CUP contents of `D` in the
-/// registry and the replica running on the merged state) right away, as the
-/// tool has already waited until the node of `D` reports the recovery CUP.
+/// Timeouts for running the merge and checking its results after the
+/// tool. Allow the source node time to observe deletion and wipe its state.
+/// The destination node already reported the recovery CUP during the merge.
 /// The overall timeout additionally covers the setup and has to stay below the
 /// 3600s of the `eternal` timeout of the Bazel target.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3100);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3450);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(3550);
 
 fn main() -> Result<()> {
@@ -238,7 +239,9 @@ pub fn test(env: TestEnv) {
         &logger,
         &topology,
         s_subnet.subnet_id,
+        REGISTRY_TIMEOUT,
     ));
+    assert_node_is_unassigned(&s_node, 1, &logger);
     info!(
         logger,
         "Step 2 done: the subnet merging tool ran through all its steps but Cleanup on node \

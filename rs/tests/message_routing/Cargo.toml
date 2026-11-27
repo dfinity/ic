@@ -14,6 +14,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-management-canister-types = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../../recovery" }

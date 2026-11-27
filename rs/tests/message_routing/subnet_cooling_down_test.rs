@@ -177,7 +177,8 @@ Runbook::
    deleting `S`, and `CheckRegistryForSourceSubnetDeletion`, which waits until
    the registry no longer holds `S`.
 27. After `CheckRegistryForSourceSubnetDeletion`: check that the registry the
-   test driver observes no longer holds `S` either.
+   test driver observes no longer holds `S` either. After `StartSourceNode`,
+   check that the source download node has wiped its state and local CUP.
 28. After the tool's last step, `Cleanup`: check that the recovery directory of
    the tool is still there, but empty.
 
@@ -202,6 +203,7 @@ use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
 use ic_agent::agent::RejectCode;
+use ic_consensus_system_test_utils::node::assert_node_is_unassigned;
 use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_recovery::{
     CHECKPOINTS, IC_STATE, RECOVERY_DIRECTORY_NAME, RecoveryArgs, get_node_metrics,
@@ -365,16 +367,16 @@ const HALT_OBSERVATION_PERIOD: Duration = Duration::from_secs(30);
 /// so that a stuck step fails with its own error. The sum is dominated by
 /// `MERGE_READY_TIMEOUT`, `HALT_TIMEOUT`, the replica restart timeout (300s),
 /// the wait of `WaitForCupOnDestinationSubnet` for the recovery CUP (35 polls
-/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and the two waits of
-/// `REGISTRY_TIMEOUT` once `D` is unhalted (`CheckRegistryVersionOnAllSubnets`
-/// and `CheckRegistryForSourceSubnetDeletion`), about 2665s together.
+/// 15s apart, about 525s), `LOOPS_RESUMED_TIMEOUT` and three registry waits after
+/// unhalting (including the driver's). The source download node has up to 420s
+/// to wipe its state and trim its filesystem after its services start.
 /// `HALT_TIMEOUT` is counted once although it applies to each of the two
 /// subnets: both are scheduled to halt before either is waited for, so the two
 /// waits overlap. The overall timeout additionally covers the setup (booting
 /// the IC and installing the NNS) and has to stay below the 3600s of the
 /// `eternal` timeout of the Bazel target, which also covers what runs outside
 /// of the test driver's own timeouts.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2900);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3250);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(3400);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
@@ -862,8 +864,15 @@ fn cool_down(env: &TestEnv, context: &Context<'_>, runtime: &Runtime) {
                     logger,
                     &topology,
                     context.s_subnet.subnet_id,
+                    REGISTRY_TIMEOUT,
                 ));
-                info!(logger, "Step 27 done: subnet S is gone from the registry");
+            }
+            StepType::StartSourceNode => {
+                assert_node_is_unassigned(&merge_node_snapshot(&context.s_subnet), 1, logger);
+                info!(
+                    logger,
+                    "Step 27 done: subnet S is deleted and its download node is unassigned"
+                );
             }
             StepType::Cleanup => {
                 check_recovery_dir_empty(env);

@@ -7,9 +7,9 @@ use crate::{
     steps::{
         CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
         CheckRoutingTableStep, CheckSourceSubnetDeletedStep, ComputeExpectedMergedManifestStep,
-        DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
-        StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
-        WaitForHaltingCupStep, WaitForRecoveryCupStep,
+        DeleteSourceSubnetStep, DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep,
+        RestartDestinationReplicaStep, StartSourceNodeStep, StopReplicaAtHaltingCheckpointStep,
+        UploadMergedStateStep, ValidateCupStep, WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -130,6 +130,9 @@ pub enum StepType {
     /// Wait until the registry no longer holds the source subnet, i.e. until
     /// the proposal deleting it has been executed.
     CheckRegistryForSourceSubnetDeletion,
+    /// Start the crypto vault and orchestrator on the source download node so it can
+    /// observe the deletion, remove its subnet state and accept a new assignment.
+    StartSourceNode,
     /// Delete everything in the recovery directory of the tool, the downloaded
     /// and the merged states included.
     Cleanup,
@@ -150,7 +153,8 @@ pub struct SubnetMergingArgs {
 
     /// The node of the source subnet to download the state from: its IPv6
     /// address, or "local" if the tool runs on that node. The halting CUP is
-    /// waited for on that node, and its replica is stopped before the download.
+    /// waited for on that node. Its services are stopped before the download and
+    /// started again after the source subnet is deleted.
     /// Asked for if missing, unless prompts are skipped. Remote access uses SSH
     /// with the admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
@@ -307,6 +311,7 @@ impl SubnetMerging {
                     StepType::WaitForHaltingCupOnSourceSubnet,
                     StepType::StopSourceReplica,
                     StepType::DownloadStateFromSourceSubnet,
+                    StepType::StartSourceNode,
                 ][..],
                 args.source_node,
                 "--source-node",
@@ -579,8 +584,8 @@ impl SubnetMerging {
         // The state manager of a running replica owns its state directory, even
         // while consensus is halted, so the replica has to be stopped before the
         // state is downloaded. The destination subnet's replica stays stopped
-        // until the merged state is uploaded to it; the source subnet's stays
-        // stopped for good, as that subnet is deleted at the end of the merge.
+        // until the merged state is uploaded to it. The source node's services
+        // start again after its subnet is deleted.
         Ok(StopReplicaAtHaltingCheckpointStep {
             subnet_id: self.subnet_id(target_subnet),
             node: self.node_access(target_subnet)?,
@@ -744,7 +749,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             StepType::HaltSourceSubnetAtCupHeight | StepType::HaltDestinationSubnetAtCupHeight => {}
             StepType::WaitForHaltingCupOnSourceSubnet
             | StepType::StopSourceReplica
-            | StepType::DownloadStateFromSourceSubnet => {
+            | StepType::DownloadStateFromSourceSubnet
+            | StepType::StartSourceNode => {
                 if self.params.source_node.is_none() {
                     self.params.source_node = Some(read_data_location(
                         &self.logger,
@@ -911,13 +917,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 logger: self.recovery.logger.clone(),
             }
             .into(),
-            StepType::DeleteSourceSubnet => AdminStep {
-                logger: self.recovery.logger.clone(),
-                ic_admin_cmd: get_propose_to_delete_subnet_command(
-                    &self.recovery.admin_helper,
-                    self.params.source_subnet_id,
-                    self.params.destination_subnet_id,
-                ),
+            StepType::DeleteSourceSubnet => DeleteSourceSubnetStep {
+                source_subnet_id: self.params.source_subnet_id,
+                layout: self.layout.clone(),
+                registry_helper: self.recovery.registry_helper.clone(),
+                proposal: AdminStep {
+                    logger: self.recovery.logger.clone(),
+                    ic_admin_cmd: get_propose_to_delete_subnet_command(
+                        &self.recovery.admin_helper,
+                        self.params.source_subnet_id,
+                        self.params.destination_subnet_id,
+                    ),
+                },
             }
             .into(),
             StepType::CheckRegistryForSourceSubnetDeletion => CheckSourceSubnetDeletedStep {
@@ -926,6 +937,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 timeout: Duration::from_secs(self.params.registry_timeout_secs),
                 poll_interval: Duration::from_secs(self.params.poll_interval_secs),
                 logger: self.recovery.logger.clone(),
+            }
+            .into(),
+            StepType::StartSourceNode => StartSourceNodeStep {
+                node: self.node_access(TargetSubnet::Source)?,
+                require_confirmation: self.recovery.ssh_confirmation,
+                logger: self.logger.clone(),
             }
             .into(),
             StepType::Cleanup => self.recovery.get_cleanup_step().into(),
@@ -987,6 +1004,7 @@ mod tests {
             StepType::WaitForHaltingCupOnSourceSubnet,
             StepType::StopSourceReplica,
             StepType::DownloadStateFromSourceSubnet,
+            StepType::StartSourceNode,
         ] {
             let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
             assert!(err.contains("--source-node"), "{err}");
@@ -1033,13 +1051,14 @@ mod tests {
         assert!(err.contains("StopDestinationReplica"), "{err}");
         args.source_node = None;
 
-        // The last step needing the node of the source subnet still runs.
+        // The download still needs the source node.
         args.next_step = Some(StepType::DownloadStateFromSourceSubnet);
         let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
         assert!(err.contains("--source-node"), "{err}");
         assert!(err.contains("DownloadStateFromSourceSubnet"), "{err}");
 
-        // Past it, only the node of the destination subnet is needed.
+        // Supply the source node for its final restart.
+        args.source_node = Some(DataLocation::Local);
         args.next_step = Some(StepType::DownloadStateFromDestinationSubnet);
         let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
         assert!(err.contains("--destination-node"), "{err}");
@@ -1072,8 +1091,16 @@ mod tests {
         assert!(err.contains("--destination-node"), "{err}");
         assert!(err.contains("WaitForCupOnDestinationSubnet"), "{err}");
 
-        // Past the last step needing the destination node, no node is needed.
+        // After recovery, only the source node is needed until it is started.
         args.next_step = Some(StepType::UnhaltDestinationSubnet);
+        assert!(SubnetMerging::check_nodes(&args).is_ok());
+
+        args.source_node = None;
+        args.next_step = Some(StepType::CheckRegistryForSourceSubnetDeletion);
+        let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
+        assert!(err.contains("StartSourceNode"), "{err}");
+
+        args.next_step = Some(StepType::Cleanup);
         assert!(SubnetMerging::check_nodes(&args).is_ok());
 
         // Without resuming, every step runs.
