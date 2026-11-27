@@ -111,6 +111,7 @@ tokio-util = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }
+x509-parser = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]

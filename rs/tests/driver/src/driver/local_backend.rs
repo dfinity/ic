@@ -939,7 +939,7 @@ impl LocalBackend {
         let key = KeyPair::generate().context("generating the time server certificate key")?;
         let cert = CertificateParams::new(vec![NTS_SERVER_NAME.to_string()])
             .context("building the time server certificate parameters")?
-            .signed_by(&key, &ca.cert, &ca.key)
+            .signed_by(&key, &ca.issuer)
             .context("signing the time server certificate")?;
         let chain_path = dir.join("chain.pem");
         let key_path = dir.join("key.pem");

@@ -8,7 +8,7 @@ use hyper_util::{
     rt::{TokioExecutor, TokioIo},
     service::TowerToHyperService,
 };
-use rcgen::CertifiedKey;
+use rcgen::{CertifiedKey, KeyPair};
 use rustls::version::TLS13;
 use std::net::{Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -46,7 +46,7 @@ impl DiskEncryptionKeyExchangeServer {
     pub async fn start_new(
         runtime: Handle,
         port: u16,
-        certified_key: CertifiedKey,
+        certified_key: CertifiedKey<KeyPair>,
         service_impl: Arc<impl DiskEncryptionKeyExchangeService>,
     ) -> Result<Self, DiskEncryptionKeyExchangeError> {
         println!("Starting Disk encryption key exchange server on port {port}");
@@ -57,7 +57,7 @@ impl DiskEncryptionKeyExchangeServer {
         // Convert rcgen certificate to rustls format
         let cert_der = CertificateDer::from(certified_key.cert.der().to_vec());
         let key_der =
-            PrivateKeyDer::try_from(certified_key.key_pair.serialize_der()).map_err(|e| {
+            PrivateKeyDer::try_from(certified_key.signing_key.serialize_der()).map_err(|e| {
                 DiskEncryptionKeyExchangeError::ServerStartError(format!(
                     "Failed to parse private key: {e}"
                 ))
