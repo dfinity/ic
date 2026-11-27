@@ -505,6 +505,7 @@ pub async fn exec<C: CallCanisters>(
                     chunk_hashes_list,
                 }),
                 canister_upgrade_options,
+                take_canister_snapshot: None,
             },
         )),
     };
