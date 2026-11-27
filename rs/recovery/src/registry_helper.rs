@@ -275,6 +275,8 @@ fn get_value_from_registry_canister(
 mod tests {
     use super::*;
 
+    /// The bundled `ic_public_key.pem` parses as a threshold signature public
+    /// key, so `mainnet_nns_public_key` never panics.
     #[test]
     fn mainnet_nns_public_key_is_valid() {
         let _ = mainnet_nns_public_key();
