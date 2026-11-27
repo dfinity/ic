@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabled `SplitSubnet` proposals (topic: Subnet Management). They were previously
+  rejected at submission time.
+
 ## Changed
 
 ## Deprecated
