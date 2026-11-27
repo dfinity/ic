@@ -399,6 +399,18 @@ message UpgradeSnsControlledCanister {
   optional CanisterUpgradeOptions canister_upgrade_options = 6;
 }
 
+// A proposal to load a snapshot into the dapp canister that it was taken from.
+// This rolls the canister back to its code and memory at the time when the
+// snapshot was taken. Everything that the canister did since then (e.g. data
+// that it stored) is lost.
+message LoadCanisterSnapshot {
+  // The dapp canister to restore.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The ID of the snapshot to load. It must be a snapshot of canister_id.
+  optional bytes snapshot_id = 2;
+}
+
 // A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 // target principal.
 message TransferSnsTreasuryFunds {
@@ -779,6 +791,11 @@ message Proposal {
     //
     // Id = 19.
     UpgradeExtension upgrade_extension = 23;
+
+    // Load a snapshot into a dapp canister.
+    //
+    // Id = 20.
+    LoadCanisterSnapshot load_canister_snapshot = 24;
   }
 }
 

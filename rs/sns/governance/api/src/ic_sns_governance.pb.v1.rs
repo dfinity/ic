@@ -429,6 +429,18 @@ pub mod upgrade_sns_controlled_canister {
         pub wasm_memory_persistence: Option<i32>,
     }
 }
+/// A proposal to load a snapshot into the dapp canister that it was taken from.
+/// This rolls the canister back to its code and memory at the time when the
+/// snapshot was taken. Everything that the canister did since then (e.g. data
+/// that it stored) is lost.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LoadCanisterSnapshot {
+    /// The dapp canister to restore.
+    pub canister_id: Option<PrincipalId>,
+    /// The ID of the snapshot to load. It must be a snapshot of canister_id.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub snapshot_id: Option<Vec<u8>>,
+}
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -786,6 +798,10 @@ pub mod proposal {
         ///
         /// Id = 19.
         UpgradeExtension(super::UpgradeExtension),
+        /// Load a snapshot into a dapp canister.
+        ///
+        /// Id = 20.
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
