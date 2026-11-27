@@ -807,7 +807,6 @@ impl StreamBuilderImpl {
                         .set(signals_end.get() as i64);
                 },
             );
-        self.observe_misrouted_messages(&state);
 
         {
             // Record the enqueuing time of any messages newly enqueued into `streams`.
@@ -823,6 +822,7 @@ impl StreamBuilderImpl {
         // Put the updated CanisterStates (outgoing messages removed) and Streams
         // (messages added) into the ReplicatedState to be returned.
         state.put_streams(streams);
+        self.observe_misrouted_messages(&state);
         state
     }
 
