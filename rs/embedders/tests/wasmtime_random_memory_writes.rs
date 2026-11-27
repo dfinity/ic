@@ -50,9 +50,10 @@ const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 const OS_PAGES_PER_WASM_PAGE: usize =
     ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
 
-/// Returns the per-Wasm-page instruction charge applied by the deterministic
-/// memory tracker.
-fn dsm_charge_per_wasm_page() -> u64 {
+/// Returns the number of *instructions* the deterministic memory tracker
+/// charges for a single Wasm page event (accessed or dirty): `page_overhead`
+/// per OS page covered by the Wasm page.
+fn dmt_instructions_per_wasm_page() -> u64 {
     OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_PAGE_OVERHEAD.get()
 }
 
@@ -842,8 +843,8 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
 
@@ -866,8 +867,8 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
 
@@ -889,8 +890,8 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
 
@@ -913,8 +914,9 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
 
@@ -936,8 +938,9 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
 
@@ -960,8 +963,9 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
 
@@ -983,8 +987,9 @@ mod tests {
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + dsm_charge_per_wasm_page()
-                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
+                    + dmt_instructions_per_wasm_page()
             );
         }
     }
@@ -1009,10 +1014,12 @@ mod tests {
                 // The deterministic memory tracker charges at 64 KiB Wasm page
                 // granularity. Use InstanceStats to get the actual Wasm page
                 // counts and compute the exact tracker charge.
+                let per_page = dmt_instructions_per_wasm_page();
                 let tracker_charge =
                     |stats: &ic_interfaces::execution_environment::InstanceStats| -> u64 {
-                        stats.wasm_accessed_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
-                            + stats.wasm_dirty_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
+                        (stats.wasm_accessed_wasm_pages_count as u64
+                            + stats.wasm_dirty_wasm_pages_count as u64)
+                            * per_page
                     };
 
                 let (instructions_consumed_without_data, _dry_run_stats, dry_run_instance_stats) =
