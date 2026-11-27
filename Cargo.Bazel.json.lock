@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "5f52bcd7d6c73384b02f424eed63d380aa6fadbd64c5c48b0fc9420a5360ef4d",
+  "checksum": "d0640a1df7bfa6bb00dd9218479ef8eb0232b08cbda8879773c170af1a18eaf9",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -16315,7 +16315,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -18691,7 +18691,7 @@
             "target": "url"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           },
           {
@@ -23803,7 +23803,7 @@
             "target": "simple_bytes"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -26930,7 +26930,7 @@
             "target": "url"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           },
           {
@@ -33419,7 +33419,7 @@
             "target": "serde_json"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -34217,7 +34217,7 @@
             "target": "thiserror"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -36443,7 +36443,7 @@
             "target": "tagptr"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -52464,7 +52464,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "uuid 1.12.1",
+              "id": "uuid 1.29.3",
               "target": "uuid"
             },
             {
@@ -55665,7 +55665,7 @@
             "target": "stable_deref_trait"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -59752,7 +59752,7 @@
             "target": "tracing"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           }
         ],
@@ -61626,27 +61626,60 @@
       ],
       "version": "1.0.0"
     },
-    "uuid 1.12.1": {
+    "uuid 1.29.3": {
       "common_attrs": {
         "crate_features": [
           "default",
           "rng",
+          "rng-getrandom",
           "serde",
           "std",
+          "uuid-rng-internal-lib",
           "v4",
           "v7"
         ],
-        "deps": [
-          {
-            "id": "getrandom 0.2.17",
-            "target": "getrandom"
-          },
-          {
-            "id": "serde 1.0.229",
-            "target": "serde"
+        "deps": {
+          "common": [
+            {
+              "id": "serde_core 1.0.229",
+              "target": "serde_core"
+            }
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ],
+            "wasm32-unknown-unknown": [
+              {
+                "alias": "uuid_rng_internal_lib",
+                "id": "uuid-rng-internal 1.29.3",
+                "target": "uuid_rng_internal"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ]
           }
-        ],
-        "edition": "2018"
+        },
+        "edition": "2021"
       },
       "library_target_name": "uuid",
       "license": "Apache-2.0 OR MIT",
@@ -61659,8 +61692,8 @@
       "package_url": "https://github.com/uuid-rs/uuid",
       "repository": {
         "Http": {
-          "sha256": "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b",
-          "url": "https://static.crates.io/crates/uuid/1.12.1/download"
+          "sha256": "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64",
+          "url": "https://static.crates.io/crates/uuid/1.29.3/download"
         }
       },
       "targets": [
@@ -61671,7 +61704,44 @@
           }
         }
       ],
-      "version": "1.12.1"
+      "version": "1.29.3"
+    },
+    "uuid-rng-internal 1.29.3": {
+      "common_attrs": {
+        "crate_features": [
+          "getrandom"
+        ],
+        "deps": [
+          {
+            "id": "getrandom 0.4.3",
+            "target": "getrandom"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "uuid_rng_internal",
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "uuid-rng-internal",
+      "package_url": "https://github.com/uuid-rs/uuid",
+      "repository": {
+        "Http": {
+          "sha256": "891a3375e8b02e4d8c6f211681910001fdca919f8ab73a3484d2342741cd9c45",
+          "url": "https://static.crates.io/crates/uuid-rng-internal/1.29.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "uuid_rng_internal",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.29.3"
     },
     "uuid-simd 0.8.0": {
       "common_attrs": {
@@ -61818,7 +61888,7 @@
             "target": "libc"
           },
           {
-            "id": "uuid 1.12.1",
+            "id": "uuid 1.29.3",
             "target": "uuid"
           },
           {
@@ -68079,7 +68149,7 @@
     "tracing-subscriber 0.3.23",
     "turmoil 0.7.2",
     "url 2.5.9",
-    "uuid 1.12.1",
+    "uuid 1.29.3",
     "virt 0.4.3",
     "vsock 0.5.5",
     "walkdir 2.5.0",

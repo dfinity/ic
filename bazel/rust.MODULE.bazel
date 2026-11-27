@@ -1829,16 +1829,17 @@ crate.spec(
     version = "^2.5.3",
 )
 
-# DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
-# This breaks `wasm32-unknown-unknown` compatibility.
-# Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
+# Bazel builds uuid with these features for every crate, canisters included. On wasm32-unknown-unknown,
+# `v4` needs a source of randomness: `rng-getrandom` makes it getrandom 0.4, which canisters build with
+# the `unsupported` backend (see the getrandom 0.4 annotation), so `Uuid::new_v4()` panics in a canister.
 crate.spec(
     features = [
-        "v4",
+        "rng-getrandom",
         "serde",
+        "v4",
     ],
     package = "uuid",
-    version = "=1.12.1",
+    version = "^1.29.3",
 )
 crate.spec(
     package = "virt",

@@ -995,10 +995,10 @@ tracing-subscriber = { version = "0.3.20", features = [
 ] }
 turmoil = "0.7.2"
 url = { version = "2.5.3", features = ["serde"] }
-# DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
-# This breaks `wasm32-unknown-unknown` compatibility.
-# Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
-uuid = { version = "=1.12.1", features = ["v4", "serde"] }
+# On wasm32-unknown-unknown, `v4` needs a source of randomness: `rng-getrandom` makes it getrandom 0.4.
+# That compiles only with a getrandom backend, which canister crates built on their own don't get, so they
+# declare uuid without these features.
+uuid = { version = "1.29.3", features = ["rng-getrandom", "serde", "v4"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.28.0"
