@@ -1,4 +1,4 @@
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem;
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
@@ -10,8 +10,7 @@ use ic_types::{
     NodeId, PrincipalId, RegistryVersion, SubnetId, Time, registry::RegistryClientError,
 };
 use prost::Message;
-use std::{io::Write, path::PathBuf, sync::Arc, thread};
-use tempfile::NamedTempFile;
+use std::{path::PathBuf, sync::Arc, thread};
 use tokio::{runtime::Runtime, task};
 use url::Url;
 
@@ -21,19 +20,16 @@ pub(crate) struct RegistryCanisterClient(Arc<RegistryCanister>);
 impl RegistryCanisterClient {
     /// Create a new [RegistryCanisterClient]
     pub fn new(nns_url: Url, nns_pem: Option<PathBuf>) -> RegistryCanisterClient {
-        let mut temp = NamedTempFile::new().unwrap();
-        let nns_pem_path = nns_pem.unwrap_or_else(|| {
-            println!("Using mainnet NNS public key.");
-            let pem_bytes: &[u8] = include_bytes!("../ic_public_key.pem");
-            // Write public keys to a temp file, because `parse_threshold_sig_key` expects a file path
-            temp.write_all(pem_bytes).unwrap();
-            temp.path().into()
-        });
+        let pem = match nns_pem {
+            Some(nns_pem_path) => std::fs::read_to_string(nns_pem_path).unwrap(),
+            None => {
+                println!("Using mainnet NNS public key.");
+                include_str!("../ic_public_key.pem").to_string()
+            }
+        };
+        println!("NNS public key being used: \n{pem}");
 
-        let content = std::fs::read_to_string(nns_pem_path.as_path()).unwrap();
-        println!("NNS public key being used: \n{content}");
-
-        let nns_public_key = parse_threshold_sig_key_from_pem_file(nns_pem_path.as_path()).unwrap();
+        let nns_public_key = parse_threshold_sig_key_from_pem(pem.as_bytes()).unwrap();
 
         RegistryCanisterClient(Arc::new(RegistryCanister::new_with_agent_transformer(
             vec![nns_url],
