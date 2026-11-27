@@ -425,7 +425,10 @@ pub async fn search_transactions(
         .transpose()?;
 
     // The offset is counted from max_block, consistent with how next_offset is computed below.
-    let start_idx = max_block.saturating_sub(offset);
+    // The start index is clamped to the highest stored block.
+    let start_idx = max_block
+        .saturating_sub(offset)
+        .min(rosetta_block_with_highest_block_index.index);
 
     if limit == 0 {
         return Ok(SearchTransactionsResponse {

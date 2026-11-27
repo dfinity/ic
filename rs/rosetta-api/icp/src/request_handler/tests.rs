@@ -766,6 +766,42 @@ async fn test_search_transactions_caps_limit() {
     );
 }
 
+#[tokio::test]
+async fn test_search_transactions_excludes_unverified_blocks() {
+    let mut scribe = Scribe::new();
+    scribe.gen_accounts(2, 1_000_000);
+    for _ in 0..10 {
+        scribe.gen_transaction();
+    }
+    let num_blocks = scribe.blockchain.len() as u64;
+    let verified_tip = num_blocks / 2;
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    blockchain
+        .push_batch(scribe.blockchain.into_iter().collect(), None)
+        .unwrap();
+    blockchain
+        .set_hashed_block_to_verified(&verified_tip)
+        .unwrap();
+    let req_handler = handler(blockchain);
+
+    // A max_block above the verified tip only returns verified blocks
+    let result = req_handler
+        .search_transactions(SearchTransactionsRequest {
+            network_identifier: req_handler.network_id(),
+            max_block: Some((num_blocks - 1) as i64),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let block_indices: Vec<u64> = result
+        .transactions
+        .iter()
+        .map(|tx| tx.block_identifier.index)
+        .collect();
+    assert_eq!(block_indices, (0..=verified_tip).rev().collect::<Vec<_>>());
+    assert_eq!(result.next_offset, None);
+}
+
 const MAX_INGRESS_WINDOW_NANOS: u64 = 24 * 60 * 60 * 1_000_000_000;
 
 fn construction_payloads_with_max_ingress_window(
