@@ -21036,6 +21036,7 @@ dependencies = [
  "ic-cdk",
  "ic-management-canister-types-private",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]
