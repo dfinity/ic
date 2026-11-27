@@ -29,6 +29,7 @@ pub mod bouncer_metrics;
 pub mod chain_key;
 pub mod crypto;
 pub mod membership;
+pub mod membership_hold;
 pub mod pool_reader;
 pub mod subnet_splitting;
 

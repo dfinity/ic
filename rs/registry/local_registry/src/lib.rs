@@ -86,9 +86,9 @@ impl LocalRegistry {
         // that even if multiple threads call this function concurrently,
         // invariants are retained.
         let latest_cached_version = self.registry_cache.get_latest_version();
-        let (mut raw_changelog, _certified_time) = {
+        let (mut raw_changelog, version_timestamps, _certified_time) = {
             let guard = self.cached_registry_canister.read().await;
-            let (raw_changelog, _, t) = guard
+            let (updates, _, t) = guard
                 .1
                 .get_certified_changes_since(
                     latest_cached_version.get(),
@@ -96,7 +96,7 @@ impl LocalRegistry {
                 )
                 .await
                 .map_err(LocalRegistryError::from)?;
-            (raw_changelog, t)
+            (updates.records, updates.version_timestamps, t)
         };
         // Persist changelog
         raw_changelog.sort_by_key(|tr| tr.version);
@@ -116,8 +116,13 @@ impl LocalRegistry {
         changelog
             .into_iter()
             .enumerate()
-            .try_for_each(|(i, cle)| {
+            .try_for_each(|(i, mut cle)| {
                 let v = latest_cached_version + RegistryVersion::from(i as u64 + 1);
+                // Preserve the registry canister's own timestamp; versions it did
+                // not stamp keep 0.
+                if let Some(timestamp_nanoseconds) = version_timestamps.get(&v) {
+                    cle.timestamp_nanoseconds = *timestamp_nanoseconds;
+                }
                 self.local_store_writer.store(v, cle)
             })
             .expect("Writing to the FS failed: Stop.");
