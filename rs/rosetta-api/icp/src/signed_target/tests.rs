@@ -390,7 +390,7 @@ fn a_manage_neuron_request_must_name_its_neuron_by_signed_subaccount() {
 
     // The nonce does not reach governance, so it is not checked.
     let honest_update = manage_neuron_update(owner(), NEURON_INDEX, &honest);
-    for nonce in [None, Some(Blob(Encode!(&0u64).unwrap()))] {
+    for nonce in [None, Some(Blob(Encode!(&0_u64).unwrap()))] {
         verify(
             &disburse(),
             &HttpCanisterUpdate {
