@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Fixed
+- `/account/balance` no longer answers above the highest block for which account balances have been
+  computed. Previously the response was labelled with the highest *stored* block while the balance
+  itself was the one computed at the highest *processed* block, so while the balance
+  synchronization lagged the block synchronization the endpoint reported a balance at a block
+  height at which it was never true. Queries without a block identifier are now answered at the
+  highest processed block, which is the same height that `/network/status` reports, and queries for
+  an explicit block above that height now fail with the new retriable error 14 instead of being
+  answered from a lower height. Note that this means that `/account/balance` may report a block
+  height lower than the one `/block` serves, and may reject a block identifier that `/block`
+  accepts, until the balance synchronization catches up. ([#11627](https://github.com/dfinity/ic/pull/11627))
 - Limit the number of envelopes in `/construction/combine` to 720 and the size of signatures and public keys, and reject repeated envelopes ([#12251](https://github.com/dfinity/ic/pull/12251))
 - Limit the memo length in `/construction/payloads` to 1024 bytes ([#11886](https://github.com/dfinity/ic/pull/11886))
 - Limit the length of amounts to 78 digits and the size of the ledger method arguments in `/construction/payloads` to 4 KiB ([#12095](https://github.com/dfinity/ic/pull/12095))
