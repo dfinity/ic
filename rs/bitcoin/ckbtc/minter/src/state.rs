@@ -1233,12 +1233,42 @@ impl CkBtcMinterState {
             .filter(|&req| req.block_index == block_index)
     }
 
+    /// Includes stuck transactions, which can still be finalized.
+    fn find_unfinalized_transaction(&self, block_index: u64) -> Option<&SubmittedBtcTransaction> {
+        self.submitted_transactions
+            .iter()
+            .chain(&self.stuck_transactions)
+            .find(|tx| {
+                tx.requests
+                    .iter_block_index()
+                    .any(|index| index == block_index)
+            })
+    }
+
+    /// A request with no submitted transaction can never be finalized, so it would
+    /// block consolidation forever. Deriving this from the state instead of
+    /// recording an event keeps replay and live state in agreement.
+    fn clear_dangling_consolidate_utxos_request(&mut self) {
+        if self
+            .current_consolidate_utxos_request
+            .as_ref()
+            .is_some_and(|request| {
+                self.find_unfinalized_transaction(request.block_index)
+                    .is_none()
+            })
+        {
+            self.current_consolidate_utxos_request = None;
+        }
+    }
+
     /// Push a new ConsolidateUtxosRequest.
     ///
     /// # Panics
     ///
-    /// This function panics if there is already an existing ConsolidateUtxosRequest.
+    /// This function panics if there is already an existing ConsolidateUtxosRequest
+    /// whose transaction was submitted.
     fn push_consolidate_utxos_request(&mut self, request: ConsolidateUtxosRequest) {
+        self.clear_dangling_consolidate_utxos_request();
         assert!(self.current_consolidate_utxos_request.is_none());
         self.last_consolidate_utxos_request_time_ns = request.received_at;
         self.current_consolidate_utxos_request = Some(request);
@@ -1277,7 +1307,10 @@ impl CkBtcMinterState {
                     self.pending_retrieve_btc_requests.push(req);
                 }
             }
-            SubmittedWithdrawalRequests::ToConsolidate { .. } => (),
+            // Nothing to re-queue: a consolidation request is not a user withdrawal.
+            SubmittedWithdrawalRequests::ToConsolidate { .. } => {
+                self.clear_dangling_consolidate_utxos_request()
+            }
         }
         self.pending_retrieve_btc_requests
             .sort_by_key(|r| r.received_at);
@@ -1562,20 +1595,10 @@ impl CkBtcMinterState {
             )
         }
 
-        for submitted_tx in self
-            .submitted_transactions
-            .iter()
-            .chain(self.stuck_transactions.iter())
-        {
-            if submitted_tx
-                .requests
-                .iter_block_index()
-                .any(|block_index| block_index == ledger_burn_index)
-            {
-                panic!(
-                    "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a submitted transaction for that withdrawal: {submitted_tx:?}"
-                );
-            }
+        if let Some(submitted_tx) = self.find_unfinalized_transaction(ledger_burn_index) {
+            panic!(
+                "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a submitted transaction for that withdrawal: {submitted_tx:?}"
+            );
         }
         self.pending_withdrawal_reimbursements
             .insert(ledger_burn_index, reimburse_deposit_task);
