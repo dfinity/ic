@@ -77,7 +77,7 @@ fn validate_transactions<Block: BlockchainBlock, Error>(
     if !block.check_merkle_root() {
         return Err(AddBlockError::InvalidMerkleRoot(block_hash));
     }
-    // Duplicate trailing transactions do not change the merkle root (CVE-2012-2459),
+    // Duplicate trailing transactions do not change the merkle root,
     // so uniqueness must be checked separately.
     let mut ntxids = HashSet::with_capacity(transactions.len());
     if !transactions
@@ -833,7 +833,7 @@ mod test {
     }
 
     /// Tests that `BlockchainState::add_block(...)` rejects a block with a duplicated trailing
-    /// transaction, which has the same merkle root and hash as the original block (CVE-2012-2459).
+    /// transaction, which has the same merkle root and hash as the original block.
     async fn test_adding_block_with_duplicate_transactions_is_rejected(
         state: BlockchainState<Network>,
     ) {
