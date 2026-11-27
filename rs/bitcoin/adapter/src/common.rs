@@ -281,10 +281,10 @@ pub trait BlockchainBlock: Decodable + Encodable + Clone {
     type Header;
     /// Return block hash.
     fn block_hash(&self) -> BlockHash;
-    /// Compute merkle root.
-    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode>;
     /// Check if the merkle root in block header matches what is computed.
     fn check_merkle_root(&self) -> bool;
+    /// Return the block's transactions.
+    fn transactions(&self) -> &[bitcoin::Transaction];
     /// Return the block header.
     fn header(&self) -> &Self::Header;
 }
@@ -295,11 +295,11 @@ impl BlockchainBlock for bitcoin::Block {
     fn block_hash(&self) -> BlockHash {
         bitcoin::Block::block_hash(self)
     }
-    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
-        bitcoin::Block::compute_merkle_root(self)
-    }
     fn check_merkle_root(&self) -> bool {
         bitcoin::Block::check_merkle_root(self)
+    }
+    fn transactions(&self) -> &[bitcoin::Transaction] {
+        &self.txdata
     }
     fn header(&self) -> &Self::Header {
         &self.header
@@ -312,11 +312,11 @@ impl BlockchainBlock for bitcoin::dogecoin::Block {
     fn block_hash(&self) -> BlockHash {
         bitcoin::dogecoin::Block::block_hash(self)
     }
-    fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
-        bitcoin::dogecoin::Block::compute_merkle_root(self)
-    }
     fn check_merkle_root(&self) -> bool {
         bitcoin::dogecoin::Block::check_merkle_root(self)
+    }
+    fn transactions(&self) -> &[bitcoin::Transaction] {
+        &self.txdata
     }
     fn header(&self) -> &Self::Header {
         &self.header

@@ -15,7 +15,7 @@ use ic_logger::{ReplicaLogger, error};
 use ic_metrics::MetricsRegistry;
 use std::fmt::Debug;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Arc, RwLock},
 };
@@ -39,9 +39,18 @@ pub enum AddHeaderError<Error> {
 
 #[derive(Debug, Error)]
 pub enum AddBlockError<Error> {
+    /// Used to indicate that the block has no transactions.
+    #[error("Received a block without transactions: {0}")]
+    NoTransactions(BlockHash),
+    /// Used to indicate that the first transaction of the block is not a coinbase transaction.
+    #[error("Received a block whose first transaction is not a coinbase: {0}")]
+    InvalidCoinbase(BlockHash),
     /// Used to indicate that the merkle root of the block is invalid.
     #[error("Received a block with an invalid merkle root: {0}")]
     InvalidMerkleRoot(BlockHash),
+    /// Used to indicate that the block contains duplicate transactions.
+    #[error("Received a block with duplicate transactions: {0}")]
+    DuplicateTransactions(BlockHash),
     /// Used to indicate when the header causes an error while adding a block to the state.
     #[error("Block's header caused an error: {0}")]
     Header(AddHeaderError<Error>),
@@ -51,6 +60,34 @@ pub enum AddBlockError<Error> {
 }
 
 pub type SerializedBlock = Vec<u8>;
+
+/// Checks the transactions of a block in the same way as the Bitcoin and Dogecoin canisters,
+/// so that the adapter does not cache a block that the canisters would reject.
+fn validate_transactions<Block: BlockchainBlock, Error>(
+    block: &Block,
+    block_hash: BlockHash,
+) -> Result<(), AddBlockError<Error>> {
+    let transactions = block.transactions();
+    if transactions.is_empty() {
+        return Err(AddBlockError::NoTransactions(block_hash));
+    }
+    if !transactions[0].is_coinbase() {
+        return Err(AddBlockError::InvalidCoinbase(block_hash));
+    }
+    if !block.check_merkle_root() {
+        return Err(AddBlockError::InvalidMerkleRoot(block_hash));
+    }
+    // Duplicate trailing transactions do not change the merkle root,
+    // so uniqueness must be checked separately.
+    let mut ntxids = HashSet::with_capacity(transactions.len());
+    if !transactions
+        .iter()
+        .all(|tx| ntxids.insert(tx.compute_ntxid()))
+    {
+        return Err(AddBlockError::DuplicateTransactions(block_hash));
+    }
+    Ok(())
+}
 
 /// This struct is a cache of Bitcoin blockchain.
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
@@ -234,9 +271,7 @@ where
         let start_time = std::time::Instant::now();
         let block_hash = block.block_hash();
 
-        if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
-            return Err(AddBlockError::InvalidMerkleRoot(block_hash));
-        }
+        validate_transactions(&block, block_hash)?;
 
         // If the block's header is not added before, then add the header into the `header_cache` first.
         let _ = self
@@ -408,7 +443,11 @@ mod test {
 
     use super::*;
     use crate::common::test_common::TestState;
-    use ic_btc_adapter_test_utils::{block_1, block_2, generate_header, generate_headers};
+    use bitcoin::{OutPoint, absolute::LockTime};
+    use ic_btc_adapter_test_utils::{
+        block_1, block_2, block_from_header, generate_block_with_transactions, generate_header,
+        generate_headers,
+    };
     use std::collections::HashSet;
 
     fn run_in_memory<R>(network: Network, test_fn: impl Fn(BlockchainState<Network>) -> R) -> R {
@@ -720,6 +759,122 @@ mod test {
         run_with_cache_dir(Network::Bitcoin, test_adding_blocks_to_the_cache).await
     }
 
+    /// Tests that `BlockchainState::add_block(...)` rejects a block whose transactions have been
+    /// stripped, and that such a block is not added to the cache.
+    async fn test_adding_block_without_transactions_is_rejected(state: BlockchainState<Network>) {
+        let complete_block = block_1();
+        let mut stripped_block = complete_block.clone();
+        stripped_block.txdata.clear();
+        // The block hash only depends on the header, so it is unchanged.
+        let block_hash = stripped_block.block_hash();
+        assert_eq!(block_hash, complete_block.block_hash());
+
+        let result = state.add_block(stripped_block).await;
+        assert!(
+            matches!(result, Err(AddBlockError::NoTransactions(stop_hash)) if stop_hash == block_hash),
+        );
+        assert!(state.get_block(&block_hash).is_none());
+
+        // The complete block can still be added afterwards.
+        let result = state.add_block(complete_block).await;
+        assert!(matches!(result, Ok(())));
+        assert!(state.get_block(&block_hash).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_adding_block_without_transactions_is_rejected_in_memory() {
+        run_in_memory(
+            Network::Bitcoin,
+            test_adding_block_without_transactions_is_rejected,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_adding_block_without_transactions_is_rejected_on_disk() {
+        run_with_cache_dir(
+            Network::Bitcoin,
+            test_adding_block_without_transactions_is_rejected,
+        )
+        .await
+    }
+
+    /// Tests that `BlockchainState::add_block(...)` rejects a block whose first transaction is
+    /// not a coinbase transaction.
+    async fn test_adding_block_without_coinbase_is_rejected(state: BlockchainState<Network>) {
+        let coinbase = block_1().txdata[0].clone();
+        let mut non_coinbase = coinbase.clone();
+        non_coinbase.input[0].previous_output = OutPoint {
+            txid: coinbase.compute_txid(),
+            vout: 0,
+        };
+        let genesis = state.genesis();
+        let block = generate_block_with_transactions(
+            genesis.block_hash(),
+            genesis.time,
+            vec![non_coinbase],
+        );
+        let block_hash = block.block_hash();
+
+        let result = state.add_block(block).await;
+        assert!(
+            matches!(result, Err(AddBlockError::InvalidCoinbase(stop_hash)) if stop_hash == block_hash),
+        );
+        assert!(state.get_block(&block_hash).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_adding_block_without_coinbase_is_rejected_in_memory() {
+        run_in_memory(
+            Network::Regtest,
+            test_adding_block_without_coinbase_is_rejected,
+        )
+        .await
+    }
+
+    /// Tests that `BlockchainState::add_block(...)` rejects a block with a duplicated trailing
+    /// transaction, which has the same merkle root and hash as the original block.
+    async fn test_adding_block_with_duplicate_transactions_is_rejected(
+        state: BlockchainState<Network>,
+    ) {
+        let coinbase = block_1().txdata[0].clone();
+        let tx_1 = block_2().txdata[0].clone();
+        let mut tx_2 = tx_1.clone();
+        tx_2.lock_time = LockTime::from_consensus(1);
+        let genesis = state.genesis();
+        let complete_block = generate_block_with_transactions(
+            genesis.block_hash(),
+            genesis.time,
+            vec![coinbase, tx_1, tx_2.clone()],
+        );
+        let mut mutated_block = complete_block.clone();
+        mutated_block.txdata.push(tx_2);
+        // Duplicating the last of an odd number of transactions leaves the merkle root unchanged.
+        assert!(mutated_block.check_merkle_root());
+        let block_hash = mutated_block.block_hash();
+        assert_eq!(block_hash, complete_block.block_hash());
+
+        let result = state.add_block(mutated_block).await;
+        assert!(
+            matches!(result, Err(AddBlockError::DuplicateTransactions(stop_hash)) if stop_hash == block_hash),
+        );
+        assert!(state.get_block(&block_hash).is_none());
+
+        // The complete block can still be added afterwards.
+        let result = state.add_block(complete_block).await;
+        assert!(matches!(result, Ok(())));
+        assert!(state.get_block(&block_hash).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_adding_block_with_duplicate_transactions_is_rejected_in_memory() {
+        run_in_memory(
+            Network::Regtest,
+            test_adding_block_with_duplicate_transactions_is_rejected,
+        )
+        .await
+    }
+
     /// Tests the functionality of `BlockchainState::prune_blocks(...)` to ensure
     /// blocks are removed from the cache.
     async fn test_pruning_blocks_from_the_cache(state: BlockchainState<Network>) {
@@ -856,20 +1011,8 @@ mod test {
         // h1 - h2  - h3  - h4
         let h3 = generate_header(h2.block_hash(), h2.time, 0);
         let h4 = generate_header(h3.block_hash(), h3.time, 0);
-        state
-            .add_block(Block {
-                header: h3,
-                txdata: Vec::new(),
-            })
-            .await
-            .unwrap();
-        state
-            .add_block(Block {
-                header: h4,
-                txdata: Vec::new(),
-            })
-            .await
-            .unwrap();
+        state.add_block(block_from_header(h3)).await.unwrap();
+        state.add_block(block_from_header(h4)).await.unwrap();
         assert_eq!(state.get_active_chain_tip().header, h4);
     }
 

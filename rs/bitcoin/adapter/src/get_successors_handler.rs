@@ -352,7 +352,7 @@ mod test {
     use tokio::sync::mpsc::channel;
 
     use ic_btc_adapter_test_utils::{
-        generate_headers, generate_large_block_blockchain, headers_to_hashes,
+        block_from_header, generate_headers, generate_large_block_blockchain, headers_to_hashes,
     };
 
     fn decode_block(serialized_block: &Arc<SerializedBlock>) -> Block {
@@ -401,15 +401,9 @@ mod test {
         );
         let side_chain_2 = generate_headers(genesis_hash, genesis.time, 3, &previous_hashes);
 
-        let main_block_2 = Block {
-            header: main_chain[1],
-            txdata: vec![],
-        };
+        let main_block_2 = block_from_header(main_chain[1]);
         let side_1 = side_chain.first().cloned().expect("Should have 1 header");
-        let side_block_1 = Block {
-            header: side_1,
-            txdata: vec![],
-        };
+        let side_block_1 = block_from_header(side_1);
 
         // Create a request with the anchor block as the block 0 and processed block hashes contain
         // block 1 and 2.
@@ -496,14 +490,8 @@ mod test {
         // Set up the following chain:
         // 0 -> 1 -> 2 -> 3 -> 4 -> 5
         let main_chain = generate_headers(genesis_hash, genesis.time, 5, &[]);
-        let main_block_1 = Block {
-            header: main_chain[0],
-            txdata: vec![],
-        };
-        let main_block_2 = Block {
-            header: main_chain[1],
-            txdata: vec![],
-        };
+        let main_block_1 = block_from_header(main_chain[0]);
+        let main_block_2 = block_from_header(main_chain[1]);
         {
             let blockchain = &handler.state;
             blockchain.add_headers(&main_chain).await;
@@ -546,14 +534,8 @@ mod test {
         // |-> 1'
         // 0 -> 1 -> 2
         let main_chain = generate_headers(genesis_hash, genesis.time, 2, &[]);
-        let main_block_1 = Block {
-            header: main_chain[0],
-            txdata: vec![],
-        };
-        let main_block_2 = Block {
-            header: main_chain[1],
-            txdata: vec![],
-        };
+        let main_block_1 = block_from_header(main_chain[0]);
+        let main_block_2 = block_from_header(main_chain[1]);
 
         let side_chain = generate_headers(
             genesis_hash,
@@ -562,10 +544,7 @@ mod test {
             &headers_to_hashes(&main_chain),
         );
         let side_1 = side_chain.first().cloned().expect("Should have 1 header");
-        let side_block_1 = Block {
-            header: side_1,
-            txdata: vec![],
-        };
+        let side_block_1 = block_from_header(side_1);
         {
             let blockchain = &handler.state;
             blockchain.add_headers(&main_chain).await;
@@ -621,11 +600,10 @@ mod test {
             let blockchain = &handler.state;
             blockchain.add_headers(&main_chain).await;
             for header in main_chain {
-                let block = Block {
-                    header,
-                    txdata: vec![],
-                };
-                blockchain.add_block(block).await.expect("invalid block");
+                blockchain
+                    .add_block(block_from_header(header))
+                    .await
+                    .expect("invalid block");
             }
         }
 
@@ -656,10 +634,7 @@ mod test {
         // |-> 1'
         // 0 -> 1 -> 2
         let main_chain = generate_headers(genesis_hash, genesis.time, 2, &[]);
-        let main_block_2 = Block {
-            header: main_chain[1],
-            txdata: vec![],
-        };
+        let main_block_2 = block_from_header(main_chain[1]);
 
         let side_chain = generate_headers(
             genesis_hash,
@@ -668,10 +643,7 @@ mod test {
             &headers_to_hashes(&main_chain),
         );
         let side_1 = side_chain.first().cloned().expect("Should have 1 header");
-        let side_block_1 = Block {
-            header: side_1,
-            txdata: vec![],
-        };
+        let side_block_1 = block_from_header(side_1);
         {
             let blockchain = &handler.state;
             let (_, maybe_err) = blockchain.add_headers(&main_chain).await;
@@ -759,10 +731,7 @@ mod test {
             &previous_hashes,
         );
         // Add an additional smaller block to the chain.
-        let small_block = Block {
-            header: additional_headers[0],
-            txdata: vec![],
-        };
+        let small_block = block_from_header(additional_headers[0]);
 
         {
             let blockchain = &handler.state;
@@ -823,10 +792,7 @@ mod test {
             assert_eq!(added_headers.len(), 5);
             let main_blocks = main_chain
                 .iter()
-                .map(|h| Block {
-                    header: *h,
-                    txdata: vec![],
-                })
+                .map(|h| block_from_header(*h))
                 .collect::<Vec<_>>();
             for block in main_blocks {
                 blockchain.add_block(block).await.unwrap();
