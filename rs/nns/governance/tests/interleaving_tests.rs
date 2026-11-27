@@ -14,16 +14,19 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        NeuronsFundParticipation as NeuronsFundParticipationPb,
-        SettleNeuronsFundParticipationRequest, manage_neuron::Disburse,
+        Empty, ManageNeuron, NeuronsFundParticipation as NeuronsFundParticipationPb,
+        SettleNeuronsFundParticipationRequest,
+        manage_neuron::{
+            ClaimOrRefresh, Command, Disburse, NeuronIdOrSubaccount, claim_or_refresh::By,
+        },
         settle_neurons_fund_participation_request,
     },
 };
 use ic_nns_governance_api::{
     CreateServiceNervousSystem, IdealMatchedParticipationFunction, NetworkEconomics,
     NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
-    SwapParticipationLimits, neuron::DissolveState,
-    neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
+    SwapParticipationLimits, manage_neuron_response::Command as CommandResponse,
+    neuron::DissolveState, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;
@@ -159,6 +162,121 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
             );
         }
     });
+}
+
+/// Anyone may refresh a neuron. While a refresh waits for the ledger to report
+/// the balance of the neuron's account, the neuron's controller must still be
+/// able to manage the neuron, as long as the balance equals the neuron's stake.
+#[test]
+fn test_controller_can_manage_neuron_while_unchanged_neuron_is_being_refreshed() {
+    // Step 1: Prepare the world.
+    let neuron_id_u64 = 1;
+    let neuron_id = NeuronId { id: neuron_id_u64 };
+    let owner = principal(1);
+    let refresher = principal(2);
+
+    // The channel lets the main thread decide when the refresh's ledger calls
+    // complete.
+    #[allow(clippy::disallowed_methods)]
+    let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
+    let finish_tx = tx.clone();
+
+    let nns = NNSBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(neuron_id_u64, 10 * E8, owner)
+                .set_dissolve_state(Some(DissolveState::DissolveDelaySeconds(86400))),
+        )
+        .add_ledger_transform(Box::new(move |l| {
+            Arc::new(InterleavingTestLedger::new(l, tx))
+        }))
+        .set_economics(NetworkEconomics::default())
+        .create();
+
+    let neuron = nns
+        .governance
+        .neuron_store
+        .with_neuron(&neuron_id, |neuron| neuron.clone())
+        .expect("Could not find the neuron we just added!");
+
+    // See test_cant_increase_dissolve_delay_while_disbursing for why the
+    // governance object is pinned and accessed through a raw pointer.
+    let mut boxed = Box::pin(nns.governance);
+    let raw_ptr = unsafe {
+        let mut_ref = boxed.as_mut();
+        Pin::get_unchecked_mut(mut_ref) as *mut Governance
+    };
+
+    // Step 2: Run the code under test.
+
+    // Step 2.1: Start the refresh in a separate thread. It blocks as soon as it
+    // calls the ledger.
+    let refresh_thread = thread::spawn(move || {
+        // Neurons have to be added again, because the neuron store is
+        // thread-local.
+        boxed
+            .neuron_store
+            .add_neuron(neuron)
+            .expect("Could not add neuron!");
+        let refresh = ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
+            command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                by: Some(By::NeuronIdOrSubaccount(Empty {})),
+            })),
+        };
+        let refresh_response = tokio_test::block_on(boxed.manage_neuron(&refresher, &refresh));
+        assert_matches!(
+            refresh_response.command,
+            Some(CommandResponse::ClaimOrRefresh(_)),
+            "{refresh_response:?}"
+        );
+        finish_tx.close_channel();
+    });
+
+    // Step 2.2: Wait until the refresh asks the ledger for the balance.
+    let (_msg, continue_refreshing) = tokio_test::block_on(async { rx.next().await.unwrap() });
+    atomic::fence(AOrdering::SeqCst);
+
+    // Step 3: Verify results.
+
+    // Step 3.1: The refresh does not hold the neuron's lock.
+    let governance = unsafe { &mut *raw_ptr };
+    assert_eq!(
+        governance
+            .heap_data
+            .in_flight_commands
+            .get(&neuron_id_u64)
+            .cloned(),
+        None
+    );
+
+    // Step 3.2: The controller can manage the neuron.
+    let increase_dissolve_delay_response =
+        increase_dissolve_delay_raw(governance, &owner, neuron_id, 1)
+            .now_or_never()
+            .unwrap();
+    assert_matches!(
+        increase_dissolve_delay_response.command,
+        Some(CommandResponse::Configure(_)),
+        "{increase_dissolve_delay_response:?}"
+    );
+
+    // Step 3.3: Let the refresh finish. It must succeed (asserted in its thread).
+    assert!(
+        continue_refreshing.send(Ok(())).is_ok(),
+        "Error in trying to continue refreshing",
+    );
+    tokio_test::block_on(async {
+        while let Some((_msg, tx)) = rx.next().await {
+            assert!(
+                tx.send(Ok(())).is_ok(),
+                "Error in trying to continue refreshing",
+            );
+        }
+    });
+    refresh_thread
+        .join()
+        .expect("Expected the refresh thread to succeed");
 }
 
 /// Test that interleaving calls to settle_neurons_fund_participation are handled correctly.
