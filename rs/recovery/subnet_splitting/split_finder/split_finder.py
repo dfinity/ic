@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pulp
-from data_io import CANISTERS_INSTALLED, canister_id_to_number, load_subnet_data
+from data_io import CANISTERS_INSTALLED, canister_id_to_number, load_subnet_data, number_to_canister_id
 from solver_core import LoadConstraints, solve_partition
 
 DEFAULT_EPSILON_LOAD_DEFAULT = 0.05
@@ -38,70 +38,31 @@ def compute_max_allowed_load_per_subnet(canister_loads):
     return max_allowed_load
 
 
-def assign_canisters_to_ranges(canister_ids: List[str], canister_id_ranges: List[Tuple[str, str]]) -> List[int]:
+def assign_canisters_to_ranges(canister_numbers: List[int], ranges: List[Tuple[int, int]]) -> List[int]:
     """
-    Returns, for each canister, the index of the canister ID range which contains it. Adjacent
-    ranges are merged into one first.
+    Returns, for each canister, the index in `sorted(ranges)` of the range of canister numbers which
+    contains it.
 
-    Raises a `ValueError` if the canister IDs are not in increasing order, if the ranges overlap, or
-    if a canister lies outside all the ranges.
+    Raises a `ValueError` if the canisters are not in increasing order, if the ranges overlap, or if
+    a canister lies outside all the ranges.
     """
-    # The first and last canister numbers of each range, in increasing order.
-    ranges = sorted((canister_id_to_number(first), canister_id_to_number(last)) for first, last in canister_id_ranges)
-    merged_ranges: List[Tuple[int, int]] = []
-    for first, last in ranges:
-        if merged_ranges and first <= merged_ranges[-1][1]:
-            raise ValueError(f"The canister ID ranges {canister_id_ranges} overlap")
-        if merged_ranges and first == merged_ranges[-1][1] + 1:
-            merged_ranges[-1] = (merged_ranges[-1][0], last)
-        else:
-            merged_ranges.append((first, last))
-    range_starts = [first for first, _ in merged_ranges]
+    ranges = sorted(ranges)
+    for (_, last), (next_first, _) in zip(ranges, ranges[1:]):
+        if next_first <= last:
+            raise ValueError(
+                f"The canister ID range starting at {number_to_canister_id(next_first)} overlaps another one"
+            )
+    range_starts = [first for first, _ in ranges]
 
     range_indices = []
-    previous_number = None
-    for canister_id in canister_ids:
-        number = canister_id_to_number(canister_id)
-        if previous_number is not None and number <= previous_number:
-            raise ValueError(
-                f"The canisters in the load data are not in increasing order of canister ID at {canister_id}"
-            )
-        previous_number = number
+    for k, number in enumerate(canister_numbers):
+        if k > 0 and number <= canister_numbers[k - 1]:
+            raise ValueError(f"The canisters are not in increasing order at {number_to_canister_id(number)}")
         range_index = bisect.bisect_right(range_starts, number) - 1
-        if range_index < 0 or number > merged_ranges[range_index][1]:
-            raise ValueError(f"Canister {canister_id} lies outside the canister ID ranges {canister_id_ranges}")
+        if range_index < 0 or number > ranges[range_index][1]:
+            raise ValueError(f"Canister {number_to_canister_id(number)} lies outside the subnet's canister ID ranges")
         range_indices.append(range_index)
     return range_indices
-
-
-def group_into_canister_ranges(
-    assignments: List[int], canister_ids: List[str], range_indices: List[int]
-) -> List[Tuple[str, str]]:
-    """
-    Returns the canister ranges, as `(first, last)` canister IDs to be migrated away.
-
-    The canister IDs must be in increasing order, and `range_indices` are the indices of the
-    subnet's canister ID ranges which contain them, as returned by `assign_canisters_to_ranges`.
-    """
-    ranges = []
-    first_in_range = None
-    last_in_range = None
-    for k in range(len(assignments)):
-        # A range must not cover the canister IDs between two of the subnet's canister ID ranges,
-        # because the routing table assigns them to other subnets. So a range also ends where the
-        # subnet's canister ID range does.
-        if first_in_range is not None and (assignments[k] == 1 or range_indices[k] != range_indices[k - 1]):
-            ranges.append((first_in_range, last_in_range))
-            first_in_range = None
-        if assignments[k] == 0:
-            last_in_range = canister_ids[k]
-            if first_in_range is None:
-                first_in_range = last_in_range
-
-    if first_in_range is not None:
-        ranges.append((first_in_range, last_in_range))
-
-    return ranges
 
 
 def find_split(
@@ -109,7 +70,7 @@ def find_split(
     baseline_path: Path,
     communication_data_path: Path,
     communication_baseline_data_path: Path,
-    subnet_canister_id_ranges: List[Tuple[str, str]],
+    subnet_canister_id_ranges: List[Tuple[int, int]],
     load_epsilons: Dict[str, float],
     max_cuts: int,
 ):
@@ -117,7 +78,7 @@ def find_split(
     Find a split which minimizes the communication between both post-split subnets.
 
     `subnet_canister_id_ranges` are the canister ID ranges which the routing table assigns to the
-    subnet, as `(first, last)` canister IDs.
+    subnet, as `(first, last)` canister numbers (see `canister_id_to_number`).
 
     `load_epsilons` maps each load type to balance to its allowed load deviation fraction: the load
     of either post-split subnet may exceed the maximum allowed load per subnet by that fraction.
@@ -128,8 +89,10 @@ def find_split(
     edges = data["edges"]
     loads = data["loads"]
     index_to_canister_id = data["index_to_canister_id"]
-    canister_ids = [index_to_canister_id[k] for k in range(len(index_to_canister_id))]
-    range_indices = assign_canisters_to_ranges(canister_ids, subnet_canister_id_ranges)
+    range_indices = assign_canisters_to_ranges(
+        [canister_id_to_number(index_to_canister_id[k]) for k in range(len(index_to_canister_id))],
+        subnet_canister_id_ranges,
+    )
 
     load_constraints = [
         LoadConstraints(load_type, load, compute_max_allowed_load_per_subnet(load), load_epsilons[load_type])
@@ -148,7 +111,29 @@ def find_split(
             "Consider allowing larger load deviations or more cuts, or balancing fewer load types."
         )
 
-    return group_into_canister_ranges(assignments, canister_ids, range_indices)
+    ranges = []
+    first_in_range = None
+    last_in_range = None
+    for k in range(len(assignments)):
+        is_to_be_migrated = assignments[k] == 1
+        # The routing table assigns the canister IDs between two of the subnet's canister ID ranges
+        # to other subnets, so a range must not span them.
+        is_in_next_subnet_range = k > 0 and range_indices[k] != range_indices[k - 1]
+
+        if is_to_be_migrated or is_in_next_subnet_range:
+            if first_in_range is not None and last_in_range is not None:
+                ranges.append((first_in_range, last_in_range))
+            first_in_range, last_in_range = None, None
+        if not is_to_be_migrated:
+            canister_id = index_to_canister_id[k]
+            last_in_range = canister_id
+            if first_in_range is None:
+                first_in_range = canister_id
+
+    if first_in_range is not None and last_in_range is not None:
+        ranges.append((first_in_range, last_in_range))
+
+    return ranges
 
 
 def parse_epsilon(value: str) -> float:
@@ -169,17 +154,18 @@ def parse_load_type(value: str) -> Tuple[str, Optional[float]]:
     return load_type, parse_epsilon(epsilon) if separator else None
 
 
-def parse_canister_id_range(value: str) -> Tuple[str, str]:
-    """Parse a `START:END` argument into the first and last canister IDs of the range."""
+def parse_canister_id_range(value: str) -> Tuple[int, int]:
+    """Parse a `START:END` argument into the numbers of the first and last canisters of the range."""
     start, separator, end = value.partition(":")
-    if not separator:
-        raise argparse.ArgumentTypeError(f"invalid canister ID range: '{value}' (expected START:END)")
     try:
-        if canister_id_to_number(start) > canister_id_to_number(end):
-            raise argparse.ArgumentTypeError(f"invalid canister ID range: '{value}' (START is greater than END)")
+        if not separator:
+            raise ValueError("expected START:END")
+        first, last = canister_id_to_number(start), canister_id_to_number(end)
     except ValueError as err:
         raise argparse.ArgumentTypeError(f"invalid canister ID range: '{value}' ({err})") from None
-    return start, end
+    if first > last:
+        raise argparse.ArgumentTypeError(f"invalid canister ID range: '{value}' (START is greater than END)")
+    return first, last
 
 
 def parse_args(argv=None):
@@ -209,7 +195,7 @@ def parse_args(argv=None):
         type=parse_canister_id_range,
         nargs="+",
         metavar="START:END",
-        help="All the canister ID ranges which the routing table assigns to the subnet."
+        help="All the canister ID ranges which the routing table assigns to the subnet.",
         required=True,
     )
     parser.add_argument(

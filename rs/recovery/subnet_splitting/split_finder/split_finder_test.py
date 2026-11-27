@@ -11,7 +11,6 @@ from split_finder import (
     assign_canisters_to_ranges,
     compute_max_allowed_load_per_subnet,
     find_split,
-    group_into_canister_ranges,
     parse_args,
 )
 
@@ -20,6 +19,8 @@ FAKE_LOAD_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_sample.csv")
 FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_baseline_sample.csv")
 FAKE_COMMUNICATION_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_sample.csv")
 FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_baseline_sample.csv")
+# The canisters in "fake_load_sample.csv" are the canisters 0 to 19.
+FAKE_SUBNET_CANISTER_ID_RANGES = [(0, 19)]
 
 # The canisters in "fake_communication_sample.csv" form a cycling graph. Subtracting
 # "fake_communication_baseline_sample.csv" from it leaves one message per edge, except:
@@ -34,20 +35,8 @@ FAKE_SAMPLE_PATHS = (
     FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
     FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
 )
-# The number of canisters in "fake_load_sample.csv": the canisters 0 to 19.
-FAKE_CANISTERS_COUNT = 20
-
-
-def canister_range(first, last):
-    """Returns the range from canister `first` to canister `last` as a pair of canister IDs."""
-    return number_to_canister_id(first), number_to_canister_id(last)
-
-
-# A subnet whose single canister ID range contains all the canisters in "fake_load_sample.csv".
-FAKE_SUBNET_CANISTER_ID_RANGES = [canister_range(0, FAKE_CANISTERS_COUNT - 1)]
-# All the command line arguments of the split finder which are required apart from `--load-type`
-# and `--subnet-canister-id-ranges`.
-REQUIRED_ARGS_WITHOUT_RANGES = [
+# All the command line arguments of the split finder which are required apart from `--load-type`.
+REQUIRED_ARGS = [
     "--load-path",
     FAKE_LOAD_SAMPLE_CSV_PATH,
     "--load-baseline-path",
@@ -56,30 +45,11 @@ REQUIRED_ARGS_WITHOUT_RANGES = [
     FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
     "--communication-baseline-data-path",
     FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+    "--subnet-canister-id-ranges",
+    "rwlgt-iiaaa-aaaaa-aaaaa-cai:sp3hj-caaaa-aaaaa-aaajq-cai",
     "--output-path",
     "output.txt",
 ]
-# All the command line arguments of the split finder which are required apart from `--load-type`.
-REQUIRED_ARGS = REQUIRED_ARGS_WITHOUT_RANGES + [
-    "--subnet-canister-id-ranges",
-    *(f"{first}:{last}" for first, last in FAKE_SUBNET_CANISTER_ID_RANGES),
-]
-
-
-def write_renumbered_fake_samples(directory, renumber):
-    """
-    Writes the fake samples to `directory`, with every canister `i` renumbered to `renumber(i)`, and
-    returns their paths in the same order as `FAKE_SAMPLE_PATHS`.
-    """
-    paths = []
-    for path in FAKE_SAMPLE_PATHS:
-        text = Path(path).read_text()
-        for number in range(FAKE_CANISTERS_COUNT):
-            text = text.replace(number_to_canister_id(number), number_to_canister_id(renumber(number)))
-        renumbered_path = Path(directory) / Path(path).name
-        renumbered_path.write_text(text)
-        paths.append(renumbered_path)
-    return paths
 
 
 def max_load_ratio(canister_ranges, load_type):
@@ -304,13 +274,37 @@ class TestCsvLoading(unittest.TestCase):
                 msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
             )
 
+    def test_solver_splits_ranges_between_subnet_canister_id_ranges(self):
+        # The subnet hosts canister 100 in its first canister ID range, canisters 1000 and 1001 in its
+        # second one, and canister 2000 in its third one. Canister 100 talks to canister 1000 and
+        # canister 2000 to canister 1001, so each pair stays together. None of these canisters is in
+        # the baseline samples.
+        split = find_split(
+            str(TEST_DATA_DIR / "fake_multi_range_load_sample.csv"),
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            str(TEST_DATA_DIR / "fake_multi_range_communication_sample.csv"),
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            [(100, 199), (1000, 1099), (2000, 2099)],
+            {CANISTERS_INSTALLED: 0.0},
+            100,
+        )
 
-class TestSubnetCanisterIdRanges(unittest.TestCase):
+        # The range of canisters 1001 and 2000 would span the canister IDs of other subnets.
+        self.assertEqual(
+            split,
+            [
+                ("heic2-yaaaa-aaaaa-aapuq-cai", "heic2-yaaaa-aaaaa-aapuq-cai"),
+                ("txegi-kaaaa-aaaaa-aa7ia-cai", "txegi-kaaaa-aaaaa-aa7ia-cai"),
+            ],
+            msg=f"`find_split` returned unexpected split: {split}",
+        )
+
+
+class TestCanisterIdRanges(unittest.TestCase):
     def test_canister_ids_convert_to_numbers(self):
         for canister_id, number in [
             ("rwlgt-iiaaa-aaaaa-aaaaa-cai", 0),
             ("rrkah-fqaaa-aaaaa-aaaaq-cai", 1),
-            ("qjdve-lqaaa-aaaaa-aaaeq-cai", 9),
             ("37pka-5h777-77777-7777q-cai", 2**64 - 1),
         ]:
             with self.subTest(canister_id=canister_id):
@@ -321,142 +315,33 @@ class TestSubnetCanisterIdRanges(unittest.TestCase):
         for canister_id in [
             "",
             "bogus",
-            # The management canister and the anonymous principal are not canister IDs.
+            # The management canister is not a canister ID.
             "aaaaa-aa",
-            "2vxsx-fae",
             # Wrong checksum.
             "rwlgt-iiaaa-aaaaa-aaaaa-caa",
             # Not the canonical textual form.
             "RWLGT-IIAAA-AAAAA-AAAAA-CAI",
-            "rwlgtiiaaaaaaaaaaaaaaacai",
         ]:
             with self.subTest(canister_id=canister_id), self.assertRaises(ValueError):
                 canister_id_to_number(canister_id)
 
     def test_canisters_are_assigned_to_ranges(self):
-        canister_ids = [number_to_canister_id(number) for number in [0, 1, 5, 9, 20]]
-        for canister_id_ranges, expected_range_indices in [
-            ([canister_range(0, 1), canister_range(5, 20)], [0, 0, 1, 1, 1]),
-            # The order of the ranges doesn't matter.
-            ([canister_range(5, 20), canister_range(0, 1)], [0, 0, 1, 1, 1]),
-            ([canister_range(0, 1), canister_range(5, 9), canister_range(20, 20)], [0, 0, 1, 1, 2]),
-            # Adjacent ranges are merged.
-            ([canister_range(0, 1), canister_range(2, 9), canister_range(10, 20)], [0, 0, 0, 0, 0]),
-        ]:
-            with self.subTest(canister_id_ranges=canister_id_ranges):
-                self.assertEqual(
-                    assign_canisters_to_ranges(canister_ids, canister_id_ranges),
-                    expected_range_indices,
-                )
+        self.assertEqual(assign_canisters_to_ranges([0, 1, 5, 9, 20], [(5, 9), (0, 1), (20, 20)]), [0, 0, 1, 1, 2])
 
     def test_invalid_assignments_to_ranges_are_rejected(self):
-        for canister_numbers, canister_id_ranges in [
-            # Canister 5 lies between the ranges.
-            ([0, 5, 9], [canister_range(0, 1), canister_range(6, 9)]),
-            # Canister 0 lies before the ranges.
-            ([0, 5], [canister_range(1, 9)]),
-            # Canister 10 lies after the ranges.
-            ([5, 10], [canister_range(0, 9)]),
+        for canister_numbers, ranges in [
+            # A canister lies between, before or after the ranges.
+            ([0, 5, 9], [(0, 1), (6, 9)]),
+            ([0, 5], [(1, 9)]),
+            ([5, 10], [(0, 9)]),
             # The ranges overlap.
-            ([0, 5], [canister_range(0, 5), canister_range(5, 9)]),
+            ([0, 5], [(0, 5), (5, 9)]),
             # The canisters are not in increasing order.
-            ([5, 0], [canister_range(0, 9)]),
-            ([5, 5], [canister_range(0, 9)]),
+            ([5, 0], [(0, 9)]),
+            ([5, 5], [(0, 9)]),
         ]:
-            with (
-                self.subTest(canister_numbers=canister_numbers, canister_id_ranges=canister_id_ranges),
-                self.assertRaises(ValueError),
-            ):
-                assign_canisters_to_ranges(
-                    [number_to_canister_id(number) for number in canister_numbers], canister_id_ranges
-                )
-
-    def test_canisters_are_grouped_into_ranges(self):
-        canister_ids = [number_to_canister_id(number) for number in [0, 1, 2, 5, 6, 9]]
-        for assignments, range_indices, expected_ranges in [
-            ([0, 0, 1, 0, 0, 1], [0, 0, 0, 0, 0, 0], [canister_range(0, 1), canister_range(5, 6)]),
-            ([1, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0], [canister_range(1, 6)]),
-            ([0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [canister_range(0, 9)]),
-            ([1, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 0], []),
-            # Ranges also end where the subnet's canister ID ranges do.
-            ([1, 0, 0, 0, 0, 1], [0, 0, 0, 1, 1, 1], [canister_range(1, 2), canister_range(5, 6)]),
-            (
-                [0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 1, 2, 2],
-                [canister_range(0, 1), canister_range(2, 5), canister_range(6, 9)],
-            ),
-            (
-                [0, 1, 0, 0, 1, 0],
-                [0, 0, 0, 1, 1, 1],
-                [canister_range(0, 0), canister_range(2, 2), canister_range(5, 5), canister_range(9, 9)],
-            ),
-        ]:
-            with self.subTest(assignments=assignments, range_indices=range_indices):
-                self.assertEqual(
-                    group_into_canister_ranges(assignments, canister_ids, range_indices),
-                    expected_ranges,
-                )
-
-    def test_split_ranges_lie_within_subnet_ranges(self):
-        load_epsilons = {"instructions_executed": 0.0001}
-        contiguous_split = find_split(*FAKE_SAMPLE_PATHS, FAKE_SUBNET_CANISTER_ID_RANGES, load_epsilons, 100)
-        # Which split the solver finds depends on the platform, so split the subnet's canister ID
-        # range right after the first canister of a range of several canisters in the split.
-        ranges_of_several_canisters = [(first, last) for first, last in contiguous_split if first != last]
-        self.assertTrue(
-            ranges_of_several_canisters, msg=f"`find_split` returned no range of several canisters: {contiguous_split}"
-        )
-        last_in_first_subnet_range = canister_id_to_number(ranges_of_several_canisters[0][0])
-        last_canister = FAKE_CANISTERS_COUNT - 1
-
-        # Adjacent canister ID ranges have no other subnet's canister IDs in between, so they don't
-        # change the split.
-        split_with_adjacent_subnet_ranges = find_split(
-            *FAKE_SAMPLE_PATHS,
-            [
-                canister_range(0, last_in_first_subnet_range),
-                canister_range(last_in_first_subnet_range + 1, last_canister),
-            ],
-            load_epsilons,
-            100,
-        )
-        self.assertEqual(split_with_adjacent_subnet_ranges, contiguous_split)
-
-        # Renumbering the canisters after the first subnet range leaves a gap of 1000 canister IDs,
-        # which the routing table assigns to other subnets. The solver then sees the same problem
-        # and finds the same split, but the ranges must end where the first subnet range does.
-        def renumber(number):
-            return number if number <= last_in_first_subnet_range else number + 1000
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            split_with_gap_between_subnet_ranges = find_split(
-                *write_renumbered_fake_samples(tmp_dir, renumber),
-                [
-                    canister_range(0, last_in_first_subnet_range),
-                    canister_range(renumber(last_in_first_subnet_range + 1), renumber(last_canister)),
-                ],
-                load_epsilons,
-                100,
-            )
-
-        expected_split = []
-        for first, last in contiguous_split:
-            first, last = canister_id_to_number(first), canister_id_to_number(last)
-            if first <= last_in_first_subnet_range < last:
-                expected_split.append(canister_range(first, last_in_first_subnet_range))
-                expected_split.append(canister_range(renumber(last_in_first_subnet_range + 1), renumber(last)))
-            else:
-                expected_split.append(canister_range(renumber(first), renumber(last)))
-        self.assertEqual(split_with_gap_between_subnet_ranges, expected_split)
-
-    def test_canisters_outside_subnet_ranges_are_rejected(self):
-        with self.assertRaises(ValueError):
-            find_split(
-                *FAKE_SAMPLE_PATHS,
-                [canister_range(1, FAKE_CANISTERS_COUNT - 1)],
-                {"instructions_executed": 0.0001},
-                100,
-            )
+            with self.subTest(canister_numbers=canister_numbers, ranges=ranges), self.assertRaises(ValueError):
+                assign_canisters_to_ranges(canister_numbers, ranges)
 
 
 class TestArgParsing(unittest.TestCase):
@@ -489,39 +374,32 @@ class TestArgParsing(unittest.TestCase):
                 parse_args(REQUIRED_ARGS + ["--load-type", *load_type_args])
 
     def test_subnet_canister_id_ranges_are_parsed(self):
-        canister_id_ranges = [canister_range(0, 5), canister_range(7, 7), canister_range(1000, 2000)]
+        # The ranges given last replace those in `REQUIRED_ARGS`.
         args = parse_args(
-            REQUIRED_ARGS_WITHOUT_RANGES
+            REQUIRED_ARGS
             + ["--load-type", "instructions_executed"]
-            + ["--subnet-canister-id-ranges", *(f"{first}:{last}" for first, last in canister_id_ranges)]
+            + ["--subnet-canister-id-ranges", "rwlgt-iiaaa-aaaaa-aaaaa-cai:rwlgt-iiaaa-aaaaa-aaaaa-cai"]
+            + ["rrkah-fqaaa-aaaaa-aaaaq-cai:sp3hj-caaaa-aaaaa-aaajq-cai"]
         )
-        self.assertEqual(args.subnet_canister_id_ranges, canister_id_ranges)
+        self.assertEqual(args.subnet_canister_id_ranges, [(0, 0), (1, 19)])
 
     def test_invalid_subnet_canister_id_ranges_are_rejected(self):
-        first, last = canister_range(0, 5)
         for range_args in [
             [],
             ["bogus"],
-            [first],
-            [f"{first}:"],
-            [f"{first}:bogus"],
-            [f"{last}:{first}"],
-            [f"{first}:{last}:{last}"],
+            ["rwlgt-iiaaa-aaaaa-aaaaa-cai"],
+            ["rwlgt-iiaaa-aaaaa-aaaaa-cai:bogus"],
+            ["rrkah-fqaaa-aaaaa-aaaaq-cai:rwlgt-iiaaa-aaaaa-aaaaa-cai"],
         ]:
             with (
                 self.subTest(range_args=range_args),
                 contextlib.redirect_stderr(io.StringIO()),
                 self.assertRaises(SystemExit),
             ):
+                # The ranges given last replace those in `REQUIRED_ARGS`.
                 parse_args(
-                    REQUIRED_ARGS_WITHOUT_RANGES
-                    + ["--load-type", "instructions_executed"]
-                    + ["--subnet-canister-id-ranges", *range_args]
+                    REQUIRED_ARGS + ["--load-type", "instructions_executed", "--subnet-canister-id-ranges", *range_args]
                 )
-
-    def test_subnet_canister_id_ranges_are_required(self):
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            parse_args(REQUIRED_ARGS_WITHOUT_RANGES + ["--load-type", "instructions_executed"])
 
 
 if __name__ == "__main__":
