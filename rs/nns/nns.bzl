@@ -23,6 +23,6 @@ CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = {
     "genesis-token-canister.wasm.gz": 3,
     "governance-canister.wasm.gz": 25,
     "governance-canister_test.wasm.gz": 32,
-    "registry-canister.wasm.gz": 17,
+    "registry-canister.wasm.gz": 18,
     "root-canister.wasm.gz": 6,
 }

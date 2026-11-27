@@ -52,7 +52,12 @@ fn get_registry(
         )
         .unwrap();
     let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+    routing_table_insert_subnet(
+        &mut routing_table,
+        subnet_id,
+        /* next_unallocated_canister_index = */ 0,
+    )
+    .unwrap();
     let pb_routing_table = PbRoutingTable::from(routing_table);
     data_provider
         .add(
