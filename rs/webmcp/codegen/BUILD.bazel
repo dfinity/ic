@@ -1,0 +1,72 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+ALIASES = {}
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+    "@crate_index//:clap",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tempfile",
+]
+
+rust_library(
+    name = "ic_webmcp_codegen",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_webmcp_codegen",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-webmcp-codegen",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    deps = DEPENDENCIES + [":ic_webmcp_codegen"],
+)
+
+rust_test(
+    name = "unit_tests",
+    aliases = ALIASES,
+    crate = ":ic_webmcp_codegen",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "integration_tests",
+    srcs = ["tests/integration_test.rs"],
+    aliases = ALIASES,
+    data = [
+        # ICP ledger
+        "//rs/ledger_suite/icp:ledger.did",
+        # ICRC-1 ledger
+        "//rs/ledger_suite/icrc1/ledger:ledger.did",
+        # NNS canisters
+        "//rs/nns/governance:canister/governance.did",
+        "//rs/nns/cmc:cmc.did",
+        # SNS
+        "//rs/sns/swap:canister/swap.did",
+        # ckBTC
+        "//rs/bitcoin/ckbtc/minter:ckbtc_minter.did",
+        # Note: management_canister_types/tests/ic.did is not publicly exported;
+        # the integration test skips it gracefully when not present.
+    ],
+    deps = [
+        ":ic_webmcp_codegen",
+        "@crate_index//:serde_json",
+    ] + DEV_DEPENDENCIES,
+)
