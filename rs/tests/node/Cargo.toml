@@ -20,6 +20,7 @@ indoc = { workspace = true }
 nested = { path = "../nested" }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]
