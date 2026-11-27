@@ -852,8 +852,8 @@ impl StreamBuilderImpl {
                     // Refunds are routed under the same conditions as subnet output
                     // responses: always, unless this subnet (the source) is not cooling down
                     // while the destination subnet is. This way a cooling down subnet can
-                    // still hand back the cycles it holds (before it is deleted), while a
-                    // subnet that is not cooling down pushes no new cycles onto one that is.
+                    // still hand back the cycles it holds, while a subnet that is not cooling
+                    // down pushes no new cycles onto one that is.
                     //
                     // Retain the skipped refunds in the refund pool until this no longer holds
                     // (the destination subnet stops cooling down, or this subnet starts),

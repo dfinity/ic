@@ -396,23 +396,14 @@ pub struct SubnetTopology {
     ///  * it executes no canister messages and no canister tasks (`Heartbeat`,
     ///    `GlobalTimer` or the on-low-wasm-memory hook), only draining its subnet
     ///    queues;
-    ///  * (on all subnets) no messages from canister output queues are routed
-    ///    to a cooling down subnet -- including into the cooling down subnet's
-    ///    own loopback stream -- but retained in their respective output queues,
-    ///    so that streams to the cooling down subnet can be emptied;
-    ///  * it routes no messages from its canisters' output queues into streams
-    ///    -- including its own loopback stream -- but retains them in output
-    ///    queues, so streams from the cooling down subnet can be emptied;
-    ///  * it still routes the responses in its subnet output queues (which
-    ///    only ever hold responses) and its refunds into streams -- to any
-    ///    subnet, including its own loopback stream -- so that it responds to
-    ///    all the calls it has already accepted and hands back the cycles it
-    ///    holds (before it is deleted);
-    ///  * subnets that are not cooling down route no responses from their
-    ///    subnet output queues and no refunds to a cooling down subnet, but
-    ///    retain them in their subnet output queues and refund pool,
-    ///    respectively, so that streams to the cooling down subnet can be
-    ///    emptied and no cycles are lost.
+    ///  * no messages from canister output queues are routed to or from it, not
+    ///    even into its own loopback stream; they are retained in their output
+    ///    queues, so that streams to and from it can be emptied;
+    ///  * responses from subnet output queues and refunds are still routed,
+    ///    except from subnets that are not cooling down to it (these retain
+    ///    them in their subnet output queues and refund pool, respectively),
+    ///    so that it still responds to the calls it has accepted and hands back
+    ///    its cycles.
     pub cooling_down: bool,
 }
 
