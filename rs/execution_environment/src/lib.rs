@@ -111,6 +111,8 @@ pub enum NonReplicatedQueryKind {
         caller: PrincipalId,
         sender_info: Option<SenderInfo>,
     },
+    /// A canister http transform, called by the management canister.
+    Transform,
 }
 
 // This struct holds public facing components that are created by Execution.

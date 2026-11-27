@@ -2,7 +2,8 @@ use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
     NumBytes, NumInstructions,
     canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
+        DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES,
     },
 };
 
@@ -17,7 +18,7 @@ impl LegacyTracker {
         Self {
             max_response_size: context
                 .max_response_bytes
-                .unwrap_or(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
+                .unwrap_or(NumBytes::from(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES)),
         }
     }
 }

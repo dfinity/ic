@@ -2,8 +2,8 @@ use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, Replication,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
+        DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, Replication,
     },
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -58,7 +58,7 @@ impl PayAsYouGoTracker {
             allowance: context.refund_status.per_replica_allowance,
             max_response_size: context
                 .max_response_bytes
-                .unwrap_or(NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)),
+                .unwrap_or(NumBytes::from(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES)),
             spent: Cycles::zero(),
         }
     }
@@ -439,7 +439,7 @@ mod tests {
         let limits = tracker.get_adapter_limits();
         assert_eq!(
             limits.max_response_size,
-            NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)
+            NumBytes::from(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES)
         );
         assert_eq!(limits.max_response_time, MAX_RESPONSE_TIME);
         assert_eq!(

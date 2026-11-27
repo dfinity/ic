@@ -14,12 +14,13 @@ use ic_error_types::RejectCode;
 use ic_execution_environment::units::{GIB, MIB};
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallModeV2,
-    CanisterMetadataRequest, CanisterMetadataResponse, CanisterMetricsArgs, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
-    EcdsaKeyId, EmptyBlob, HttpMethod, IC_00, InstallCodeArgsV2, ListCanistersResponse,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload, SignWithECDSAArgs,
-    SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, CanisterIdRecord,
+    CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse, CanisterMetricsArgs,
+    CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
+    DerivationPath, EcdsaKeyId, EmptyBlob, HttpMethod, IC_00, InstallCodeArgsV2,
+    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_resource_limits::ResourceLimits;
@@ -38,6 +39,9 @@ use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::canister_http::{
+    CanisterHttpPaymentReceipt, CanisterHttpResponseContent, Replication,
+};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CanisterMessage, CanisterMessageOrTask, MessageId};
 use ic_types::{
@@ -2392,6 +2396,102 @@ fn bounded_wait_http_requests_are_cancelled_at_deadline() {
         .unwrap();
     env.tick();
     assert_eq!(env.canister_http_request_contexts().len(), 1);
+}
+
+#[test]
+fn bounded_wait_http_request_delivers_4mb_response() {
+    const MAX_RESPONSE_BYTES: u64 = 4_000_000;
+
+    for is_replicated in [None, Some(false)] {
+        let env = application_subnet_with_payload_builder();
+        let canister = create_canister_with_cycles(
+            &env,
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            None,
+            INITIAL_CYCLES_BALANCE,
+        );
+        let args = CanisterHttpRequestArgs {
+            url: "https://example.com".to_string(),
+            max_response_bytes: Some(MAX_RESPONSE_BYTES),
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method: HttpMethod::GET,
+            transform: None,
+            is_replicated,
+            pricing_version: None,
+        };
+        // Records the size of the reply, or the reject message.
+        let outcall = wasm()
+            .call_simple_with_cycles_and_best_effort_response(
+                IC_00,
+                Method::HttpRequest,
+                call_args()
+                    .other_side(args.encode())
+                    .on_reply(
+                        wasm()
+                            .msg_arg_data_size()
+                            .int_to_blob()
+                            .append_to_global_data(),
+                    )
+                    .on_reject(wasm().reject_message().append_to_global_data()),
+                Cycles::new(100 * B),
+                MAX_CALL_TIMEOUT_SECONDS,
+            )
+            .reply()
+            .build();
+        let global_data = || {
+            let query = wasm().get_global_data().append_and_reply().build();
+            get_reply(env.query(canister, "query", query))
+        };
+
+        env.execute_ingress(canister, "update", outcall).unwrap();
+        env.tick();
+        let Some((id, context)) = env.canister_http_request_contexts().into_iter().next() else {
+            // Route the reject to the canister.
+            env.tick();
+            env.tick();
+            panic!(
+                "outcall rejected: {}",
+                String::from_utf8_lossy(&global_data())
+            );
+        };
+
+        let reply = Encode!(&CanisterHttpResponsePayload {
+            status: 200,
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: vec![0; MAX_RESPONSE_BYTES as usize],
+        })
+        .unwrap();
+        let content = CanisterHttpResponseContent::Success(reply.clone());
+        let responders: Vec<_> = match context.replication {
+            Replication::NonReplicated(node_id) => vec![node_id],
+            _ => env.nodes.iter().map(|node| node.node_id).collect(),
+        };
+        env.mock_canister_http_response_for_nodes(
+            id.get(),
+            responders
+                .into_iter()
+                .map(|node_id| {
+                    (
+                        node_id,
+                        (content.clone(), CanisterHttpPaymentReceipt::default()),
+                    )
+                })
+                .collect(),
+        );
+        // Include the response in a block, route it to the canister and run the callback.
+        for _ in 0..5 {
+            env.execute_round();
+        }
+
+        let global_data = global_data();
+        assert_eq!(
+            global_data,
+            (reply.len() as u32).to_le_bytes(),
+            "{is_replicated:?}: {}",
+            String::from_utf8_lossy(&global_data)
+        );
+    }
 }
 
 #[test]

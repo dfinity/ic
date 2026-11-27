@@ -24,7 +24,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, NumberOfNodes, PrincipalId, SubnetId, Time,
-    canister_http::ReplicationKind,
+    canister_http::{MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES, ReplicationKind},
     ingress::WasmResult,
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
@@ -55,6 +55,9 @@ mod stable_memory;
 
 pub const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
+/// A canister http transform may reply with the largest response an outcall may deliver.
+const MAX_TRANSFORM_REPLY_SIZE: NumBytes =
+    NumBytes::new(MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES);
 const CERTIFIED_DATA_MAX_LENGTH: usize = 32;
 
 // Enables tracing of system calls for local debugging.
@@ -542,6 +545,26 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
             sender_info,
+        }
+    }
+
+    /// A canister http transform, i.e. a query called by the management canister.
+    pub fn transform(
+        time: Time,
+        own_subnet_id: SubnetId,
+        incoming_payload: Vec<u8>,
+        data_certificate: Option<Vec<u8>>,
+    ) -> Self {
+        Self::NonReplicatedQuery {
+            time,
+            caller: IC_00.get(),
+            own_subnet_id,
+            incoming_payload,
+            data_certificate,
+            response_data: vec![],
+            response_status: ResponseStatus::NotRepliedYet,
+            max_reply_size: MAX_TRANSFORM_REPLY_SIZE,
+            sender_info: None,
         }
     }
 

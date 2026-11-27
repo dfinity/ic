@@ -26,8 +26,8 @@ use ic_test_utilities_types::{
 use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     messages::{
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload as ResponsePayload, SignedIngress,
-        extract_effective_canister_id,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE, Payload as ResponsePayload,
+        SignedIngress, extract_effective_canister_id,
     },
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -718,6 +718,34 @@ fn settle_prepayment_for_unexecuted_response_charges_only_the_base_fee() {
     }
 }
 
+/// A best-effort response, such as a bounded-wait HTTP outcall's, may be larger than
+/// the response the caller prepaid the transmission of. Nothing is refunded then, and
+/// that is not an error.
+#[test]
+fn response_transmission_refund_for_a_larger_best_effort_response() {
+    let cycles_account_manager = cycles_account_manager();
+    let config = subnet_cycles_config(CanisterCyclesCostSchedule::Normal);
+    let prepaid = cycles_account_manager.prepayment_for_response_transmission(config);
+    let response = ResponsePayload::Data(vec![
+        0;
+        2 * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get()
+            as usize
+    ]);
+    let error_counter: IntCounter = IntCounter::new("errors", "errors").unwrap();
+
+    let refund = cycles_account_manager.refund_for_response_transmission(
+        &no_op_logger(),
+        &error_counter,
+        &response,
+        CoarseTime::from_secs_since_unix_epoch(1),
+        prepaid,
+        config,
+    );
+
+    assert_eq!(refund.real(), Cycles::zero());
+    assert_eq!(error_counter.get(), 0);
+}
+
 /// The cycles prepaid for transmitting a response are settled by refunding the part
 /// of the prepayment that the transmission did not cost. That path never tops up the
 /// prepayment either: the refund is `prepaid - cost`, which saturates part by part,
@@ -768,6 +796,7 @@ fn response_transmission_refund_never_exceeds_the_prepayment() {
                     &no_op_logger(),
                     &no_op_counter,
                     &response,
+                    NO_DEADLINE,
                     prepaid,
                     config_at_response,
                 );

@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A flexible HTTP outcall delivers responses up to 2,031,616 bytes (2 MiB − 64 KiB) in total rather than 2 MiB:
   it delivers fewer than `max_responses` responses where more would exceed that, and fails with `responses_too_large`
   once the smallest responses that would have to be delivered exceed it.
+- An HTTP outcall made by a bounded-wait call may send up to 4,000,000 bytes of headers and body and set
+  `max_response_bytes` up to 4,000,000, rather than 2,000,000; if it is flexible, it delivers responses up to
+  4,128,768 bytes (4 MiB − 64 KiB) in total. Outcalls made by unbounded-wait calls keep the previous limits.
 
 ### Fixed
 - Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1 s instead of 50 ms,

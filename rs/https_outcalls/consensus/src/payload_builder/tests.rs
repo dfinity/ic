@@ -50,8 +50,9 @@ use ic_types::{
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
-        ValidationContext, iterator_to_bytes, slice_to_messages, stripping_savings,
+        MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE, ValidationContext, iterator_to_bytes,
+        slice_to_messages, stripping_savings,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -60,9 +61,10 @@ use ic_types::{
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus, MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PricingVersion, RefundStatus, Replication,
-        canister_http_threshold, max_http_outcall_response_size,
+        CanisterHttpResponseWithConsensus, MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
+        MAX_CANISTER_HTTP_RESPONSE_BYTES, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES,
+        PricingVersion, RefundStatus, Replication, canister_http_threshold,
+        max_http_outcall_response_size,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -603,7 +605,8 @@ fn oversized_validation() {
         true,
         |response, _| {
             // Give response oversized content
-            response.content = CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
+            response.content =
+                CanisterHttpResponseContent::Success(vec![123; MAX_CANISTER_HTTP_PAYLOAD_SIZE]);
         },
         &default_validation_context(),
     );
@@ -612,7 +615,7 @@ fn oversized_validation() {
             InvalidPayloadReason::InvalidCanisterHttpPayload(
                 InvalidCanisterHttpPayloadReason::PayloadTooBig { expected, received },
             ),
-        )) if expected == 2 * 1024 * 1024 && received > expected => (),
+        )) if expected == MAX_CANISTER_HTTP_PAYLOAD_SIZE && received > expected => (),
         x => panic!("Expected PayloadTooBig, got {x:?}"),
     }
 }
@@ -2532,6 +2535,49 @@ fn flexible_responses_over_the_group_limit_are_too_large() {
     });
 }
 
+/// The responses of a bounded-wait call's flexible outcall must be within
+/// `MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE` instead.
+#[test]
+fn bounded_wait_flexible_responses_have_a_larger_group_limit() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let context = bounded_wait(flexible_request_context(committee, 2, 2));
+
+    for (content_size, delivered) in [
+        (MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 + 1000, true),
+        (
+            MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 + 1000,
+            false,
+        ),
+    ] {
+        setup_test_with_contexts(
+            num_nodes,
+            vec![(callback_id, context.clone())],
+            |pb, pool| {
+                let content = vec![0xAB; content_size];
+                add_flexible_ok_shares(&pool, callback_id, 0..num_nodes as u64, &content);
+
+                let parsed = build_and_validate_and_parse_payload(&pb);
+
+                if delivered {
+                    assert_matches!(
+                        parsed.flexible_responses.as_slice(),
+                        [group] if group.responses.len() == 2
+                    );
+                } else {
+                    assert!(parsed.flexible_responses.is_empty());
+                    assert_matches!(
+                        parsed.flexible_errors.as_slice(),
+                        [FlexibleCanisterHttpError::ResponsesTooLarge { callback_id: id, .. }]
+                            if *id == callback_id
+                    );
+                }
+            },
+        );
+    }
+}
+
 /// Messages are serialized in the order in which they are selected, by callback id, so
 /// that a message can only be crowded out of the payload by those selected before it.
 #[test]
@@ -2587,6 +2633,20 @@ fn payload_messages_are_serialized_in_the_order_selected() {
 /// size and an extra share of every other member of the committee.
 #[test]
 fn flexible_responses_at_the_group_limit_fit_into_the_payload() {
+    flexible_responses_at_the_group_limit_fit_into_the_payload_impl(
+        MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        |context| context,
+    );
+    flexible_responses_at_the_group_limit_fit_into_the_payload_impl(
+        MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        bounded_wait,
+    );
+}
+
+fn flexible_responses_at_the_group_limit_fit_into_the_payload_impl(
+    limit: usize,
+    to_context: impl Fn(CanisterHttpRequestContext) -> CanisterHttpRequestContext,
+) {
     let num_nodes = MAX_SUBNET_SIZE;
     let nodes: Vec<_> = (0..num_nodes as u64).map(full_size_node_id).collect();
     let callback_id = CallbackId::from(42);
@@ -2602,7 +2662,7 @@ fn flexible_responses_at_the_group_limit_fit_into_the_payload() {
     // The two smallest responses are exactly at the limit.
     let (response, share) = response_of(nodes[0], 0);
     let empty_size = FlexibleCanisterHttpResponseWithProof::count_bytes(&response, &share);
-    let content_size = MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE / 2 - empty_size;
+    let content_size = limit / 2 - empty_size;
     let responses: Vec<_> = nodes
         .iter()
         .enumerate()
@@ -2615,12 +2675,12 @@ fn flexible_responses_at_the_group_limit_fit_into_the_payload() {
         NumberOfNodes::from(num_nodes as u32),
         2,
     );
-    let context = flexible_request_context_with_allowance(
+    let context = to_context(flexible_request_context_with_allowance(
         nodes.iter().copied().collect(),
         2,
         2,
         Cycles::new(cost.get().div_ceil(num_nodes as u128)),
-    );
+    ));
 
     setup_test_with_contexts(num_nodes, vec![(callback_id, context)], |pb, pool| {
         {
@@ -2644,7 +2704,7 @@ fn flexible_responses_at_the_group_limit_fit_into_the_payload() {
                 .iter()
                 .map(|r| r.count_bytes())
                 .sum::<usize>(),
-            MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE
+            limit
         );
         assert_eq!(group.extra_shares.len(), num_nodes - 2);
     });
@@ -2702,8 +2762,13 @@ fn older_message_is_not_crowded_out_by_a_newer_one() {
         NumberOfNodes::from(num_nodes as u32),
         2,
     );
-    let flexible_context =
-        flexible_request_context_with_allowance(committee.iter().copied().collect(), 2, 2, cost);
+    // Only a bounded-wait call's responses may take up the whole payload.
+    let flexible_context = bounded_wait(flexible_request_context_with_allowance(
+        committee.iter().copied().collect(),
+        2,
+        2,
+        cost,
+    ));
 
     setup_test_with_contexts(
         num_nodes,
@@ -4720,6 +4785,15 @@ fn flexible_error_timeout_invalid_non_flexible_request() {
             )) if id == callback_id
         );
     });
+}
+
+/// A bounded-wait call's deadline that no test reaches.
+const FAR_FUTURE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(u32::MAX);
+
+/// Turns `context` into one for a bounded-wait call that asks for the largest responses.
+fn bounded_wait(mut context: CanisterHttpRequestContext) -> CanisterHttpRequestContext {
+    context.max_response_bytes = Some(NumBytes::new(MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES));
+    with_deadline(context, FAR_FUTURE)
 }
 
 /// Turns `context` into one for a bounded-wait call with the given deadline.

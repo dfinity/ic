@@ -1430,9 +1430,9 @@ pub struct MockFlexibleCanisterHttpResponse {
     ///   many that `min_responses` replies can no longer be reached — deliver a
     ///   `too_many_rejects` error naming the rejecting nodes;
     /// - if the smallest replies that would have to be delivered together exceed
-    ///   the 2 MiB − 64 KiB a block delivers for one flexible outcall, a
-    ///   `responses_too_large` error (each response may still be within the 2 MB
-    ///   cap on a single one);
+    ///   the 2 MiB − 64 KiB a block delivers for one flexible outcall (4 MiB − 64 KiB
+    ///   if it is made by a bounded-wait call), a `responses_too_large` error (each
+    ///   response may still be within the 2 MB cap on a single one, or 4 MB);
     /// - if what the nodes left unspent of their per-replica cycles allowances no
     ///   longer covers putting a response into a block, an `out_of_cycles`;
     /// - anything else leaves the outcall pending, so that advancing the time past

@@ -2161,7 +2161,8 @@ fn build_streams_with_refunds(
     })?;
 }
 
-// Tests that remote requests and all responses with oversized payloads are rejected.
+// Tests that remote requests and all responses with oversized payloads, other than local
+// best-effort responses, are rejected.
 #[test]
 fn build_streams_with_oversized_payloads() {
     with_test_replica_logger(|log| {
@@ -2226,6 +2227,18 @@ fn build_streams_with_oversized_payloads() {
             )),
             deadline: NO_DEADLINE,
         };
+
+        // Oversized local best-effort response: will be routed normally, as no memory is
+        // reserved for it.
+        let best_effort_response = Response {
+            originator: local_canister,
+            respondent: local_canister,
+            originator_reply_callback: CallbackId::from(5),
+            refund: Cycles::zero(),
+            response_payload: Payload::Data(oversized_response_payload.clone()),
+            deadline: SOME_DEADLINE,
+        };
+        assert!(best_effort_response.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
 
         // Oversized response: will be replaced with a reject response.
         let data_response = Response {
@@ -2300,6 +2313,7 @@ fn build_streams_with_oversized_payloads() {
             remote_request.into(),
             data_response.into(),
             reject_response.into(),
+            best_effort_response.clone().into(),
         ]);
         provided_state.put_canister_states(provided_canister_states);
 
@@ -2315,11 +2329,13 @@ fn build_streams_with_oversized_payloads() {
         // Expecting a loopback stream consisting of:
         //  * successfully routed local request;
         //  * no remote request routed;
-        //  * responses replaced with reject responses.
+        //  * guaranteed responses replaced with reject responses;
+        //  * successfully routed best-effort response.
         let mut expected_stream_messages = StreamIndexedQueue::with_begin(0.into());
         expected_stream_messages.push(local_request.into());
         expected_stream_messages.push(data_response_reject.into());
         expected_stream_messages.push(reject_response_reject.into());
+        expected_stream_messages.push(best_effort_response.into());
         let expected_stream = Stream::new(expected_stream_messages, Default::default());
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
         expected_state.modify_streams(|streams| {
@@ -2359,12 +2375,19 @@ fn build_streams_with_oversized_payloads() {
                     ],
                     2,
                 ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
+                    ],
+                    1,
+                ),
             ]),
             &metrics_registry,
         );
-        assert_eq!(1, fetch_routed_payload_count(&metrics_registry));
+        assert_eq!(2, fetch_routed_payload_count(&metrics_registry));
         assert_eq!(
-            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 3)]),
+            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 4)]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
         );
         assert_eq!(
@@ -2768,7 +2791,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(msgs: Vec<M>) -> Can
                     rep.originator_reply_callback,
                     "".to_string(),
                     Cycles::new(0),
-                    NO_DEADLINE,
+                    rep.deadline,
                 );
                 push_input(canister_state, req.into());
                 canister_state.system_state.pop_input().unwrap();

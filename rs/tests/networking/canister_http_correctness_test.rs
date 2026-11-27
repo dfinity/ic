@@ -46,7 +46,7 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     RegistryVersion,
-    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    canister_http::{CanisterHttpRequestContext, DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES},
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -3451,7 +3451,7 @@ fn expected_cycle_cost(
     let cm = CyclesAccountManagerBuilder::new().build();
     let response_size = request
         .max_response_bytes
-        .unwrap_or(MAX_CANISTER_HTTP_RESPONSE_BYTES);
+        .unwrap_or(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES);
 
     let dummy_context = CanisterHttpRequestContext::generate_from_args(
         UNIX_EPOCH,

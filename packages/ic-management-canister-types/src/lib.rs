@@ -879,7 +879,8 @@ pub struct HttpRequestArgs {
     pub url: String,
     /// The maximal size of the response in bytes.
     ///
-    /// If None, 2MB will be the limit.
+    /// If None, 2MB will be the limit. It may be at most 2MB, or 4MB if the outcall is
+    /// made by a bounded-wait call.
     /// This value affects the cost of the http request and it is highly recommended
     /// to set it as low as possible to avoid unnecessary extra costs.
     ///
@@ -1046,7 +1047,8 @@ pub struct FlexibleHttpRequestArgs {
     pub url: String,
     /// The maximal size of any single node's response in bytes.
     ///
-    /// If None, 2MB will be the limit. This bounds the response but does not set the
+    /// If None, 2MB will be the limit. It may be at most 2MB, or 4MB if the outcall is
+    /// made by a bounded-wait call. This bounds the response but does not set the
     /// price, since a flexible outcall is charged for the resources it consumes.
     pub max_response_bytes: Option<u64>,
     /// The method of HTTP request.

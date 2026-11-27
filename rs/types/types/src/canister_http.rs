@@ -44,6 +44,10 @@
 use crate::{
     CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
+    batch::{
+        MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+    },
     consensus::get_faults_tolerated,
     crypto::{BasicSigOf, CryptoHashOf, crypto_hash},
     messages::{CallbackId, NO_DEADLINE, RejectContext, Request},
@@ -89,11 +93,25 @@ pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 /// limit. Neither do asynchronous receipts, as the response they belong to already did.
 pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
 
-/// Maximum number of request bytes for a canister http request.
+/// Maximum number of request bytes for a canister http request made by an
+/// unbounded-wait call.
 pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
 
-/// Maximum number of response bytes for a canister http request.
+/// Maximum number of response bytes for a canister http request made by an
+/// unbounded-wait call, so that the response fits into the memory reserved for it.
 pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
+
+/// Maximum number of request bytes for a canister http request made by a
+/// bounded-wait call.
+pub const MAX_BOUNDED_WAIT_CANISTER_HTTP_REQUEST_BYTES: u64 = 4_000_000;
+
+/// Maximum number of response bytes for a canister http request made by a
+/// bounded-wait call, whose response has no memory reserved for it.
+pub const MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES: u64 = 4_000_000;
+
+/// The number of response bytes of a canister http request that does not set
+/// `max_response_bytes`.
+pub const DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES: u64 = 2_000_000;
 
 /// Maximum size of a canister http reject message.
 pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
@@ -567,11 +585,13 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
     }
 }
 
-/// Check that the header and body of the request conform to the
-/// [Interface Spec](https://ic-interface-spec.netlify.app/#ic-http_request).
+/// Check that the headers and body of a request or response conform to the
+/// [Interface Spec](https://ic-interface-spec.netlify.app/#ic-http_request), with
+/// at most `max_total_bytes` of headers and body together.
 pub fn validate_http_headers_and_body(
     headers: &[HttpHeader],
     body: &[u8],
+    max_total_bytes: u64,
 ) -> Result<(), CanisterHttpRequestContextError> {
     let mut headers_num = 0;
     let mut headers_max_name_len = 0;
@@ -610,10 +630,11 @@ pub fn validate_http_headers_and_body(
 
     let body_size_bytes = body.len();
     let request_total_bytes = headers_size_bytes + body_size_bytes;
-    if request_total_bytes > (MAX_CANISTER_HTTP_REQUEST_BYTES as usize) {
-        return Err(CanisterHttpRequestContextError::TooLargeRequest(
-            request_total_bytes,
-        ));
+    if request_total_bytes as u64 > max_total_bytes {
+        return Err(CanisterHttpRequestContextError::TooLargeRequest {
+            size: request_total_bytes,
+            limit: max_total_bytes,
+        });
     }
 
     Ok(())
@@ -645,20 +666,41 @@ fn validate_url_length(url: &str) -> Result<(), CanisterHttpRequestContextError>
     Ok(())
 }
 
+/// The largest request (headers and body) that a canister http request made by
+/// `request` may send.
+pub fn max_canister_http_request_bytes(request: &Request) -> u64 {
+    if request.is_best_effort() {
+        MAX_BOUNDED_WAIT_CANISTER_HTTP_REQUEST_BYTES
+    } else {
+        MAX_CANISTER_HTTP_REQUEST_BYTES
+    }
+}
+
+/// The largest `max_response_bytes` that a canister http request made by
+/// `request` may ask for.
+pub fn max_canister_http_response_bytes(request: &Request) -> u64 {
+    if request.is_best_effort() {
+        MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES
+    } else {
+        MAX_CANISTER_HTTP_RESPONSE_BYTES
+    }
+}
+
 /// Validate the requested `max_response_bytes` and convert it to [`NumBytes`].
 ///
-/// A value exceeding [`MAX_CANISTER_HTTP_RESPONSE_BYTES`] is rejected; `None`
-/// (i.e. no limit specified by the caller) is passed through unchanged.
+/// A value exceeding `max` is rejected; `None` (i.e. no limit specified by the
+/// caller) is passed through unchanged.
 fn validate_max_response_bytes(
     max_response_bytes: Option<u64>,
+    max: u64,
 ) -> Result<Option<NumBytes>, CanisterHttpRequestContextError> {
     match max_response_bytes {
         Some(max_response_bytes) => {
-            if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
+            if max_response_bytes > max {
                 Err(CanisterHttpRequestContextError::MaxResponseBytes(
                     InvalidMaxResponseBytes {
                         min: 0,
-                        max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                        max,
                         given: max_response_bytes,
                     },
                 ))
@@ -710,12 +752,19 @@ impl CanisterHttpRequestContext {
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
-        validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+        validate_http_headers_and_body(
+            args.headers.get(),
+            args.body.as_ref().unwrap_or(&vec![]),
+            max_canister_http_request_bytes(request),
+        )?;
         if node_ids.is_empty() {
             return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
         }
 
-        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
+        let max_response_bytes = validate_max_response_bytes(
+            args.max_response_bytes,
+            max_canister_http_response_bytes(request),
+        )?;
 
         // Allow PUT, DELETE, and PATCH only in non-replicated mode to avoid
         // confusing race conditions that may occur.
@@ -790,8 +839,15 @@ impl CanisterHttpRequestContext {
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
-        validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
-        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
+        validate_http_headers_and_body(
+            args.headers.get(),
+            args.body.as_ref().unwrap_or(&vec![]),
+            max_canister_http_request_bytes(request),
+        )?;
+        let max_response_bytes = validate_max_response_bytes(
+            args.max_response_bytes,
+            max_canister_http_response_bytes(request),
+        )?;
 
         let n = node_ids.len() as u32;
         let ReplicationCounts {
@@ -920,7 +976,7 @@ pub enum CanisterHttpRequestContextError {
     TooLongHeaderName(usize),
     TooLongHeaderValue(usize),
     TooLargeHeaders(usize),
-    TooLargeRequest(usize),
+    TooLargeRequest { size: usize, limit: u64 },
     NoNodesAvailableForDelegation,
     DeterministicResponseCountRequired,
     InvalidReplicationCounts(String),
@@ -971,10 +1027,10 @@ impl From<CanisterHttpRequestContextError> for UserError {
                     "total number of bytes to represent all http header names and values {total_header_size} exceeds {MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE}"
                 ),
             ),
-            CanisterHttpRequestContextError::TooLargeRequest(total_request_size) => UserError::new(
+            CanisterHttpRequestContextError::TooLargeRequest { size, limit } => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "total number of bytes to represent all http header names and values and http body {total_request_size} exceeds {MAX_CANISTER_HTTP_REQUEST_BYTES}"
+                    "total number of bytes to represent all http header names and values and http body {size} exceeds {limit}"
                 ),
             ),
             CanisterHttpRequestContextError::NoNodesAvailableForDelegation => UserError::new(
@@ -1300,6 +1356,16 @@ impl CanisterHttpRequestContext {
             max_http_outcall_response_size(self.max_response_bytes)
         }
     }
+
+    /// The total [`CountBytes`] of OK responses up to which the payload builder
+    /// delivers this flexible outcall's responses.
+    pub fn max_flexible_responses_size(&self) -> usize {
+        if self.request.is_best_effort() {
+            MAX_BOUNDED_WAIT_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE
+        } else {
+            MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE
+        }
+    }
 }
 
 /// The largest [`CanisterHttpResponseContent::Success`] an outcall with the given
@@ -1309,7 +1375,9 @@ impl CanisterHttpRequestContext {
 /// [`CANDID_OVERHEAD_RESERVE_BYTES`].
 pub fn max_http_outcall_response_size(max_response_bytes: Option<NumBytes>) -> u64 {
     max_response_bytes
-        .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get())
+        .map_or(DEFAULT_CANISTER_HTTP_MAX_RESPONSE_BYTES, |bytes| {
+            bytes.get()
+        })
         .saturating_add(CANDID_OVERHEAD_RESERVE_BYTES)
 }
 
@@ -2432,6 +2500,97 @@ mod tests {
         }
     }
 
+    #[test]
+    fn bounded_wait_calls_have_larger_size_limits() {
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let bounded_wait = Request {
+            deadline: CoarseTime::from_secs_since_unix_epoch(1),
+            ..dummy_request()
+        };
+        let unbounded_wait = dummy_request();
+        let args = |body_bytes: u64, max_response_bytes: u64| CanisterHttpRequestArgs {
+            body: Some(vec![0; body_bytes as usize]),
+            max_response_bytes: Some(max_response_bytes),
+            ..dummy_args(HttpMethod::POST, None)
+        };
+        let flexible_args =
+            |body_bytes: u64, max_response_bytes: u64| FlexibleCanisterHttpRequestArgs {
+                body: Some(vec![0; body_bytes as usize]),
+                max_response_bytes: Some(max_response_bytes),
+                ..dummy_flexible_args(None)
+            };
+        let generate = |request: &Request, args| {
+            CanisterHttpRequestContext::generate_from_args(
+                UNIX_EPOCH,
+                request,
+                args,
+                &node_ids,
+                RegistryVersion::from(1),
+                CanisterCyclesCostSchedule::Normal,
+                &mut ReproducibleRng::new(),
+                /* pay_as_you_go_enabled = */ false,
+            )
+        };
+        let generate_flexible = |request: &Request, args| {
+            CanisterHttpRequestContext::generate_from_flexible_args(
+                UNIX_EPOCH,
+                request,
+                args,
+                &node_ids,
+                RegistryVersion::from(1),
+                CanisterCyclesCostSchedule::Normal,
+                &mut ReproducibleRng::new(),
+                PricingVersion::PayAsYouGo,
+            )
+        };
+
+        for (request, max_request_bytes, max_response_bytes) in [
+            (
+                &bounded_wait,
+                MAX_BOUNDED_WAIT_CANISTER_HTTP_REQUEST_BYTES,
+                MAX_BOUNDED_WAIT_CANISTER_HTTP_RESPONSE_BYTES,
+            ),
+            (
+                &unbounded_wait,
+                MAX_CANISTER_HTTP_REQUEST_BYTES,
+                MAX_CANISTER_HTTP_RESPONSE_BYTES,
+            ),
+        ] {
+            assert_matches!(
+                generate(request, args(max_request_bytes, max_response_bytes)),
+                Ok(_)
+            );
+            assert_matches!(
+                generate(request, args(max_request_bytes + 1, 0)),
+                Err(CanisterHttpRequestContextError::TooLargeRequest { limit, .. })
+                if limit == max_request_bytes
+            );
+            assert_matches!(
+                generate(request, args(0, max_response_bytes + 1)),
+                Err(CanisterHttpRequestContextError::MaxResponseBytes(err))
+                if err.max == max_response_bytes
+            );
+
+            assert_matches!(
+                generate_flexible(
+                    request,
+                    flexible_args(max_request_bytes, max_response_bytes)
+                ),
+                Ok(_)
+            );
+            assert_matches!(
+                generate_flexible(request, flexible_args(max_request_bytes + 1, 0)),
+                Err(CanisterHttpRequestContextError::TooLargeRequest { limit, .. })
+                if limit == max_request_bytes
+            );
+            assert_matches!(
+                generate_flexible(request, flexible_args(0, max_response_bytes + 1)),
+                Err(CanisterHttpRequestContextError::MaxResponseBytes(err))
+                if err.max == max_response_bytes
+            );
+        }
+    }
+
     /// Generates a context from `args` and `node_ids`, filling in dummy values
     /// for the time, request, registry version, cost schedule, and
     /// rng.
@@ -2481,7 +2640,14 @@ mod validate_http_headers_and_body_tests {
     fn test_empty_request() {
         let empty_headers: Vec<HttpHeader> = vec![];
         let empty_body = b"";
-        assert!(validate_http_headers_and_body(&empty_headers, empty_body).is_ok());
+        assert!(
+            validate_http_headers_and_body(
+                &empty_headers,
+                empty_body,
+                MAX_CANISTER_HTTP_REQUEST_BYTES
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -2491,7 +2657,9 @@ mod validate_http_headers_and_body_tests {
             value: "application/json".to_string(),
         }];
         let body = b"Hello";
-        assert!(validate_http_headers_and_body(&headers, body).is_ok());
+        assert!(
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES).is_ok()
+        );
     }
 
     #[test]
@@ -2505,7 +2673,8 @@ mod validate_http_headers_and_body_tests {
             .collect::<Vec<_>>();
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert!(result.is_ok());
     }
 
@@ -2518,7 +2687,8 @@ mod validate_http_headers_and_body_tests {
         }];
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert!(result.is_ok());
     }
 
@@ -2531,7 +2701,8 @@ mod validate_http_headers_and_body_tests {
         }];
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert!(result.is_ok());
     }
 
@@ -2554,7 +2725,8 @@ mod validate_http_headers_and_body_tests {
             .collect::<Vec<_>>();
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert!(result.is_ok());
     }
 
@@ -2569,7 +2741,8 @@ mod validate_http_headers_and_body_tests {
             .collect::<Vec<_>>();
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::TooManyHeaders(count))
@@ -2586,7 +2759,8 @@ mod validate_http_headers_and_body_tests {
         }];
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::TooLongHeaderName(size))
@@ -2603,7 +2777,8 @@ mod validate_http_headers_and_body_tests {
         }];
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::TooLongHeaderValue(size))
@@ -2629,7 +2804,8 @@ mod validate_http_headers_and_body_tests {
             .collect::<Vec<_>>();
         let body = b"";
 
-        let result = validate_http_headers_and_body(&headers, body);
+        let result =
+            validate_http_headers_and_body(&headers, body, MAX_CANISTER_HTTP_REQUEST_BYTES);
 
         assert_matches!(
             result,

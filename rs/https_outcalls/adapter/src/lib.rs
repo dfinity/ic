@@ -14,7 +14,9 @@ pub use config::{Config, IncomingSource};
 
 use futures::StreamExt;
 use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
-use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
+use ic_https_outcalls_service::{
+    MAX_MESSAGE_SIZE_BYTES, https_outcalls_service_server::HttpsOutcallsServiceServer,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use rpc_server::CanisterHttp;
@@ -33,7 +35,10 @@ pub fn start_server(
 
     let server = Server::builder()
         .timeout(Duration::from_secs(config.http_request_timeout_secs))
-        .add_service(HttpsOutcallsServiceServer::new(canister_http));
+        .add_service(
+            HttpsOutcallsServiceServer::new(canister_http)
+                .max_decoding_message_size(MAX_MESSAGE_SIZE_BYTES),
+        );
 
     let incoming = match config.incoming_source {
         IncomingSource::Path(uds_path) => incoming_from_path(uds_path).boxed(),

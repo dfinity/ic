@@ -615,9 +615,12 @@ impl StreamBuilderImpl {
                             oversized_requests.push(req);
                         }
 
-                        // Response above the payload size limit.
+                        // Response above the payload size limit, other than a local best-effort
+                        // response, which has no memory reserved for it.
                         RequestOrResponse::Response(ref mut rep)
-                            if rep.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES =>
+                            if rep.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+                                && (dst_subnet_id != self.subnet_id
+                                    || rep.deadline == NO_DEADLINE) =>
                         {
                             error!(
                                 self.log,

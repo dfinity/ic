@@ -468,8 +468,9 @@ responding. What the outcall reports is then decided in this order:
   more than `total_requests - min_responses` of them, the outcall fails with a `too_many_rejects` error
   reporting the rejecting nodes;
 - if the smallest successful responses that would have to be delivered exceed the 2 MiB − 64 KiB (2,031,616 bytes)
-  a block delivers for one flexible outcall, the outcall fails with a `responses_too_large` error — note that each
-  individual response may still be within the 2 MB cap that applies to a single response;
+  a block delivers for one flexible outcall (4 MiB − 64 KiB, or 4,128,768 bytes, for an outcall made by a bounded-wait
+  call), the outcall fails with a `responses_too_large` error — note that each individual response may still be within
+  the cap that applies to a single response (2 MB, or 4 MB for an outcall made by a bounded-wait call);
 - if what the nodes left unspent of their per-replica cycles allowances no longer covers putting a response
   into a block, it fails with an `out_of_cycles` error;
 - with too few responses to decide any of the above, the outcall stays pending, so that advancing the time past
