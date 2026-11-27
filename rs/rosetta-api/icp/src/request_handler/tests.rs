@@ -730,6 +730,33 @@ async fn test_search_transactions_caps_limit() {
     );
     assert_eq!(result.next_offset, None);
 
+    // Paging with a max_block below the tip returns every matching transaction exactly once
+    let max_block = MAX_SEARCH_LIMIT as u64 + 2;
+    assert!(max_block < num_blocks - 1);
+    let mut block_indices = vec![];
+    let mut offset = None;
+    for _ in 0..3 {
+        let result = req_handler
+            .search_transactions(SearchTransactionsRequest {
+                max_block: Some(max_block as i64),
+                ..request(i64::MAX, offset)
+            })
+            .await
+            .unwrap();
+        block_indices.extend(
+            result
+                .transactions
+                .iter()
+                .map(|tx| tx.block_identifier.index),
+        );
+        offset = result.next_offset;
+        if offset.is_none() {
+            break;
+        }
+    }
+    assert_eq!(offset, None);
+    assert_eq!(block_indices, (0..=max_block).rev().collect::<Vec<_>>());
+
     // A negative limit is still rejected
     assert!(
         req_handler

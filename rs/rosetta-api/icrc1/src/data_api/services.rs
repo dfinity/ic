@@ -424,11 +424,8 @@ pub async fn search_transactions(
         })
         .transpose()?;
 
-    let start_idx = max_block.min(
-        rosetta_block_with_highest_block_index
-            .index
-            .saturating_sub(offset),
-    );
+    // The offset is counted from max_block, consistent with how next_offset is computed below.
+    let start_idx = max_block.saturating_sub(offset);
 
     if limit == 0 {
         return Ok(SearchTransactionsResponse {
@@ -1379,7 +1376,7 @@ mod test {
         use crate::common::storage::types::{IcrcBlock, IcrcTransaction};
 
         let storage_client = StorageClient::new_in_memory().await.unwrap();
-        let num_blocks = MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST + 1;
+        let num_blocks = MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST + 10;
         let to = Account {
             owner: Principal::anonymous(),
             subaccount: None,
@@ -1448,9 +1445,48 @@ mod test {
         )
         .await
         .unwrap();
-        assert_eq!(result.transactions.len(), 1);
-        assert_eq!(result.transactions[0].block_identifier.index, 0);
+        assert_eq!(
+            result.transactions.len() as u64,
+            num_blocks - MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST
+        );
+        assert_eq!(
+            result.transactions.last().unwrap().block_identifier.index,
+            0
+        );
         assert_eq!(result.next_offset, None);
+
+        // Paging with a max_block below the tip returns every matching transaction exactly once
+        let max_block = MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST + 2;
+        assert!(max_block < num_blocks - 1);
+        let mut block_indices = vec![];
+        let mut offset = None;
+        for _ in 0..3 {
+            let result = search_transactions(
+                &storage_client,
+                SearchTransactionsRequest {
+                    limit: Some(i64::MAX),
+                    max_block: Some(max_block as i64),
+                    offset,
+                    ..Default::default()
+                },
+                "ICP".to_string(),
+                8,
+            )
+            .await
+            .unwrap();
+            block_indices.extend(
+                result
+                    .transactions
+                    .iter()
+                    .map(|tx| tx.block_identifier.index),
+            );
+            offset = result.next_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+        assert_eq!(offset, None);
+        assert_eq!(block_indices, (0..=max_block).rev().collect::<Vec<_>>());
 
         // A negative limit is still rejected
         assert!(

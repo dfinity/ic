@@ -795,7 +795,8 @@ impl RosettaRequestHandler {
             })
             .transpose()?;
 
-        let start_idx = max_block.min(block_with_highest_block_index.index.saturating_sub(offset));
+        // The offset is counted from max_block, consistent with how next_offset is computed below.
+        let start_idx = max_block.saturating_sub(offset);
 
         if limit == 0 {
             return Ok(SearchTransactionsResponse {
