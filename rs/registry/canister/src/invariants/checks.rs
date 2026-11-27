@@ -11,7 +11,10 @@ use crate::{
         node_operator::check_node_operator_invariants,
         node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
-        routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
+        routing_table::{
+            check_canister_id_allocation_invariants, check_canister_migrations_invariants,
+            check_routing_table_invariants,
+        },
         standard_engine_replica_version::check_standard_engine_replica_version_invariants,
         subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
@@ -88,11 +91,27 @@ impl Registry {
         // Node assignment invariants
         result = result.and(check_node_assignment_invariants(&snapshot));
 
-        // Routing Table invariants
-        result = result.and(check_routing_table_invariants(&snapshot));
+        // Routing table invariants, and the invariants that depend on the routing table. The
+        // latter reuse the routing table, rather than decoding it again, since decoding it is
+        // expensive. If the routing table is invalid, they are skipped: `result` already holds an
+        // error then, and only the first error is reported.
+        match check_routing_table_invariants(&snapshot) {
+            Ok(routing_table) => {
+                // Canister migrations invariants
+                result = result.and(check_canister_migrations_invariants(
+                    &snapshot,
+                    &routing_table,
+                ));
 
-        // Canister migrations invariants
-        result = result.and(check_canister_migrations_invariants(&snapshot));
+                // Canister ID allocation invariants
+                result = result.and(check_canister_id_allocation_invariants(
+                    &snapshot,
+                    &routing_table,
+                    self.get_stored_next_unallocated_canister_index_or_panic(self.latest_version()),
+                ));
+            }
+            Err(err) => result = result.and(Err(err)),
+        }
 
         // Subnet invariants
         result = result.and(check_subnet_invariants(&snapshot));

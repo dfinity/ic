@@ -25,9 +25,11 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
     CanisterMetricsResult, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash,
-    CyclesConsumed, EmptyBlob, Global, GlobalTimer, Method as Ic00Method, Payload as _,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    CyclesConsumed, EmptyBlob, Global, GlobalTimer, MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+    MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
+    Method as Ic00Method, Payload as _, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, StoredChunksReply,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadCanisterSnapshotMetadataResponse, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -246,23 +248,23 @@ impl CanisterManager {
         &self,
         environment_variables: &EnvironmentVariables,
     ) -> Result<(), CanisterManagerError> {
-        if environment_variables.len() > self.config.max_environment_variables {
+        if environment_variables.len() > MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT {
             return Err(CanisterManagerError::EnvironmentVariablesTooMany {
-                max: self.config.max_environment_variables,
+                max: MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
                 count: environment_variables.len(),
             });
         }
         for (name, value) in environment_variables.iter() {
-            if name.len() > self.config.max_environment_variable_name_length {
+            if name.len() > MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH {
                 return Err(CanisterManagerError::EnvironmentVariablesNameTooLong {
                     name: name.clone(),
-                    max_name_length: self.config.max_environment_variable_name_length,
+                    max_name_length: MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH,
                 });
             }
-            if value.len() > self.config.max_environment_variable_value_length {
+            if value.len() > MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH {
                 return Err(CanisterManagerError::EnvironmentVariablesValueTooLong {
                     value: value.clone(),
-                    max_value_length: self.config.max_environment_variable_value_length,
+                    max_value_length: MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
                 });
             }
         }

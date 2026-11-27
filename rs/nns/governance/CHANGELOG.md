@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-11-27: Proposal 145078
+
+http://dashboard.internetcomputer.org/proposal/145078
+
+## Added
+
+* Enabled `SplitSubnet` proposals (topic: Subnet Management). They were previously
+  rejected at submission time.
+
+
 # 2026-11-24: Proposal 144972
 
 http://dashboard.internetcomputer.org/proposal/144972

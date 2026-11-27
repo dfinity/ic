@@ -16,13 +16,12 @@ use candid::{CandidType, Decode, Encode};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
-use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
+use ic_config::embedders::{DEFAULT_CREATE_EXECUTION_STATE_BASE_COST, WASM_MAX_SIZE};
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -42,13 +41,16 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsResult, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable, IC_00,
-    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
-    NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, RenameToArgs, StoredChunksArgs,
-    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, SubnetMetricsArgs,
-    SubnetMetricsResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable,
+    HASH_LENGTH, IC_00, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    MAX_ALLOWED_CHUNK_HASHES_COUNT, MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+    MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
+    MAX_ALLOWED_WASM_CHUNK_LENGTH, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
+    OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
+    SubnetInfoResponse, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -330,9 +332,6 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().canister_log_resize_instructions_per_byte,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        MAX_ENVIRONMENT_VARIABLES,
-        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
     )
 }
 
@@ -5447,13 +5446,16 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
         canister_id: canister_id.into(),
         chunk: vec![42; max_chunk_size + 1],
     };
-    test.subnet_message("upload_chunk", upload_args.encode())
-        .unwrap_err()
-        .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum \
-        chunk size of 1048576.",
-        );
+    let err = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(
+        err.description()
+            .contains("The blob length 1048577 exceeds maximum allowed 1048576"),
+        "Actual: {}",
+        err.description()
+    );
 
     assert_eq!(
         test.subnet_available_memory(),
@@ -7399,11 +7401,30 @@ fn test_environment_variables_are_updated_on_update_settings() {
     assert_eq!(canister.system_state.environment_variables, env_vars);
 }
 
+/// A payload exceeding these bounds is rejected when decoding it, i.e. before
+/// the limits are checked, so that a bound lower than its limit would reject
+/// valid payloads.
+#[test]
+fn decoding_bounds_match_limits() {
+    assert_eq!(
+        MAX_ALLOWED_WASM_CHUNK_LENGTH as u64,
+        wasm_chunk_store::CHUNK_SIZE
+    );
+    assert_eq!(
+        MAX_ALLOWED_CHUNK_HASHES_COUNT as u64,
+        WASM_MAX_SIZE.get() / wasm_chunk_store::CHUNK_SIZE
+    );
+    assert_eq!(
+        HASH_LENGTH,
+        std::mem::size_of::<wasm_chunk_store::WasmChunkHash>()
+    );
+}
+
 #[test]
 fn test_environment_variables_are_not_set_when_too_many_keys() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
+    let env_vars = (0..MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT + 1)
         .map(|i| (format!("KEY{i}"), "VAL".to_string()))
         .map(|(k, v)| EnvironmentVariable { name: k, value: v })
         .collect::<Vec<_>>();
@@ -7418,16 +7439,13 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        err,
-        UserError::new(
-            ErrorCode::InvalidManagementPayload,
-            format!(
-                "Too many environment variables: {} (max: {})",
-                env_vars.len(),
-                MAX_ENVIRONMENT_VARIABLES
-            )
-        )
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(
+        err.description().contains(&format!(
+            "The number of elements exceeds maximum allowed {MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT}"
+        )),
+        "Actual: {}",
+        err.description()
     );
 }
 
@@ -7435,7 +7453,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
 fn test_environment_variables_are_not_set_when_key_is_too_long() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let long_key = "K".repeat(MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
+    let long_key = "K".repeat(MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
         ("KEY2".to_string(), "VALUE2".to_string()),
@@ -7461,7 +7479,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         UserError::new(
             ErrorCode::InvalidManagementPayload,
             format!(
-                "Environment variable name \"{long_key}\" exceeds the maximum allowed length of {MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH}."
+                "Environment variable name \"{long_key}\" exceeds the maximum allowed length of {MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH}."
             )
         )
     );
@@ -7471,7 +7489,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
 fn test_environment_variables_are_not_set_when_value_is_too_long() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let long_value = "V".repeat(MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
+    let long_value = "V".repeat(MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
         ("KEY2".to_string(), "VALUE2".to_string()),
@@ -7497,7 +7515,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
         UserError::new(
             ErrorCode::InvalidManagementPayload,
             format!(
-                "Environment variable value \"{long_value}\" exceeds the maximum allowed length of {MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH}."
+                "Environment variable value \"{long_value}\" exceeds the maximum allowed length of {MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH}."
             )
         )
     );

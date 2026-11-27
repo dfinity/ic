@@ -52,10 +52,10 @@ This takes about 5 min on my devenv.
 (This is a new way of doing upgrade/release testing (as of May 2024). The old way is still
 documented elsewhere in this README.)
 
-One special requirement for this to work is access to zh1-pyr07. This can be
+One special requirement for this to work is access to dm1-spm51. This can be
 requested from the consensus team, e.g. Christian Müller.
 
-If your devenv is not in zh1, this test will run much slower, because it
+If your devenv is not in dm1, this test will run much slower, because it
 downloads a large file.
 
 Other than that, the only thing non-standard about the above command are the two

@@ -4,6 +4,7 @@
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
 use ic_config::embedders::{Config as EmbeddersConfig, MAX_FUNCTIONS};
+use ic_management_canister_types_private::MAX_ALLOWED_GLOBALS_COUNT;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -1945,7 +1946,7 @@ pub(super) fn validate_wasm_binary<'a>(
     )?;
     validate_table_section(&module)?;
     validate_data_section(&module)?;
-    validate_global_section(&module, config.max_globals)?;
+    validate_global_section(&module, MAX_ALLOWED_GLOBALS_COUNT)?;
     let max_num_locals = validate_function_section(&module, config.max_functions)?;
     // The maximum Wasm memory size is different for Wasm32 and Wasm64 and
     // each needs to be validated accordingly.

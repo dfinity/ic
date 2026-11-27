@@ -15,6 +15,7 @@ use ic_embedders::{
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::MAX_ALLOWED_GLOBALS_COUNT;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 
 use ic_replicated_state::canister_state::execution_state::{
@@ -823,29 +824,14 @@ fn reject_wasm_that_imports_global() {
 
 #[test]
 fn can_reject_module_with_too_many_globals() {
-    let wasm = wat2wasm(
-        r#"
-                (module
-                  (global (mut i32) (i32.const 0))
-                  (global (mut i64) (i64.const 1))
-                  (global i64 (i64.const 2))
-                )
-            "#,
-    )
-    .unwrap();
+    let globals = "(global i64 (i64.const 0))".repeat(MAX_ALLOWED_GLOBALS_COUNT + 1);
+    let wasm = wat2wasm(&format!("(module {globals})")).unwrap();
     assert_matches!(
-        validate_wasm_binary(
-            &wasm,
-            &EmbeddersConfig {
-                max_globals: 2,
-                max_functions: 1024,
-                ..Default::default()
-            }
-        ),
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::TooManyGlobals {
-            defined: 3,
-            allowed: 2
-        })
+            defined,
+            allowed: MAX_ALLOWED_GLOBALS_COUNT,
+        }) if defined == MAX_ALLOWED_GLOBALS_COUNT + 1
     );
 }
 
@@ -868,7 +854,6 @@ fn can_reject_module_with_too_many_functions() {
         validate_wasm_binary(
             &wasm,
             &EmbeddersConfig {
-                max_globals: 256,
                 max_functions: 5,
                 ..Default::default()
             }

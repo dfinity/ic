@@ -9,8 +9,7 @@ use std::time::Duration;
 
 use candid::{CandidType, Deserialize};
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload,
-    TransformContext,
+    BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
 };
 
 /// The reject code that this canister reports back to its callers.
@@ -64,7 +63,11 @@ pub struct RemoteHttpStressRequest {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct FlexibleRemoteHttpRequest {
-    pub request: FlexibleCanisterHttpRequestArgs,
+    /// The Candid-encoded arguments of `flexible_http_request`, forwarded
+    /// unchanged. This canister does not decode them, so that tests can send
+    /// a URL or body exceeding the limit to the management canister.
+    #[serde(with = "serde_bytes")]
+    pub request: Vec<u8>,
     pub cycles: u64,
 }
 

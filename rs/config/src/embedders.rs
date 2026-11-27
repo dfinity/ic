@@ -11,14 +11,6 @@ use serde::{Deserialize, Serialize};
 use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use crate::flag_status::FlagStatus;
 
-// Defining 100000 globals in a module can result in significant overhead in
-// each message's execution time (about 40x), so set a limit 3 orders of
-// magnitude lower which should still allow for reasonable canisters to be
-// written (current max number of globals on the Alpha network is 7).
-// NOTE. The following constant is contained in the public Interface Specification.
-// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
-// if you change its value.
-pub const MAX_GLOBALS: usize = 1000;
 // The maximum number of functions allowed in a Wasm module.
 // NOTE. The following constant is contained in the public Interface Specification.
 // Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
@@ -171,9 +163,6 @@ pub struct Config {
     /// The number of threads to use for query execution per canister.
     pub query_execution_threads_per_canister: usize,
 
-    /// Maximum number of globals allowed in a Wasm module.
-    pub max_globals: usize,
-
     /// Maximum number of functions allowed in a Wasm module.
     pub max_functions: usize,
 
@@ -273,7 +262,6 @@ impl Config {
     pub const fn new() -> Self {
         Config {
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
-            max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,

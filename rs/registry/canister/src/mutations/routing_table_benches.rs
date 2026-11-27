@@ -5,7 +5,9 @@ use crate::{
 
 use canbench_rs::{BenchResult, bench, bench_fn, bench_scope};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_registry_keys::make_canister_id_allocation_key;
 use ic_registry_routing_table::CANISTER_IDS_PER_SUBNET;
+use ic_registry_transport::delete;
 use prost::Message;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -80,12 +82,24 @@ fn migrate_canisters_10_times_10k() -> BenchResult {
     migrate_canisters(10_000, 10)
 }
 
-fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
+/// Benchmarks an upgrade of a registry with `NUM_SUBNETS` subnets and `num_canisters` migrated
+/// canisters.
+///
+/// If `is_canister_id_allocation_deleted`, the `CanisterIdAllocation` is deleted before the upgrade,
+/// as on the first upgrade to a release that introduces it. Then `post_upgrade` backfills it from
+/// the full history of the routing table, which this measures.
+fn upgrade_with_routing_table(
+    num_canisters: u64,
+    is_canister_id_allocation_deleted: bool,
+) -> BenchResult {
     let mut registry = Registry::new();
 
     setup_subnets(&mut registry);
     let mut rng = ChaCha20Rng::seed_from_u64(0);
     migrate_canisters_to_subnets(&mut registry, num_canisters, &mut rng);
+    if is_canister_id_allocation_deleted {
+        registry.apply_mutations_for_test(vec![delete(make_canister_id_allocation_key())]);
+    }
 
     bench_fn(|| {
         let bytes = {
@@ -110,17 +124,32 @@ fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
 
 #[bench(raw)]
 fn upgrade_with_routing_table_100() -> BenchResult {
-    upgrade_with_routing_table(100)
+    upgrade_with_routing_table(100, /* is_canister_id_allocation_deleted = */ false)
+}
+
+#[bench(raw)]
+fn upgrade_with_routing_table_and_canister_id_allocation_backfill_100() -> BenchResult {
+    upgrade_with_routing_table(100, /* is_canister_id_allocation_deleted = */ true)
 }
 
 #[bench(raw)]
 fn upgrade_with_routing_table_1k() -> BenchResult {
-    upgrade_with_routing_table(1_000)
+    upgrade_with_routing_table(1_000, /* is_canister_id_allocation_deleted = */ false)
+}
+
+#[bench(raw)]
+fn upgrade_with_routing_table_and_canister_id_allocation_backfill_1k() -> BenchResult {
+    upgrade_with_routing_table(1_000, /* is_canister_id_allocation_deleted = */ true)
 }
 
 #[bench(raw)]
 fn upgrade_with_routing_table_10k() -> BenchResult {
-    upgrade_with_routing_table(10_000)
+    upgrade_with_routing_table(10_000, /* is_canister_id_allocation_deleted = */ false)
+}
+
+#[bench(raw)]
+fn upgrade_with_routing_table_and_canister_id_allocation_backfill_10k() -> BenchResult {
+    upgrade_with_routing_table(10_000, /* is_canister_id_allocation_deleted = */ true)
 }
 
 fn get_subnet_for_canister(num_canisters: u64, num_calls: u64) -> BenchResult {

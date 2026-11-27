@@ -182,16 +182,6 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
-/// The maximum number of environment variables allowed per canister.
-pub const MAX_ENVIRONMENT_VARIABLES: usize = 32;
-
-/// The maximum length of an environment variable name.
-pub const MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;
-
-/// The maximum length of an environment variable value.
-/// Environment variables are sized to comfortably accommodate the root key.
-pub const MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
-
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -331,15 +321,6 @@ pub struct Config {
     /// The maximum number of snapshots allowed per canister.
     pub max_number_of_snapshots_per_canister: usize,
 
-    /// The maximum number of environment variables allowed per canister.
-    pub max_environment_variables: usize,
-
-    /// The maximum length of an environment variable name.
-    pub max_environment_variable_name_length: usize,
-
-    /// The maximum length of an environment variable value.
-    pub max_environment_variable_value_length: usize,
-
     /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
 
@@ -423,9 +404,6 @@ impl Default for Config {
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
             max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-            max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
-            max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-            max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE,
             flexible_http_requests: FLEXIBLE_HTTP_REQUESTS_FEATURE,
         }

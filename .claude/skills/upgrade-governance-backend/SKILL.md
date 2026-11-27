@@ -300,7 +300,9 @@ Use the actual proposals directory path (e.g. `../proposals/release-2026-04-06`)
 variable. Each command should `tee` its output to a file so Claude can read the proposal
 IDs afterward.
 
-For each NNS proposal:
+For each NNS proposal (put governance **last**, because governance calls the
+other NNS canisters, so a new governance may rely on their new behavior; lower
+proposal IDs tend to be voted on and executed first):
 ```
 ./rs/nervous_system/tools/release/submit-mainnet-nns-upgrade-proposal.sh \
     ../proposals/release-YYYY-MM-DD/nns-$CANISTER.md \
