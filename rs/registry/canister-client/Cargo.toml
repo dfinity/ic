@@ -13,7 +13,7 @@ ic-cdk = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-registry-transport = { path = "../transport" }
-ic-stable-structures = { workspace = true }
+ic-stable-structures = "0.7.2"
 ic-types = { path = "../../types/types" }
 prost = { workspace = true }
 

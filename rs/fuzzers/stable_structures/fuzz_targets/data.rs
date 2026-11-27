@@ -24,6 +24,10 @@ impl Storable for BoundedFuzzStruct {
         Cow::Owned(serde_cbor::ser::to_vec(self).unwrap())
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
+    }
+
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         let value: Self = serde_cbor::de::from_slice(bytes.as_ref()).unwrap();
         value
@@ -39,6 +43,10 @@ impl Storable for BoundedFuzzStruct {
 impl Storable for UnboundedFuzzStruct {
     fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(serde_cbor::ser::to_vec(self).unwrap())
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
     }
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {

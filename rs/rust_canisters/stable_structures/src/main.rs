@@ -10,7 +10,7 @@ thread_local! {
       RefCell::new(StableBTreeMap::init(DefaultMemoryImpl::default()));
 
     pub static STABLE_VEC_U64: RefCell<StableVec<u64, DefaultMemoryImpl>> =
-      RefCell::new(StableVec::init(DefaultMemoryImpl::default()).expect("Unable to create Vec memory"));
+      RefCell::new(StableVec::init(DefaultMemoryImpl::default()));
 }
 
 // For each structure we have 4 operations: repeated read, sparse read, repeated
@@ -128,7 +128,7 @@ fn vec_u64_insert(count: u32) {
     STABLE_VEC_U64.with(|vec| {
         let vec = vec.borrow();
         for _ in 0..count {
-            vec.push(&1).unwrap();
+            vec.push(&1);
         }
     })
 }

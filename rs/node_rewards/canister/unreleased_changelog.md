@@ -13,6 +13,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Moved to version 0.7.2 of the `ic-stable-structures` library, which stores
+  this canister's data in stable memory. The stable-memory layout is unchanged,
+  so the upgrade needs no data migration.
+
 ## Deprecated
 
 ## Removed

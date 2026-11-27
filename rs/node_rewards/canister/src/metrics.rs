@@ -213,6 +213,7 @@ where
             .subnets_metrics
             .borrow()
             .range(first_key..=last_key)
+            .map(|entry| entry.into_pair())
             .into_group_map_by(|(k, _)| {
                 DateTime::from_timestamp_nanos(k.timestamp_nanos as i64).date_naive()
             })

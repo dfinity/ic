@@ -20,7 +20,7 @@ rust_canister(
         "@crate_index//:getrandom",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
-        "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:mockall",
         "@crate_index//:prometheus",
         "@crate_index//:rand_chacha",
@@ -36,6 +36,10 @@ rust_canister(
 rust_test(
     name = "unit_tests",
     srcs = glob(["canister/**/*.rs"]),
+    # TODO: remove, with the test that uses it, once the workspace is on ic-stable-structures 0.7.
+    aliases = {
+        "@crate_index//:ic-stable-structures": "ic_stable_structures_0_6",
+    },
     crate_name = "rate_limit_canister",
     crate_root = "canister/lib.rs",
     data = ["canister/interface.did"],
@@ -52,6 +56,7 @@ rust_test(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:mockall",
         "@crate_index//:prometheus",
         "@crate_index//:rand_chacha",

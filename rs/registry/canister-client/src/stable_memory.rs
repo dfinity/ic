@@ -12,6 +12,10 @@ impl Storable for StorableRegistryValue {
         self.0.to_bytes()
     }
 
+    fn into_bytes(self) -> Vec<u8> {
+        self.0.into_bytes()
+    }
+
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self(Option::from_bytes(bytes))
     }
@@ -51,6 +55,10 @@ impl Storable for StorableRegistryKey {
         storable_key.extend_from_slice(&timestamp_b);
 
         Cow::Owned(storable_key)
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().into_owned()
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {

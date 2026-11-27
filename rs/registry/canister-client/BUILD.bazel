@@ -22,7 +22,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
-        "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:prost",
     ],
 )
@@ -43,7 +43,7 @@ rust_test(
         "//rs/types/types",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
-        "@crate_index//:ic-stable-structures",
+        "@crate_index//:ic_stable_structures_next",
         "@crate_index//:prost",
     ],
 )

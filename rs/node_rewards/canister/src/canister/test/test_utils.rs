@@ -24,7 +24,7 @@ thread_local! {
 
     pub static LAST_DAY_SYNCED: RefCell<StableCell<Option<NaiveDateStorable>, VM>> = RefCell::new({
         let mgr = MemoryManager::init(DefaultMemoryImpl::default());
-        StableCell::init(mgr.get(MemoryId::new(1)), None).expect("Could not initialize last_day_synced")
+        StableCell::init(mgr.get(MemoryId::new(1)), None)
     });
 
     // Dummy value b/c we can't do direct assignment using values defined above.
