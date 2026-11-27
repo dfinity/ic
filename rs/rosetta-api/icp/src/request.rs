@@ -1,12 +1,12 @@
 use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
-    models::seconds::Seconds, request_types::*, signed_target::representative_envelope,
+    models::seconds::Seconds, request_types::*, signed_target::verify_signed_envelopes,
 };
 use ic_nns_governance_api::{
     ManageNeuronCommandRequest,
     manage_neuron::{self, Configure, configure},
 };
-use ic_types::PrincipalId;
+use ic_types::{CanisterId, PrincipalId};
 use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};
 
@@ -227,14 +227,21 @@ impl Request {
     }
 }
 
-/// Sort of the inverse of `construction_payloads`.
-impl TryFrom<&models::Request> for Request {
-    type Error = ApiError;
-
-    fn try_from(req: &models::Request) -> Result<Self, Self::Error> {
+impl Request {
+    /// Sort of the inverse of `construction_payloads`.
+    pub fn from_signed_request(
+        req: &models::Request,
+        ledger_canister_id: &CanisterId,
+        governance_canister_id: &CanisterId,
+    ) -> Result<Self, ApiError> {
         let (request_type, calls) = req;
 
-        let update = representative_envelope(calls)?;
+        let update = verify_signed_envelopes(
+            request_type,
+            calls,
+            ledger_canister_id,
+            governance_canister_id,
+        )?;
 
         let pid = PrincipalId::try_from(update.sender.clone().0).map_err(|e| {
             ApiError::internal_error(format!("Could not parse envelope sender's public key: {e}"))
