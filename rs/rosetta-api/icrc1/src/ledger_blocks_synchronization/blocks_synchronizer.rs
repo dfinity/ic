@@ -201,15 +201,14 @@ pub async fn start_synching_blocks(
             Ok(_) => {
                 // We will only end up here if there are no gaps, the blockchain is synced to the
                 // tip, and the account balances have been updated.
-                let highest_block_index = storage_client
-                    .get_block_with_highest_block_idx()
+                let highest_processed_block_index = storage_client
+                    .get_highest_processed_block_idx()
                     .await
                     .unwrap_or(None)
-                    .map(|rosetta_block| rosetta_block.index)
                     .unwrap_or(0_u64);
                 storage_client
                     .get_metrics()
-                    .set_verified_height(highest_block_index);
+                    .set_verified_height(highest_processed_block_index);
             }
             Err(e) => {
                 error!("Error while updating account balances: {}", e);

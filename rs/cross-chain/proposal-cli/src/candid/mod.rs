@@ -68,7 +68,7 @@ pub fn encode_upgrade_args<F: Into<String>>(
 }
 
 fn parse_constructor_args(candid_file: &Path) -> (TypeEnv, Vec<Type>) {
-    let (env, class_type) =
+    let (env, class_type, _) =
         candid_parser::check_file(candid_file).expect("fail to parse candid file");
     let class_type = class_type.expect("missing class type");
     let constructor_types = match class_type.as_ref() {

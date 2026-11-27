@@ -8,8 +8,9 @@ use crate::{
     },
 };
 
-use ic_base_types::SubnetId;
+use ic_base_types::{RegistryVersion, SubnetId};
 use ic_cup_explorer::get_cup;
+use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     IC_CHECKPOINTS_PATH, IC_DATA_PATH, Recovery,
@@ -24,6 +25,7 @@ use ic_recovery::{
     },
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
@@ -692,6 +694,19 @@ impl Step for CheckRoutingTableStep {
     }
 }
 
+/// The height of the merged state assembled by [MergeStatesStep], which follows
+/// from the heights of the CUPs the two subnets halted at.
+fn merged_state_height(
+    layout: &Layout,
+    source_subnet_id: SubnetId,
+    destination_subnet_id: SubnetId,
+) -> RecoveryResult<Height> {
+    let source_height = read_cup_file(&layout.halting_cup_file(source_subnet_id))?.height();
+    let destination_height =
+        read_cup_file(&layout.halting_cup_file(destination_subnet_id))?.height();
+    Ok(merged_recovery_height(source_height, destination_height))
+}
+
 /// The state hash of the merged state assembled by [MergeStatesStep]: the root
 /// hash of its manifest, which has to match the expected one.
 fn merged_state_hash(layout: &Layout) -> RecoveryResult<String> {
@@ -745,7 +760,8 @@ fn check_time_is_past_halting_times(
 ///
 /// Its height and state hash are read when the step is described or executed
 /// rather than when it is created: a step that fails to be created is skipped,
-/// and the tool would then carry on without a recovery CUP.
+/// and the tool would then upload the merged state and unhalt the destination
+/// subnet without a recovery CUP.
 pub(crate) struct ProposeRecoveryCupStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
@@ -757,21 +773,19 @@ pub(crate) struct ProposeRecoveryCupStep {
 
 impl ProposeRecoveryCupStep {
     /// The proposal for the recovery CUP at the merged state, stamped with
-    /// `time`. The height of the merged state follows from the heights of the
-    /// CUPs the two subnets halted at, as in [MergeStatesStep].
+    /// `time`.
     fn admin_step(&self, time: SystemTime) -> RecoveryResult<AdminStep> {
-        let source_height =
-            read_cup_file(&self.layout.halting_cup_file(self.source_subnet_id))?.height();
-        let destination_height =
-            read_cup_file(&self.layout.halting_cup_file(self.destination_subnet_id))?.height();
-
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: get_propose_recovery_cup_command(
                 &self.admin_helper,
                 self.source_subnet_id,
                 self.destination_subnet_id,
-                merged_recovery_height(source_height, destination_height),
+                merged_state_height(
+                    &self.layout,
+                    self.source_subnet_id,
+                    self.destination_subnet_id,
+                )?,
                 merged_state_hash(&self.layout)?,
                 time,
             ),
@@ -934,4 +948,143 @@ impl Step for RestartDestinationReplicaStep {
             .execute(CMD_RESTART_REPLICA.to_string(), confirmation_logger)?;
         Ok(())
     }
+}
+
+/// Waits until the destination subnet came up on the merged state, i.e. until
+/// the node the merged state was uploaded to reports the recovery CUP.
+pub(crate) struct WaitForRecoveryCupStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for WaitForRecoveryCupStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until node {} reports the recovery CUP holding the merged state.",
+            self.node_ip,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let height = merged_state_height(
+            &self.layout,
+            self.source_subnet_id,
+            self.destination_subnet_id,
+        )?;
+        let state_hash = merged_state_hash(&self.layout)?;
+
+        Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, height, state_hash)
+    }
+}
+
+/// Waits until every subnet other than the source subnet has reached the
+/// registry version recorded by `CheckRoutingTableStep`, i.e. routes the
+/// canisters that used to be hosted by the source subnet to the destination
+/// subnet. Only then may the source subnet be deleted.
+pub(crate) struct CheckRegistryVersionOnAllSubnetsStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) layout: Layout,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckRegistryVersionOnAllSubnetsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until every subnet other than {} has reached the registry version the merge \
+             created, i.e. routes the canisters that used to be hosted by it to the destination \
+             subnet.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let registry_version = self
+            .layout
+            .read_merge_registry_version(self.source_subnet_id)?;
+
+        readiness::await_registry_version_on_all_subnets(
+            &self.registry_helper,
+            self.source_subnet_id,
+            registry_version,
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+        )
+    }
+}
+
+/// Waits until the registry no longer holds the source subnet, i.e. until the
+/// proposal deleting it has been executed. `ic-admin` returns once the proposal
+/// is submitted, which does not mean that it is adopted and executed.
+pub(crate) struct CheckSourceSubnetDeletedStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) timeout: Duration,
+    pub(crate) poll_interval: Duration,
+    pub(crate) logger: Logger,
+}
+
+impl Step for CheckSourceSubnetDeletedStep {
+    fn descr(&self) -> String {
+        format!(
+            "Wait until the registry no longer holds subnet {}.",
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let source_subnet_id = self.source_subnet_id;
+        let registry_version = wait_for(
+            &format!("the registry no longer holds subnet {source_subnet_id}"),
+            self.timeout,
+            self.poll_interval,
+            &self.logger,
+            || {
+                let registry_version = self.registry_helper.latest_registry_version()?;
+                ensure_subnet_deleted(
+                    &*self.registry_helper.registry_client(),
+                    source_subnet_id,
+                    registry_version,
+                )?;
+                Ok(registry_version)
+            },
+        )?;
+
+        info!(
+            self.logger,
+            "Subnet {source_subnet_id} is gone from the registry as of version {registry_version}"
+        );
+        Ok(())
+    }
+}
+
+/// Fails unless the registry records `subnet_id` as deleted at
+/// `registry_version`, i.e. held its subnet record at an earlier version and
+/// holds none at this one. A subnet the registry never held is not deleted.
+fn ensure_subnet_deleted(
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+) -> RecoveryResult<()> {
+    let deleted = registry_client
+        .is_subnet_deleted(subnet_id, registry_version)
+        .map_err(|err| {
+            RecoveryError::RegistryError(format!(
+                "Failed to check whether subnet {subnet_id} is deleted at registry version \
+                 {registry_version}: {err}"
+            ))
+        })?;
+    if !deleted {
+        return Err(RecoveryError::RegistryError(format!(
+            "The registry does not record subnet {subnet_id} as deleted at version \
+             {registry_version}"
+        )));
+    }
+    Ok(())
 }

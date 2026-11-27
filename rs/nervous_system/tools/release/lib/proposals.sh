@@ -738,24 +738,57 @@ _base_validate_version_wasm_sha() {
 
 #### User interaction helper for proposals
 
-confirm_submit_proposal_command() {
-    print_green "Would you like to run the following command?"
-    echo
+# Runs the given ic-admin command (which must submit a proposal), and prints the
+# ID of the new proposal.
+#
+# ic-admin's standard output repeats the whole proposal, including its payload.
+# When the payload contains a WASM, that is every byte of the WASM, one per line.
+# Therefore, this saves standard output to a file, rather than printing it.
+# ic-admin's error messages go to standard error, so they still show up.
+#
+# On success, this prints a link to the new proposal, of the form
+#
+#     https://dashboard.internetcomputer.org/proposal/123456
+#
+# In a dry run, there is no new proposal, so this line is not printed.
+submit_proposal_using_ic_admin() {
+    local IC_ADMIN_OUTPUT_FILE
+    IC_ADMIN_OUTPUT_FILE=$(mktemp -t ic-admin-output.XXXXXX)
 
-    # Preview the command.
-    first=true
-    for arg in "$@"; do
-        # Indent, except the first line.
-        if [ "$first" == false ]; then
-            echo -n '    '
-        fi
-        first=false
+    echo "Sending the proposal..."
+    if ! "$@" >"$IC_ADMIN_OUTPUT_FILE"; then
+        echo
+        echo "😬 It very much seems that the proposal was NOT submitted, because"
+        echo "ic-admin failed. See its error messages above. It could be you"
+        echo "entered the wrong PIN for your HSM. In that case, trying again"
+        echo "should work. ic-admin's standard output is in"
+        echo "    $IC_ADMIN_OUTPUT_FILE"
+        exit 1
+    fi
 
-        # Quote arguments (in case there is a space).
-        printf '%q \\\n' "$arg" \
-            | sed 's~pin=.*~pin=******~'
-    done
-    echo
+    if [ "${DRY_RUN:-false}" = true ]; then
+        print_yellow "This was just a dry run. Still, everything went ok."
+        echo "What would have been submitted is in $IC_ADMIN_OUTPUT_FILE."
+        return
+    fi
 
-    confirm
+    # Scan the output of ic-admin for the proposal ID (expected to appear as
+    # "proposal 123456").
+    local PROPOSAL_ID
+    PROPOSAL_ID=$(
+        grep -E -o 'proposal [0-9]+' "$IC_ADMIN_OUTPUT_FILE" \
+            | tail -n 1 \
+            | awk '{print $2}' \
+            || true
+    )
+
+    # Handle no proposal ID found.
+    if [ -z "$PROPOSAL_ID" ]; then
+        print_yellow "ic-admin succeeded, but its output does not contain a proposal ID."
+        echo "Look for it in $IC_ADMIN_OUTPUT_FILE."
+        return
+    fi
+
+    echo "🎉 Success!"
+    echo "https://dashboard.internetcomputer.org/proposal/$PROPOSAL_ID"
 }

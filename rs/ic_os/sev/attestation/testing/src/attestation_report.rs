@@ -1,7 +1,7 @@
 use attestation::LAUNCH_MEASUREMENT_LEN;
 use p384::ecdsa::Signature;
 use p384::ecdsa::signature::Signer;
-use p384::pkcs8::EncodePublicKey;
+use p384::elliptic_curve::Generate;
 use rand::{Rng, SeedableRng};
 use rand_0_10::SeedableRng as _;
 use rsa::PrivateKey;
@@ -115,7 +115,7 @@ impl FakeAttestationReportSigner {
 
     pub fn new(seed: [u8; 32]) -> Self {
         let mut rng = rand::rngs::StdRng::from_seed(seed);
-        // `rsa` and x509-cert take a rand 0.10 RNG.
+        // `rsa`, `p384` and x509-cert take a rand 0.10 RNG.
         let mut rsa_rng = rand_0_10::rngs::StdRng::from_seed(rng.r#gen());
 
         // ARK - RSA with RSASSA-PSS (root cert)
@@ -141,13 +141,10 @@ impl FakeAttestationReportSigner {
         .unwrap();
 
         // VCEK - P384 ECDSA (signed by ASK)
-        let vcek_key = p384::ecdsa::SigningKey::random(&mut rng);
-        // p384 implements the spki 0.7 traits and x509-cert takes spki 0.8 types, so the public
-        // key goes through its DER encoding.
-        let vcek_public_key_der = vcek_key.verifying_key().to_public_key_der().unwrap();
+        let vcek_key = p384::ecdsa::SigningKey::generate_from_rng(&mut rsa_rng);
         let vcek_cert = create_certificate(
             "VCEK",
-            SubjectPublicKeyInfo::try_from(vcek_public_key_der.as_bytes()).unwrap(),
+            SubjectPublicKeyInfo::from_key(vcek_key.verifying_key()).unwrap(),
             ask_key,
             Some(&ask_cert),
             &mut rsa_rng,

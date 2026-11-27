@@ -45,7 +45,7 @@ use crate::{
     CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     consensus::get_faults_tolerated,
-    crypto::{BasicSigOf, CryptoHashOf, crypto_hash},
+    crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, NO_DEADLINE, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -1469,10 +1469,9 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
 
-    fn check_integrity(&self) -> bool {
-        self.response
-            .as_ref()
-            .is_none_or(|response| &crypto_hash(response) == self.share.content.content_hash())
+    // Nodes only announce their own shares.
+    fn sole_sender(id: &Self::Id) -> Option<NodeId> {
+        Some(id.signature.signer)
     }
 }
 
@@ -1480,7 +1479,7 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 mod tests {
     use crate::{
         CanisterId,
-        crypto::{BasicSig, CryptoHash, Signed, SignedBytesWithoutDomainSeparator},
+        crypto::{CryptoHash, SignedBytesWithoutDomainSeparator},
         messages::NO_DEADLINE,
         time::{CoarseTime, UNIX_EPOCH},
     };
@@ -1491,13 +1490,23 @@ mod tests {
     use candid::Principal;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_management_canister_types_private::{
-        BoundedHttpHeaders, CanisterHttpRequestArgs, FlexibleCanisterHttpRequestArgs, HttpHeader,
-        HttpMethod, ReplicationCounts, TransformFunc,
+        BoundedHttpHeaders, CanisterHttpRequestArgs, FlexibleCanisterHttpRequestArgs,
+        HTTP_BODY_MAX_SIZE, HTTP_URL_MAX_SIZE, HttpHeader, HttpMethod, ReplicationCounts,
+        TransformFunc,
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
     use std::str::FromStr;
     use strum::IntoEnumIterator;
+
+    /// A request exceeding these bounds is rejected when decoding it, i.e.
+    /// before the limits are validated, so that a bound lower than its limit
+    /// would reject valid requests.
+    #[test]
+    fn decoding_bounds_match_limits() {
+        assert_eq!(HTTP_URL_MAX_SIZE, MAX_CANISTER_HTTP_URL_SIZE);
+        assert_eq!(HTTP_BODY_MAX_SIZE as u64, MAX_CANISTER_HTTP_REQUEST_BYTES);
+    }
 
     #[test]
     fn replication_kind_all_as_str_is_stable_and_distinct() {
@@ -1569,51 +1578,6 @@ mod tests {
         ];
         let encodings: BTreeSet<_> = amounts.iter().map(|spent| signed_bytes(*spent)).collect();
         assert_eq!(encodings.len(), amounts.len());
-    }
-
-    /// A share of `response`, as the replica that made the outcall would sign it.
-    fn share_of(response: &CanisterHttpResponse) -> CanisterHttpResponseShare {
-        Signed {
-            content: CanisterHttpResponseReceipt {
-                metadata: CanisterHttpResponseMetadata {
-                    id: response.id,
-                    content_hash: crypto_hash(response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: response.content.is_reject(),
-                    replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),
-                },
-                payment_receipt: CanisterHttpPaymentReceipt {
-                    spent: Cycles::zero(),
-                },
-            },
-            signature: BasicSignature {
-                signature: BasicSigOf::new(BasicSig(vec![])),
-                signer: node_test_id(1),
-            },
-        }
-    }
-
-    /// The share covers the response only by its hash, so an artifact passes the integrity check
-    /// only with the response that hash is of, or without one.
-    #[test]
-    fn artifact_integrity_check_covers_the_response() {
-        let response = CanisterHttpResponse {
-            id: CallbackId::new(1),
-            content: CanisterHttpResponseContent::Success(b"response".to_vec()),
-        };
-        let share = share_of(&response);
-        let artifact = |response| CanisterHttpResponseArtifact {
-            share: share.clone(),
-            response,
-        };
-        let other_response = CanisterHttpResponse {
-            id: CallbackId::new(1),
-            content: CanisterHttpResponseContent::Success(b"other response".to_vec()),
-        };
-
-        assert!(artifact(Some(response)).check_integrity());
-        assert!(artifact(None).check_integrity());
-        assert!(!artifact(Some(other_response)).check_integrity());
     }
 
     #[test]

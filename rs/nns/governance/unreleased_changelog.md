@@ -14,6 +14,9 @@ on the process that this file is part of, see
   (via `get_full_neuron` and `list_neurons`), and see ManageNeuron proposals for
   C in `list_proposals`.
 
+* Enabled `SplitSubnet` proposals (topic: Subnet Management). They were previously
+  rejected at submission time.
+
 ## Changed
 
 ## Deprecated

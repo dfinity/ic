@@ -23,7 +23,6 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
-        "@crate_index//:k256",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -161,5 +160,6 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
+        "@crate_index//:tempfile",
     ],
 )

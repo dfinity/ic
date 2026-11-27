@@ -1179,6 +1179,7 @@ mod tests {
             });
 
             axum_server::from_tcp_rustls(tcp_listener, generate_self_signed_cert().await)
+                .unwrap()
                 .serve(router.into_make_service())
                 .await
                 .unwrap()

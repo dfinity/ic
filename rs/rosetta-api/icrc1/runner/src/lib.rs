@@ -84,13 +84,14 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
     let mut command = Command::new(rosetta_bin);
     if let Some(multi_tokens) = arguments.multi_tokens {
         command.arg("--multi-tokens").arg(multi_tokens);
-        if let Some(store_dir) = arguments.multi_tokens_store_dir {
-            command.arg("--multi-tokens-store-dir").arg(store_dir);
-        }
     } else {
         command
             .arg("--ledger-id")
             .arg(arguments.ledger_id.to_string());
+    }
+    // Despite its name, the directory is also where the database of a single token is stored.
+    if let Some(store_dir) = arguments.multi_tokens_store_dir {
+        command.arg("--multi-tokens-store-dir").arg(store_dir);
     }
     command
         .arg("--network-type")

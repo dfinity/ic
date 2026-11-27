@@ -2,7 +2,6 @@ use anyhow::{Context, Error, bail};
 use candid::Principal;
 use clap::Parser;
 use ic_agent::{Agent, identity::Secp256k1Identity};
-use k256::elliptic_curve::SecretKey;
 use rate_limiting_canister_client::{check_config, submit_config};
 use std::{path::PathBuf, str};
 use tracing::info;
@@ -62,9 +61,8 @@ async fn main() -> Result<(), Error> {
         let canister_id = cli.canister_id.unwrap();
 
         // create the agent
-        let identity = Secp256k1Identity::from_private_key(
-            SecretKey::from_sec1_pem(&identity_key).context("failed to parse the identity key")?,
-        );
+        let identity = Secp256k1Identity::from_pem(&identity_key)
+            .context("failed to parse the identity key")?;
         let agent = Agent::builder()
             .with_url(cli.ic_domain)
             .with_identity(identity)

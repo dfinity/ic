@@ -16,7 +16,8 @@ use ic_nns_governance_api::{
     proposal::Action,
 };
 use ic_nns_test_utils::state_test_helpers::{
-    get_pending_proposals, nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    get_pending_proposals, nns_get_most_recent_monthly_node_provider_rewards, registry_get_value,
+    scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -26,8 +27,12 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_protobuf::registry::routing_table::v1::CanisterIdAllocation;
+use ic_registry_keys::make_canister_id_allocation_key;
+use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
+use prost::Message;
 use serde::Deserialize;
 use std::{
     env,
@@ -442,6 +447,37 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     );
 
     check_canisters_are_all_protocol_canisters(&state_machine);
+
+    let is_registry_upgraded = nns_canister_upgrade_sequence
+        .iter()
+        .any(|nns_canister_upgrade| nns_canister_upgrade.canister_id == REGISTRY_CANISTER_ID);
+    if is_registry_upgraded {
+        check_canister_id_allocation_covers_mainnet_history(&state_machine);
+    }
+}
+
+/// One past the largest canister index that mainnet had allocated to a subnet by registry version
+/// 65131.
+const MIN_MAINNET_NEXT_UNALLOCATED_CANISTER_INDEX: u64 = 0xa00_0000;
+
+// The registry canister backfills the `CanisterIdAllocation` from the full history of the routing
+// table when it is upgraded.
+fn check_canister_id_allocation_covers_mainnet_history(state_machine: &StateMachine) {
+    let response = registry_get_value(state_machine, make_canister_id_allocation_key().as_bytes());
+    let Some(high_capacity_registry_get_value_response::Content::Value(bytes)) = response.content
+    else {
+        panic!("The registry has no CanisterIdAllocation after the upgrade: {response:#?}");
+    };
+    let next_unallocated_canister_index = CanisterIdAllocation::decode(bytes.as_slice())
+        .unwrap()
+        .next_unallocated_canister_index;
+
+    assert!(
+        next_unallocated_canister_index >= MIN_MAINNET_NEXT_UNALLOCATED_CANISTER_INDEX,
+        "The backfilled next_unallocated_canister_index {next_unallocated_canister_index:#x} is \
+         below {MIN_MAINNET_NEXT_UNALLOCATED_CANISTER_INDEX:#x}, the value found by replaying \
+         mainnet registry history.",
+    );
 }
 
 /// Panics if any of the given canisters no longer runs the WASM that this test

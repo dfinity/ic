@@ -284,7 +284,7 @@ fn sha256_hex(input: Vec<u8>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input);
     let result = hasher.finalize();
-    format!("{result:x}")
+    hex::encode(result)
 }
 
 /** Uses Apalache to check whether a trace step is allowed by the TLA+ transition.

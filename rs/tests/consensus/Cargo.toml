@@ -31,6 +31,7 @@ ic-recovery = { path = "../../recovery" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
@@ -39,7 +40,6 @@ ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic_consensus_system_test_utils = { path = "./utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "./tecdsa/utils" }
-k256 = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
