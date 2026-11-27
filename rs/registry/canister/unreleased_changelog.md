@@ -9,7 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabled subnet splitting: the `split_subnet` endpoint, called by `SplitSubnet` proposals, now
+  splits a subnet instead of rejecting every request.
+
 ## Changed
+
+* The invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set
+  now also requires that `cup_type` is decodable.
 
 ## Deprecated
 

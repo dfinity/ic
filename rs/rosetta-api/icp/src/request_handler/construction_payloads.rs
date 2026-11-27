@@ -25,7 +25,7 @@ use ic_nns_governance_api::{
     manage_neuron::{self, NeuronIdOrSubaccount, configure},
 };
 use ic_types::{
-    PrincipalId,
+    CanisterId, PrincipalId,
     messages::{Blob, HttpCanisterUpdate, MessageId},
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
@@ -269,6 +269,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::NeuronInfo(req) => handle_neuron_info(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -276,6 +277,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::ListNeurons(req) => handle_list_neurons(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -283,6 +285,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::Stake(req) => handle_stake(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -290,6 +293,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::StartDissolve(req) => handle_start_dissolve(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -297,6 +301,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::StopDissolve(req) => handle_stop_dissolve(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -304,6 +309,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::SetDissolveTimestamp(req) => handle_set_dissolve_timestamp(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -311,6 +317,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::ChangeAutoStakeMaturity(req) => handle_change_auto_stake_maturity(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -318,6 +325,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::AddHotKey(req) => handle_add_hotkey(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -325,6 +333,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::RemoveHotKey(req) => handle_remove_hotkey(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -332,6 +341,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::Disburse(req) => handle_disburse(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -339,6 +349,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::DisburseMaturity(req) => handle_disburse_maturity(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -346,6 +357,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::Spawn(req) => handle_spawn(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -353,6 +365,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::RegisterVote(req) => handle_register_vote(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -360,6 +373,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::StakeMaturity(req) => handle_stake_maturity(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -367,6 +381,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::Follow(req) => handle_follow(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -374,6 +389,7 @@ impl RosettaRequestHandler {
                 )?,
                 Request::RefreshVotingPower(req) => handle_refresh_voting_power(
                     req,
+                    self.ledger.governance_canister_id(),
                     &mut payloads,
                     &mut updates,
                     &pks_map,
@@ -512,6 +528,7 @@ fn handle_transfer_operation(
 /// Handle NEURON_INFO.
 fn handle_neuron_info(
     req: NeuronInfo,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -541,7 +558,7 @@ fn handle_neuron_info(
     // Argument for the method called on the governance canister.
     let args = NeuronIdOrSubaccount::Subaccount(neuron_subaccount.to_vec());
     let update = HttpCanisterUpdate {
-        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+        canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "get_full_neuron_by_id_or_subaccount".to_string(),
         arg: Blob(Encode!(&args).expect("Serialization failed")),
         nonce: None,
@@ -569,6 +586,7 @@ fn handle_neuron_info(
 /// Handle LIST_NEURONS.
 fn handle_list_neurons(
     req: ListNeurons,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -603,7 +621,7 @@ fn handle_list_neurons(
         neuron_subaccounts: None,
     };
     let update = HttpCanisterUpdate {
-        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+        canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "list_neurons".to_string(),
         arg: Blob(Encode!(&args).expect("Serialization failed")),
         nonce: None,
@@ -630,6 +648,7 @@ fn handle_list_neurons(
 /// Handle DISBURSE.
 fn handle_disburse(
     req: Disburse,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -651,6 +670,7 @@ fn handle_disburse(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -662,6 +682,7 @@ fn handle_disburse(
 /// Handle DISBURSE_MATURITY.
 fn handle_disburse_maturity(
     req: DisburseMaturity,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -681,6 +702,7 @@ fn handle_disburse_maturity(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -692,6 +714,7 @@ fn handle_disburse_maturity(
 /// Handle STAKE.
 fn handle_stake(
     req: Stake,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -712,7 +735,7 @@ fn handle_stake(
     };
 
     let update = HttpCanisterUpdate {
-        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+        canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "claim_or_refresh_neuron_from_account".to_string(),
         arg: Blob(Encode!(&args).expect("Serialization failed")),
         // TODO work out whether Rosetta will accept us generating a nonce here
@@ -757,6 +780,7 @@ fn handle_stake(
 /// Handle START_DISSOLVE.
 fn handle_start_dissolve(
     req: StartDissolve,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -775,6 +799,7 @@ fn handle_start_dissolve(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -786,6 +811,7 @@ fn handle_start_dissolve(
 /// Handle STOP_DISSOLVE.
 fn handle_stop_dissolve(
     req: StopDissolve,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -804,6 +830,7 @@ fn handle_stop_dissolve(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -815,6 +842,7 @@ fn handle_stop_dissolve(
 /// Handle SET_DISSOLVE_TIMESTAMP.
 fn handle_set_dissolve_timestamp(
     req: SetDissolveTimestamp,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -836,6 +864,7 @@ fn handle_set_dissolve_timestamp(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -846,6 +875,7 @@ fn handle_set_dissolve_timestamp(
 
 fn handle_change_auto_stake_maturity(
     req: ChangeAutoStakeMaturity,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -867,6 +897,7 @@ fn handle_change_auto_stake_maturity(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -878,6 +909,7 @@ fn handle_change_auto_stake_maturity(
 /// Handle ADD_HOTKEY.
 fn handle_add_hotkey(
     req: AddHotKey,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -908,6 +940,7 @@ fn handle_add_hotkey(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -919,6 +952,7 @@ fn handle_add_hotkey(
 /// Handle REMOVE_HOTKEY.
 fn handle_remove_hotkey(
     req: RemoveHotKey,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -951,6 +985,7 @@ fn handle_remove_hotkey(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -962,6 +997,7 @@ fn handle_remove_hotkey(
 /// Handle SPAWN.
 fn handle_spawn(
     req: Spawn,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -979,6 +1015,7 @@ fn handle_spawn(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -990,6 +1027,7 @@ fn handle_spawn(
 //Handle REGISTER_VOTE
 fn handle_register_vote(
     req: RegisterVote,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -1009,6 +1047,7 @@ fn handle_register_vote(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -1019,6 +1058,7 @@ fn handle_register_vote(
 
 fn handle_stake_maturity(
     req: StakeMaturity,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -1036,6 +1076,7 @@ fn handle_stake_maturity(
         None,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -1047,6 +1088,7 @@ fn handle_stake_maturity(
 /// Handle FOLLOW.
 fn handle_follow(
     req: Follow,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -1074,6 +1116,7 @@ fn handle_follow(
         controller,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -1084,6 +1127,7 @@ fn handle_follow(
 
 fn handle_refresh_voting_power(
     req: RefreshVotingPower,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -1103,6 +1147,7 @@ fn handle_refresh_voting_power(
         controller,
         neuron_index,
         command,
+        governance_canister_id,
         payloads,
         updates,
         pks_map,
@@ -1116,6 +1161,7 @@ fn add_neuron_management_payload(
     controller: Option<PrincipalId>, // specify with hotkey.
     neuron_index: u64,
     command: ic_nns_governance_api::ManageNeuronCommandRequest,
+    governance_canister_id: &CanisterId,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
@@ -1140,7 +1186,7 @@ fn add_neuron_management_payload(
     };
 
     let update = HttpCanisterUpdate {
-        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+        canister_id: Blob(governance_canister_id.get().to_vec()),
         method_name: "manage_neuron".to_string(),
         arg: Blob(Encode!(&manage_neuron).expect("Serialization failed")),
         nonce: Some(Blob(
@@ -1245,92 +1291,4 @@ fn neuron_subaccount(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_types::time::Time;
-
-    const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
-    // A realistic "now" (~2023) that is well away from the u64 boundary.
-    const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
-
-    fn t(nanos: u64) -> Time {
-        Time::from_nanos_since_unix_epoch(nanos)
-    }
-
-    // A window whose span exceeds the documented 24h bound would make the loop
-    // build a huge list of ingress expiries, so it is rejected before the loop.
-    #[test]
-    fn oversized_ingress_window_is_rejected() {
-        assert!(
-            validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + 48 * HOUR_NANOS))
-                .is_err()
-        );
-    }
-
-    // A near-zero start together with a near-`u64::MAX` end spans almost the
-    // entire u64 range; that enormous span is rejected (it would otherwise
-    // iterate billions of times).
-    #[test]
-    fn unbounded_ingress_span_is_rejected() {
-        assert!(validate_ingress_window(t(NOW_NANOS), t(0), t(u64::MAX)).is_err());
-    }
-
-    // A window ending at (near) `u64::MAX` has a small span but an end far in the
-    // future; without the future bound the loop counter would wrap past
-    // `u64::MAX` and never terminate. The future bound rejects it.
-    #[test]
-    fn near_u64_max_ingress_window_is_rejected() {
-        let start = t(u64::MAX - 50 * 1_000_000_000);
-        assert!(validate_ingress_window(t(NOW_NANOS), start, t(u64::MAX)).is_err());
-    }
-
-    // A reversed or empty window (ingress_end <= ingress_start) is rejected
-    // rather than silently producing an empty set of payloads.
-    #[test]
-    fn reversed_ingress_window_is_rejected() {
-        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS + 1), t(NOW_NANOS)).is_err());
-        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS)).is_err());
-    }
-
-    // Negative control: a realistic window (5 minutes ahead of now) is accepted.
-    #[test]
-    fn valid_ingress_window_is_accepted() {
-        let end = t(NOW_NANOS + 5 * 60 * 1_000_000_000);
-        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), end).is_ok());
-    }
-
-    // Boundary: a window of exactly 24h ending exactly 24h from now is accepted,
-    // one nanosecond more is rejected.
-    #[test]
-    fn ingress_window_boundary_is_inclusive() {
-        let max = MAX_INGRESS_WINDOW.as_nanos() as u64;
-        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max)).is_ok());
-        assert!(
-            validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max + 1)).is_err()
-        );
-    }
-
-    // Boundary: exactly the maximum number of (request, ingress expiry) pairs is
-    // accepted, one more request or one more expiry is rejected.
-    #[test]
-    fn request_ingress_expiry_pairs_boundary_is_inclusive() {
-        const EXPIRIES: usize = 720;
-        const MAX_REQUESTS: usize = MAX_REQUEST_INGRESS_EXPIRY_PAIRS / EXPIRIES;
-        assert_eq!(MAX_REQUESTS * EXPIRIES, MAX_REQUEST_INGRESS_EXPIRY_PAIRS);
-
-        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS - 1, EXPIRIES).is_ok());
-        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS, EXPIRIES).is_ok());
-        assert!(validate_request_ingress_expiry_pairs(MAX_REQUESTS + 1, EXPIRIES).is_err());
-        assert!(validate_request_ingress_expiry_pairs(MAX_REQUEST_INGRESS_EXPIRY_PAIRS, 1).is_ok());
-        assert!(
-            validate_request_ingress_expiry_pairs(MAX_REQUEST_INGRESS_EXPIRY_PAIRS + 1, 1).is_err()
-        );
-    }
-
-    // The product of the counts must not wrap around and slip under the bound.
-    #[test]
-    fn request_ingress_expiry_pairs_overflow_is_rejected() {
-        assert!(validate_request_ingress_expiry_pairs(usize::MAX, 2).is_err());
-        assert!(validate_request_ingress_expiry_pairs(2, usize::MAX).is_err());
-    }
-}
+mod tests;

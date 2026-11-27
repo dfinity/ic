@@ -16,7 +16,7 @@ use candid::{CandidType, Decode, Encode};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
-use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
+use ic_config::embedders::{DEFAULT_CREATE_EXECUTION_STATE_BASE_COST, MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
@@ -42,8 +42,11 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsResult, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable, IC_00,
-    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
+    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable,
+    HASH_LENGTH, IC_00, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    MAX_ALLOWED_CHUNK_HASHES_COUNT, MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+    MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
+    MAX_ALLOWED_GLOBALS_COUNT, MAX_ALLOWED_WASM_CHUNK_LENGTH, Method, NodeMetricsHistoryArgs,
     NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, RenameToArgs, StoredChunksArgs,
     StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, SubnetMetricsArgs,
@@ -5447,13 +5450,16 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
         canister_id: canister_id.into(),
         chunk: vec![42; max_chunk_size + 1],
     };
-    test.subnet_message("upload_chunk", upload_args.encode())
-        .unwrap_err()
-        .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum \
-        chunk size of 1048576.",
-        );
+    let err = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(
+        err.description()
+            .contains("The blob length 1048577 exceeds maximum allowed 1048576"),
+        "Actual: {}",
+        err.description()
+    );
 
     assert_eq!(
         test.subnet_available_memory(),
@@ -7399,6 +7405,38 @@ fn test_environment_variables_are_updated_on_update_settings() {
     assert_eq!(canister.system_state.environment_variables, env_vars);
 }
 
+/// A payload exceeding these bounds is rejected when decoding it, i.e. before
+/// the limits are checked, so that a bound lower than its limit would reject
+/// valid payloads.
+#[test]
+fn decoding_bounds_match_limits() {
+    assert_eq!(
+        MAX_ALLOWED_ENVIRONMENT_VARIABLES_COUNT,
+        MAX_ENVIRONMENT_VARIABLES
+    );
+    assert_eq!(
+        MAX_ALLOWED_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
+    );
+    assert_eq!(
+        MAX_ALLOWED_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH
+    );
+    assert_eq!(
+        MAX_ALLOWED_WASM_CHUNK_LENGTH as u64,
+        wasm_chunk_store::CHUNK_SIZE
+    );
+    assert_eq!(
+        MAX_ALLOWED_CHUNK_HASHES_COUNT as u64,
+        WASM_MAX_SIZE.get() / wasm_chunk_store::CHUNK_SIZE
+    );
+    assert_eq!(
+        HASH_LENGTH,
+        std::mem::size_of::<wasm_chunk_store::WasmChunkHash>()
+    );
+    assert_eq!(MAX_ALLOWED_GLOBALS_COUNT, MAX_GLOBALS);
+}
+
 #[test]
 fn test_environment_variables_are_not_set_when_too_many_keys() {
     let mut test = ExecutionTestBuilder::new().build();
@@ -7418,16 +7456,13 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        err,
-        UserError::new(
-            ErrorCode::InvalidManagementPayload,
-            format!(
-                "Too many environment variables: {} (max: {})",
-                env_vars.len(),
-                MAX_ENVIRONMENT_VARIABLES
-            )
-        )
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    assert!(
+        err.description().contains(&format!(
+            "The number of elements exceeds maximum allowed {MAX_ENVIRONMENT_VARIABLES}"
+        )),
+        "Actual: {}",
+        err.description()
     );
 }
 

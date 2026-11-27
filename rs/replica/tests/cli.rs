@@ -3,12 +3,7 @@ use ic_config::SAMPLE_CONFIG;
 use predicates::prelude::*;
 
 fn new_replica_command() -> Command {
-    match Command::cargo_bin("replica") {
-        // When in Cargo environment. This should be removed after Bazel the migration is complete.
-        Ok(v) => v,
-        // When in Bazel environment
-        Err(_) => Command::new("rs/replica/replica"),
-    }
+    Command::cargo_bin("replica").expect("replica binary should exist")
 }
 
 #[test]

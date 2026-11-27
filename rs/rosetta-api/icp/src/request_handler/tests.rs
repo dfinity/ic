@@ -173,6 +173,143 @@ async fn test_network_status_returns_error_during_initial_sync() {
     }
 }
 
+pub(super) mod construction {
+    use crate::{
+        ledger_client::LedgerClient,
+        models::{
+            Amount, ConstructionDeriveRequest, Currency, CurveType, NetworkIdentifier, Operation,
+            OperationIdentifier, PublicKey, operation::OperationType,
+        },
+        request_handler::RosettaRequestHandler,
+    };
+    use ic_base_types::CanisterId;
+    use rand_chacha::rand_core::OsRng;
+    use rosetta_core::metrics::RosettaMetrics;
+    use std::{
+        str::FromStr,
+        sync::{Arc, atomic::AtomicBool},
+    };
+    use url::Url;
+
+    pub(crate) fn setup_handler() -> (
+        RosettaRequestHandler,
+        NetworkIdentifier,
+        PublicKey,
+        ic_ed25519::PrivateKey,
+    ) {
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let ledger_client = futures::executor::block_on(LedgerClient::new(
+            Url::from_str("http://localhost:1234").unwrap(),
+            CanisterId::from_u64(1),
+            "TKN".into(),
+            CanisterId::from_u64(2),
+            None,
+            None,
+            true,
+            None,
+            false,
+            false, // optimize_search_indexes: disabled for tests
+        ))
+        .unwrap();
+        let mock_canister_id_hex = "00000000000000000101";
+        let initial_sync_complete = AtomicBool::new(true);
+        let handler = RosettaRequestHandler::new(
+            "Internet Computer".into(),
+            ledger_client.into(),
+            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
+            Arc::new(initial_sync_complete),
+        );
+
+        let network_identifier = handler.network_id();
+        let pub_key = PublicKey {
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
+            curve_type: CurveType::Edwards25519,
+        };
+
+        (handler, network_identifier, pub_key, key)
+    }
+
+    pub(crate) fn setup_transfer_test() -> (
+        RosettaRequestHandler,
+        NetworkIdentifier,
+        Vec<Operation>,
+        PublicKey,
+        ic_ed25519::PrivateKey,
+    ) {
+        let (handler, network_identifier, pub_key, key) = setup_handler();
+        let currency = Currency {
+            symbol: "TKN".into(),
+            decimals: 8,
+            metadata: None,
+        };
+
+        let account = handler
+            .construction_derive(ConstructionDeriveRequest {
+                network_identifier: network_identifier.clone(),
+                public_key: pub_key.clone(),
+                metadata: None,
+            })
+            .unwrap()
+            .account_identifier;
+
+        let operations = vec![
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 0,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Transaction.to_string(),
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "-100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 1,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Transaction.to_string(),
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 2,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Fee.to_string(),
+                status: None,
+                account,
+                amount: Some(Amount {
+                    value: "-1000000".into(),
+                    currency,
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+        ];
+
+        (handler, network_identifier, operations, pub_key, key)
+    }
+}
+
 /// Test that the endpoints that read blocks return the retriable error of `/network/status`
 /// until the initial sync is complete, before they read the blocks: they answer even while the
 /// blockchain is write-locked.
@@ -1079,4 +1216,72 @@ fn should_combine_neuron_workflow_over_max_ingress_window() {
     req_handler
         .construction_combine(request)
         .expect("the largest transaction should be combined");
+}
+
+#[tokio::test]
+async fn construction_submit_refuses_a_read_state_call_the_ic_would_reject() {
+    use crate::models::{
+        ConstructionCombineRequest, ConstructionPayloadsRequest, ConstructionSubmitRequest,
+        CurveType, PublicKey, Signature, SignatureType, SignedTransaction,
+    };
+    use ic_types::messages::Blob;
+
+    let (handler, network_identifier, operations, pub_key, key) =
+        construction::setup_transfer_test();
+    let payloads = handler
+        .construction_payloads(ConstructionPayloadsRequest {
+            network_identifier: network_identifier.clone(),
+            operations,
+            metadata: None,
+            public_keys: Some(vec![pub_key]),
+        })
+        .unwrap();
+    let signatures = payloads
+        .payloads
+        .into_iter()
+        .map(|payload| {
+            let bytes = hex::decode(&payload.hex_bytes).unwrap();
+            Signature {
+                signing_payload: payload,
+                public_key: PublicKey::new(
+                    hex::encode(key.public_key().serialize_raw()),
+                    CurveType::Edwards25519,
+                ),
+                signature_type: SignatureType::Ed25519,
+                hex_bytes: hex::encode(key.sign_message(&bytes)),
+            }
+        })
+        .collect();
+    let signed_transaction = handler
+        .construction_combine(ConstructionCombineRequest {
+            network_identifier: network_identifier.clone(),
+            unsigned_transaction: payloads.unsigned_transaction,
+            signatures,
+        })
+        .unwrap()
+        .signed_transaction;
+    let submit = |signed_transaction| {
+        handler.construction_submit(ConstructionSubmitRequest {
+            network_identifier: network_identifier.clone(),
+            signed_transaction,
+        })
+    };
+
+    let err = submit(signed_transaction.clone()).await.unwrap_err();
+    assert!(
+        matches!(err, ApiError::NotAvailableOffline(..)),
+        "expected the offline ledger to be reached, got {err:?}"
+    );
+
+    let mut corrupted = SignedTransaction::from_str(&signed_transaction).unwrap();
+    for (_, envelopes) in &mut corrupted.requests {
+        for envelope in envelopes {
+            envelope.read_state.sender_sig = Some(Blob(vec![0; 64]));
+        }
+    }
+    let err = submit(corrupted.to_string()).await.unwrap_err();
+    assert!(
+        format!("{err:?}").contains("whose read-state call the IC would reject"),
+        "unexpected error: {err:?}"
+    );
 }

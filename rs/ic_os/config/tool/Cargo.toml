@@ -24,6 +24,8 @@ deterministic_ips = { path = "../../networking/deterministic_ips" }
 tempfile = { workspace = true }
 reqwest = { workspace = true }
 fs_extra = { workspace = true }
+ic-types = { path = "../../../types/types" }
+idna = { workspace = true }
 nix = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 strum = { workspace = true }

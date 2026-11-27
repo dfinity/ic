@@ -3,6 +3,7 @@ use crate::models::{ConstructionSubmitRequest, ConstructionSubmitResponse, Signe
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
 use crate::request_handler::{RosettaRequestHandler, verify_network_id};
+use crate::signed_target::verify_read_state_signatures;
 use crate::transaction_id::{self, TransactionIdentifier};
 use std::str::FromStr;
 
@@ -20,6 +21,7 @@ impl RosettaRequestHandler {
         let envelopes = SignedTransaction::from_str(&msg.signed_transaction).map_err(|e| {
             ApiError::invalid_transaction(format!("Failed to parse signed transaction: {e}"))
         })?;
+        verify_read_state_signatures(&envelopes, ic_types::time::current_time())?;
         let results = self.ledger.submit(envelopes).await?;
         let transaction_identifier = transaction_identifier(&results);
         let metadata = TransactionOperationResults::from_transaction_results(

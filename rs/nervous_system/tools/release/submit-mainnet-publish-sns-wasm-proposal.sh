@@ -14,6 +14,10 @@ Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
   Environment Variables:
    DRY_RUN: If set to true, no proposal will be created, but other than that,
     this script will do as much as it would otherwise.
+   SKIP_CONFIRMATION: If set to true, submit without asking for confirmation.
+    submit-governance-upgrade-proposals.sh sets this, because it asks for
+    confirmation of all its proposals up front.
+   DFX_HSM_PIN: If set, used instead of prompting for your HSM PIN.
 
   This script will create a proposal on mainnet from a given proposal text. It
   outputs the values for confirmation, and ensures that the target version
@@ -30,6 +34,7 @@ PROPOSAL_FILE=$1
 NEURON_ID=$2
 
 DRY_RUN="${DRY_RUN:-false}"
+SKIP_CONFIRMATION="${SKIP_CONFIRMATION:-false}"
 
 submit_nns_publish_sns_wasm_proposal_mainnet() {
     ensure_variable_set IC_ADMIN
@@ -48,18 +53,27 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
     WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
     WASM_SHA=$(sha_256 $WASM_GZ)
 
+    # Show what we are about to submit, in full gory detail.
     echo_line
     cat "$PROPOSAL_FILE"
     echo_line
     echo
 
+    # Briefly, explain what is about to happen to the user.
     echo "Publish SNS WASM Synopsis:"
-    echo "    Target canister: $HUMANIZED_CANISTER_TYPE"
+    echo "    Target canister: $HUMANIZED_CANISTER_TYPE (SNS)"
     echo "    Build Commit: $VERSION"
+    echo
+    echo_line
+    echo
 
-    echo
-    check_or_set_dfx_hsm_pin
-    echo
+    # Prompt the user to confirm the above is what they want.
+    # Unless they waive confirmation (and supplied HSM pin).
+    if [ -z "${DFX_HSM_PIN:-}" ]; then
+        confirm_by_entering_dfx_hsm_pin
+    elif [ "$SKIP_CONFIRMATION" != true ]; then
+        confirm
+    fi
 
     cmd=(
         $IC_ADMIN
@@ -90,34 +104,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
         cmd+=(--dry-run)
     fi
 
-    confirm_submit_proposal_command "${cmd[@]}"
-    echo
-
-    echo "Sending the proposal..."
-    echo
-
-    echo_line
-    if ! RESPONSE=$("${cmd[@]}"); then
-        echo "$RESPONSE"
-        echo_line
-        echo
-        echo "😬 It very much seems that the proposal was NOT submitted, because"
-        echo "ic-admin failed. See its output above. It could be you entered"
-        echo "the wrong PIN for your HSM. In that case, trying again should work."
-        exit 1
-    fi
-    echo "$RESPONSE"
-    echo_line
-    PROPOSAL_ID=$(echo "${RESPONSE}" | grep -o 'proposal [0-9]*' | awk '{print $2}' | tr -d '[:space:]')
-
-    # Report conclusion.
-    echo
-    if [ "$DRY_RUN" = true ]; then
-        print_yellow "This was just a dry run. Still, everything went ok."
-    else
-        echo "🎉 Success!"
-        echo "https://dashboard.internetcomputer.org/proposal/${PROPOSAL_ID}"
-    fi
+    submit_proposal_using_ic_admin "${cmd[@]}"
 }
 
 # We download a version of IC_ADMIN compatible with the previous release

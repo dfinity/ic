@@ -6,12 +6,13 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterIdRecord, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterSnapshotDataOffset, CanisterUpgradeOptions, Global, GlobalTimer, IC_00,
-    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs, WasmMemoryPersistence,
+    BoundedGlobals, CanisterChangeDetails, CanisterIdRecord, CanisterInstallModeV2,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterUpgradeOptions, Global,
+    GlobalTimer, IC_00, InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method,
+    OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    WasmMemoryPersistence,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -934,7 +935,11 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
         &env,
         || {
             let mut args = original_args.clone();
-            args.globals = vec![Global::I32(1), Global::I64(1999996623), Global::I32(2)];
+            args.globals = BoundedGlobals::new(vec![
+                Global::I32(1),
+                Global::I64(1999996623),
+                Global::I32(2),
+            ]);
             args
         },
         "Wasm exported globals of canister module and snapshot metadata do not match",

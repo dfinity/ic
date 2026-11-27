@@ -41,6 +41,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, Error};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -379,6 +380,7 @@ async fn start(runtime: Arc<Runtime>) {
 
     let main_task = tokio::spawn(async move {
         axum_server::from_tcp(listener)
+            .unwrap()
             .handle(axum_handle)
             .serve(router)
             .await
@@ -400,7 +402,7 @@ async fn start(runtime: Arc<Runtime>) {
 
 async fn terminate(
     app_state: AppState,
-    shutdown_handle: axum_server::Handle,
+    shutdown_handle: axum_server::Handle<SocketAddr>,
     port_file_path: Option<PathBuf>,
 ) {
     debug!("The PocketIC server will terminate");

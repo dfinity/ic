@@ -282,14 +282,10 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
             dkg_id: try_from_option_field(summary.dkg_id.clone(), "NiDkgTranscript::dkg_id")?,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(summary.threshold))
                 .map_err(|e| ProxyDecodeError::Other(format!("threshold error {e:?}")))?,
-            committee: NiDkgReceivers::new(
-                summary
-                    .committee
-                    .iter()
-                    .cloned()
-                    .map(crate::node_id_try_from_protobuf)
-                    .collect::<Result<BTreeSet<_>, _>>()?,
-            )
+            committee: NiDkgReceivers::new(crate::decode_set(
+                summary.committee.iter().cloned(),
+                crate::node_id_try_from_protobuf,
+            )?)
             .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,
             registry_version: RegistryVersion::from(summary.registry_version),
             internal_csp_transcript: bincode::deserialize(&summary.internal_csp_transcript)

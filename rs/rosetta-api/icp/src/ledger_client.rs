@@ -303,14 +303,15 @@ impl LedgerAccess for LedgerClient {
             .requests
             .iter()
             .map(|e| {
-                Request::try_from(e).map(|_type| RequestResult {
-                    _type,
-                    block_index: None,
-                    neuron_id: None,
-                    transaction_identifier: None,
-                    status: crate::request_types::Status::NotAttempted,
-                    response: None,
-                })
+                Request::from_signed_request(e, &self.canister_id, &self.governance_canister_id)
+                    .map(|_type| RequestResult {
+                        _type,
+                        block_index: None,
+                        neuron_id: None,
+                        transaction_identifier: None,
+                        status: crate::request_types::Status::NotAttempted,
+                        response: None,
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?
             .into();
@@ -567,18 +568,10 @@ impl LedgerClient {
         let now = ic_types::time::current_time();
         let deadline = start_time + Self::TIMEOUT;
 
-        let EnvelopePair { update, read_state } = request
-            .clone()
-            .into_iter()
-            .find(|EnvelopePair { update, .. }| {
-                let ingress_expiry =
-                    ic_types::Time::from_nanos_since_unix_epoch(update.content.ingress_expiry());
-                let ingress_start = ingress_expiry.saturating_sub(
-                    ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT),
-                );
-                ingress_start <= now && ingress_expiry > now
-            })
-            .ok_or(ApiError::TransactionExpired)?;
+        let EnvelopePair { update, read_state } =
+            crate::signed_target::current_envelope(&request, now)
+                .cloned()
+                .ok_or(ApiError::TransactionExpired)?;
 
         let canister_id = match &update.content {
             HttpCallContent::Call { update } => CanisterId::try_from(update.canister_id.0.clone())

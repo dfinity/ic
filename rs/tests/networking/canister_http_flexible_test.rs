@@ -39,7 +39,7 @@ use dfn_candid::candid_one;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, CanisterHttpResponsePayload, FlexibleCanisterHttpRequestArgs,
     FlexibleHttpGlobalError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
-    HttpMethod, ReplicationCounts, TransformContext, TransformFunc,
+    HttpMethod, Payload, ReplicationCounts, TransformContext, TransformFunc,
 };
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::{
@@ -266,7 +266,7 @@ async fn send_flexible_reporting_refund(
             "send_flexible_request",
             candid_one::<FlexibleResponseWithRefundedCycles, FlexibleRemoteHttpRequest>,
             FlexibleRemoteHttpRequest {
-                request: args,
+                request: args.encode(),
                 cycles,
             },
         )
@@ -1168,7 +1168,7 @@ fn test_reject_url_too_long(env: TestEnv) {
             let long_path = "a".repeat(8200);
             get_args(format!("{}/ascii/{long_path}", webserver_base(env)))
         },
-        |result| expect_rejection(result, "exceeds 8192"),
+        |result| expect_rejection(result, "exceeds maximum allowed 8192"),
     );
 }
 
@@ -1269,7 +1269,7 @@ fn test_reject_request_too_large(env: TestEnv) {
             args.body = Some(vec![0_u8; 2_000_001]);
             args
         },
-        |result| expect_rejection(result, "exceeds 2000000"),
+        |result| expect_rejection(result, "exceeds maximum allowed 2000000"),
     );
 }
 

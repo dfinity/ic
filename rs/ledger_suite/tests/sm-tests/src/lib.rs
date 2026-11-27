@@ -3801,7 +3801,7 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
             self.sender
         }
 
-        fn time(&self) -> std::time::SystemTime {
+        async fn time(&self) -> std::time::SystemTime {
             self.sm.time()
         }
 

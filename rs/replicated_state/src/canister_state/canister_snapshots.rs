@@ -552,7 +552,7 @@ impl ValidatedSnapshotMetadata {
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
             return Err(MetadataValidationError::StableMemoryTooLarge);
         }
-        if raw.globals.len() > MAX_GLOBALS {
+        if raw.globals.get().len() > MAX_GLOBALS {
             return Err(MetadataValidationError::ExportedGlobalsTooLarge);
         }
         // a 32 byte hash
@@ -563,7 +563,7 @@ impl ValidatedSnapshotMetadata {
         Ok(Self {
             replace_snapshot: raw.replace_snapshot,
             wasm_module_size: NumBytes::new(raw.wasm_module_size),
-            exported_globals: raw.globals,
+            exported_globals: raw.globals.into_vec(),
             wasm_memory_size: NumWasmPages::new(
                 raw.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
             ),

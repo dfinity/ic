@@ -419,6 +419,8 @@ type SuspendedReason = variant {
     ValueTooSmall;
     // The Bitcoin checker considered this UTXO to be tainted.
     Quarantined;
+    // The Bitcoin checker returned an error for this UTXO.
+    Unchecked;
 };
 
 type WithdrawalFee = record {

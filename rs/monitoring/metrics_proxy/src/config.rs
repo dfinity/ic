@@ -1,6 +1,9 @@
 use duration_string::DurationString;
 use regex;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{
+    CertificateDer, PrivateKeyDer,
+    pem::{self, PemObject},
+};
 use serde;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -8,7 +11,6 @@ use serde::de::Error;
 use serde_yaml::{self};
 use std::collections::HashMap;
 use std::fmt;
-use std::io::Cursor;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -77,11 +79,16 @@ impl TryFrom<&ListenOn> for Protocol {
                     return Err(Self::Error::KeyFileReadError(err));
                 }
 
-                let mut certs_cursor: Cursor<Vec<u8>> = Cursor::new(certdata.unwrap());
                 let certs_parsed: Vec<CertificateDer<'static>> =
-                    match rustls_pemfile::certs(&mut certs_cursor).collect::<Result<Vec<_>, _>>() {
+                    match CertificateDer::pem_slice_iter(&certdata.unwrap())
+                        .collect::<Result<Vec<_>, _>>()
+                    {
                         Ok(certs) => certs,
-                        Err(err) => return Err(Self::Error::CertificateFileReadError(err)),
+                        Err(err) => {
+                            return Err(Self::Error::CertificateFileReadError(
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, err),
+                            ));
+                        }
                     };
                 if certs_parsed.is_empty() {
                     return Err(Self::Error::CertificateFileReadError(
@@ -92,10 +99,9 @@ impl TryFrom<&ListenOn> for Protocol {
                     ));
                 }
 
-                let mut key_cursor = Cursor::new(keydata.unwrap());
-                let key = match rustls_pemfile::private_key(&mut key_cursor) {
-                    Ok(Some(key)) => key,
-                    Ok(None) => {
+                let key = match PrivateKeyDer::from_pem_slice(&keydata.unwrap()) {
+                    Ok(key) => key,
+                    Err(pem::Error::NoItemsFound) => {
                         return Err(Self::Error::KeyFileReadError(std::io::Error::other(
                             format!(
                                 "{} contains no private key",
@@ -103,7 +109,12 @@ impl TryFrom<&ListenOn> for Protocol {
                             ),
                         )));
                     }
-                    Err(err) => return Err(Self::Error::KeyFileReadError(err)),
+                    Err(err) => {
+                        return Err(Self::Error::KeyFileReadError(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            err,
+                        )));
+                    }
                 };
 
                 Ok(Self::Https {
@@ -730,5 +741,81 @@ proxies:
 "#,
         );
         assert!(result.is_err());
+    }
+
+    // A self-signed certificate for `localhost` and its private key, made with
+    // `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes
+    // -days 36500 -subj /CN=localhost`.
+    const CERTIFICATE_PEM: &str = "\
+-----BEGIN CERTIFICATE-----
+MIIBfjCCASWgAwIBAgIUMb+4rcoLpm+4GQJqkq99fZuENeEwCgYIKoZIzj0EAwIw
+FDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MTEyMjE1MTcwNVoYDzIxMjYxMDI5
+MTUxNzA1WjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAAT1aUtalAj8f2UG66U55UvMVvoog4/GQla/eG0USuRQ7qrVA1w8uX4u
+SYXRVgLPPggRwWwDDUCaTqXIkfyd8hxKo1MwUTAdBgNVHQ4EFgQUKOA8yYEBgpGj
+dUooCSQT6CuEeukwHwYDVR0jBBgwFoAUKOA8yYEBgpGjdUooCSQT6CuEeukwDwYD
+VR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBEAiBFiwkVMiQ4KpAgoE42E7Yu
+XM1VDJL26Ep+/HjSTy0xewIgXzeRNscopktpI3JilgtOTVP/k2WPXRuEj8jByyLY
+QZA=
+-----END CERTIFICATE-----
+";
+    const KEY_PEM: &str = "\
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg9DNULJaY6JTqE4Qq
+xJGCXGyzX2nbD5T2mYZCPQd1fqehRANCAAT1aUtalAj8f2UG66U55UvMVvoog4/G
+Qla/eG0USuRQ7qrVA1w8uX4uSYXRVgLPPggRwWwDDUCaTqXIkfyd8hxK
+-----END PRIVATE KEY-----
+";
+
+    /// Parses a configuration whose only proxy listens on HTTPS, with
+    /// `certificate` and `key` as the contents of its certificate and key
+    /// files.
+    fn parse_https(certificate: &str, key: &str) -> Result<Config, serde_yaml::Error> {
+        let dir = tempfile::tempdir().unwrap();
+        let certificate_file = dir.path().join("cert.pem");
+        let key_file = dir.path().join("key.pem");
+        std::fs::write(&certificate_file, certificate).unwrap();
+        std::fs::write(&key_file, key).unwrap();
+        serde_yaml::from_str(&format!(
+            r#"
+proxies:
+  - listen_on:
+      url: https://127.0.0.1:18443/metrics
+      certificate_file: {certificate_file:?}
+      key_file: {key_file:?}
+    connect_to:
+      url: http://localhost:9100/metrics
+    label_filters: []
+"#
+        ))
+    }
+
+    #[test]
+    fn https_listener_loads_its_certificate_and_key() {
+        let cfg = parse_https(CERTIFICATE_PEM, KEY_PEM).expect("configuration should parse");
+        match &cfg.proxies[0].listen_on.protocol {
+            Protocol::Https { certificate, key } => {
+                assert_eq!(certificate.len(), 1);
+                assert!(matches!(key, PrivateKeyDer::Pkcs8(_)));
+            }
+            Protocol::Http => panic!("expected an HTTPS listener"),
+        }
+    }
+
+    #[test]
+    fn https_listener_rejects_a_key_file_without_a_private_key() {
+        let err = parse_https(CERTIFICATE_PEM, "").unwrap_err().to_string();
+        assert!(err.contains("could not read key file: "), "{err}");
+        assert!(err.contains("contains no private key"), "{err}");
+    }
+
+    #[test]
+    fn https_listener_rejects_a_certificate_without_an_end_line() {
+        let certificate = CERTIFICATE_PEM.replace("-----END CERTIFICATE-----\n", "");
+        let err = parse_https(&certificate, KEY_PEM).unwrap_err().to_string();
+        assert!(
+            err.contains("could not read certificate file: missing section end marker"),
+            "{err}"
+        );
     }
 }

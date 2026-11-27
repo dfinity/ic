@@ -2,6 +2,8 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
+        constants::SSH_USERNAME,
+        driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
         group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
@@ -10,6 +12,7 @@ use ic_system_test_driver::{
     systest,
 };
 use slog::info;
+use std::process::Command;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -129,11 +132,66 @@ fn check_kernel_panic_params(env: TestEnv) {
     }
 }
 
+/// Assert that SSH agent forwarding works: log in to each node with `ssh -A`
+/// and, from there, log in to the node again using only the forwarded agent.
+fn check_ssh_agent_forwarding(env: TestEnv) {
+    let logger = env.logger();
+    let admin_key = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    for node in env.topology_snapshot().subnets().flat_map(|s| s.nodes()) {
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Failed to establish SSH session to GuestOS node");
+        // The test's temporary directory is too long for the path of a Unix socket.
+        let agent_dir = tempfile::Builder::new()
+            .prefix("ssh-agent")
+            .tempdir_in("/tmp")
+            .expect("Failed to create a directory for the SSH agent socket");
+        let ssh = format!(
+            "ssh -A -F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=no \
+             -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR admin@{}",
+            node.get_ip_addr()
+        );
+        // Lists the key of a fresh agent locally and, after two hops of agent
+        // forwarding, on the node.
+        let script = format!(
+            r#"ssh-add -q "$1" && ssh-add -l && {ssh} 'echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >&2; {ssh} ssh-add -l'"#
+        );
+        let out = Command::new("ssh-agent")
+            .arg("-a")
+            .arg(agent_dir.path().join("agent.sock"))
+            .args(["sh", "-c", &script, "sh"])
+            .arg(&admin_key)
+            .output()
+            .expect("Failed to run ssh-agent");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        info!(
+            logger,
+            "Node {}: SSH agent forwarding ({}):\nstdout:\n{}stderr:\n{}",
+            node.node_id,
+            out.status,
+            stdout,
+            stderr
+        );
+        let lines: Vec<&str> = stdout.lines().collect();
+        assert!(
+            out.status.success() && lines.len() == 2 && lines[0] == lines[1],
+            "Node {}: the forwarded agent did not list the local key ({}):\nstdout:\n{}stderr:\n{}",
+            node.node_id,
+            out.status,
+            stdout,
+            stderr
+        );
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(check_no_failed_systemd_units))
         .add_test(systest!(check_kernel_panic_params))
+        .add_test(systest!(check_ssh_agent_forwarding))
         .execute_from_args()?;
 
     Ok(())

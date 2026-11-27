@@ -18,13 +18,14 @@ parking_lot = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-sha2 = { workspace = true }
+sha2_0_10 = { workspace = true }
 subtle = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+sha2 = { workspace = true }
 
 [[bench]]
 name = "ops"

@@ -1,11 +1,15 @@
 use crate::{
-    admin_helper::{get_propose_to_cool_down_subnet_command, get_propose_to_merge_subnets_command},
+    admin_helper::{
+        get_propose_to_cool_down_subnet_command, get_propose_to_delete_subnet_command,
+        get_propose_to_merge_subnets_command,
+    },
     layout::Layout,
     steps::{
-        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRoutingTableStep,
-        ComputeExpectedMergedManifestStep, DownloadStateStep, MergeStatesStep,
-        ProposeRecoveryCupStep, RestartDestinationReplicaStep, StopReplicaAtHaltingCheckpointStep,
-        UploadMergedStateStep, ValidateCupStep, WaitForHaltingCupStep,
+        CheckCoolingDownStep, CheckMergeReadinessStep, CheckRegistryVersionOnAllSubnetsStep,
+        CheckRoutingTableStep, CheckSourceSubnetDeletedStep, ComputeExpectedMergedManifestStep,
+        DownloadStateStep, MergeStatesStep, ProposeRecoveryCupStep, RestartDestinationReplicaStep,
+        StopReplicaAtHaltingCheckpointStep, UploadMergedStateStep, ValidateCupStep,
+        WaitForHaltingCupStep, WaitForRecoveryCupStep,
     },
     utils::ensure_default_initial_dkg_subnet_is_not_merged,
 };
@@ -26,14 +30,21 @@ use ic_recovery::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_tools::{
-    admin_helper::get_halt_subnet_at_cup_height_command, utils::print_url_and_ask_for_confirmation,
+    admin_helper::{get_halt_subnet_at_cup_height_command, get_unhalt_subnet_command},
+    utils::print_url_and_ask_for_confirmation,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
-use std::{collections::BTreeSet, fmt::Debug, iter::Peekable, time::Duration};
+use std::{
+    collections::BTreeSet,
+    fmt::Debug,
+    iter::Peekable,
+    net::{IpAddr, Ipv6Addr},
+    time::Duration,
+};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -107,6 +118,21 @@ pub enum StepType {
     UploadStateToDestinationSubnet,
     /// Set permissions on the installed state and restart the destination node's replica.
     RestartDestinationReplica,
+    /// Wait until that node reports the recovery CUP.
+    WaitForCupOnDestinationSubnet,
+    /// Submit a proposal to unhalt the destination subnet.
+    UnhaltDestinationSubnet,
+    /// Wait until every subnet other than the source subnet has reached the
+    /// registry version recorded by `CheckRegistryForRoutingTableEntry`.
+    CheckRegistryVersionOnAllSubnets,
+    /// Submit a proposal to delete the source subnet.
+    DeleteSourceSubnet,
+    /// Wait until the registry no longer holds the source subnet, i.e. until
+    /// the proposal deleting it has been executed.
+    CheckRegistryForSourceSubnetDeletion,
+    /// Delete everything in the recovery directory of the tool, the downloaded
+    /// and the merged states included.
+    Cleanup,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -133,9 +159,9 @@ pub struct SubnetMergingArgs {
     /// The node of the destination subnet to download the state from and upload
     /// the merged state to: its IPv6 address, or "local" if the tool runs on
     /// that node. The halting CUP is waited for on that node, its replica is
-    /// stopped before the download and restarted on the merged state. Asked for
-    /// if missing, unless prompts are skipped. Remote access uses SSH with the
-    /// admin key.
+    /// stopped before the download and restarted on the merged state, and the
+    /// recovery CUP is waited for on that node. Asked for if missing, unless
+    /// prompts are skipped. Remote access uses SSH with the admin key.
     #[clap(long, value_parser=ic_recovery::util::data_location_from_str)]
     pub destination_node: Option<DataLocation>,
 
@@ -154,9 +180,12 @@ pub struct SubnetMergingArgs {
     #[clap(long, default_value = "1800")]
     pub halt_timeout_secs: u64,
 
-    /// How long to wait, in seconds, for the proposals labeling the source
-    /// subnet as "cooling down" and merging it into the destination subnet to
-    /// be adopted, executed and visible in the registry.
+    /// How long to wait, in seconds, for each of the proposals labeling the
+    /// source subnet as "cooling down", merging it into the destination subnet
+    /// and deleting it to be adopted, executed and visible in the registry.
+    /// Also how long to wait for every other subnet to reach the registry
+    /// version at which the source subnet is merged into the destination
+    /// subnet.
     #[clap(long, default_value = "3600")]
     pub registry_timeout_secs: u64,
 
@@ -222,12 +251,20 @@ impl SubnetMerging {
         )
         .expect("Failed to initialize recovery");
 
-        Self::check_subnets_preconditions(
-            &recovery,
-            subnet_merging_args.source_subnet_id,
-            subnet_merging_args.destination_subnet_id,
-        )
-        .expect("Subnets should satisfy all the preconditions");
+        // Once the proposal deleting the source subnet has been submitted, the
+        // registry may no longer hold that subnet, so the preconditions cannot
+        // be checked when resuming after `DeleteSourceSubnet`.
+        let source_subnet_may_be_deleted = subnet_merging_args
+            .next_step
+            .is_some_and(|next_step| next_step as usize > StepType::DeleteSourceSubnet as usize);
+        if !source_subnet_may_be_deleted {
+            Self::check_subnets_preconditions(
+                &recovery,
+                subnet_merging_args.source_subnet_id,
+                subnet_merging_args.destination_subnet_id,
+            )
+            .expect("Subnets should satisfy all the preconditions");
+        }
 
         let layout =
             Layout::new(&recovery, &logger).expect("Failed to create the working directories");
@@ -255,7 +292,7 @@ impl SubnetMerging {
     /// Only needed when prompts are skipped: otherwise each of these steps asks
     /// for the node. Without the node the steps cannot be created, and the tool
     /// would carry on without confirming that the subnet has halted or
-    /// uploading the merged state.
+    /// uploading the merged state and waiting for its recovery CUP.
     fn check_nodes(args: &SubnetMergingArgs) -> RecoveryResult<()> {
         let skipped_steps = args.skip.clone().unwrap_or_default();
         let runs = |step_type: &StepType| {
@@ -281,6 +318,7 @@ impl SubnetMerging {
                     StepType::DownloadStateFromDestinationSubnet,
                     StepType::UploadStateToDestinationSubnet,
                     StepType::RestartDestinationReplica,
+                    StepType::WaitForCupOnDestinationSubnet,
                 ][..],
                 args.destination_node,
                 "--destination-node",
@@ -495,6 +533,20 @@ impl SubnetMerging {
         Ok(subnet_record)
     }
 
+    /// Unhalting the destination subnet only clears its `is_halted` flag. The
+    /// merge installs no SSH keys, so there are none to clear, and any SSH keys
+    /// or recalled replica versions the destination subnet had before the merge
+    /// are kept.
+    fn unhalt_destination_subnet_step(&self) -> AdminStep {
+        AdminStep {
+            logger: self.recovery.logger.clone(),
+            ic_admin_cmd: get_unhalt_subnet_command(
+                &self.recovery.admin_helper,
+                self.params.destination_subnet_id,
+            ),
+        }
+    }
+
     fn halt_subnet_at_cup_height_step(&self, target_subnet: TargetSubnet) -> AdminStep {
         AdminStep {
             logger: self.recovery.logger.clone(),
@@ -574,6 +626,19 @@ impl SubnetMerging {
         })
     }
 
+    fn wait_for_recovery_cup_step(&self) -> RecoveryResult<impl Step + use<>> {
+        Ok(WaitForRecoveryCupStep {
+            source_subnet_id: self.params.source_subnet_id,
+            destination_subnet_id: self.params.destination_subnet_id,
+            node_ip: match self.node_location(TargetSubnet::Destination)? {
+                DataLocation::Remote(ip) => ip,
+                DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+            },
+            layout: self.layout.clone(),
+            logger: self.recovery.logger.clone(),
+        })
+    }
+
     /// How the steps run commands on the node of a subnet whose state is
     /// merged: locally if the tool runs on that node, and over SSH with the
     /// admin key otherwise.
@@ -594,7 +659,8 @@ impl SubnetMerging {
 
     /// The node used for every step that accesses a subnet: waiting for CUPs,
     /// stopping its replica, downloading its state and, for the destination
-    /// subnet, uploading the merged state and restarting its replica.
+    /// subnet, uploading the merged state, restarting its replica and waiting
+    /// for the recovery CUP.
     ///
     /// Every step that needs the node prompts for it, and it is checked upfront
     /// when prompts are skipped, so it is only missing if something went wrong.
@@ -691,7 +757,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::StopDestinationReplica
             | StepType::DownloadStateFromDestinationSubnet
             | StepType::UploadStateToDestinationSubnet
-            | StepType::RestartDestinationReplica => {
+            | StepType::RestartDestinationReplica
+            | StepType::WaitForCupOnDestinationSubnet => {
                 if self.params.destination_node.is_none() {
                     self.params.destination_node = Some(read_data_location(
                         &self.logger,
@@ -707,7 +774,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
             | StepType::MergeStates
             | StepType::MergeSubnets
             | StepType::CheckRegistryForRoutingTableEntry
-            | StepType::ProposeCupForDestinationSubnet => {}
+            | StepType::ProposeCupForDestinationSubnet
+            | StepType::UnhaltDestinationSubnet
+            | StepType::CheckRegistryVersionOnAllSubnets
+            | StepType::DeleteSourceSubnet
+            | StepType::CheckRegistryForSourceSubnetDeletion
+            | StepType::Cleanup => {}
         }
     }
 
@@ -828,6 +900,35 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 logger: self.recovery.logger.clone(),
             }
             .into(),
+            StepType::WaitForCupOnDestinationSubnet => self.wait_for_recovery_cup_step()?.into(),
+            StepType::UnhaltDestinationSubnet => self.unhalt_destination_subnet_step().into(),
+            StepType::CheckRegistryVersionOnAllSubnets => CheckRegistryVersionOnAllSubnetsStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                layout: self.layout.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+            StepType::DeleteSourceSubnet => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_delete_subnet_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+            StepType::CheckRegistryForSourceSubnetDeletion => CheckSourceSubnetDeletedStep {
+                source_subnet_id: self.params.source_subnet_id,
+                registry_helper: self.recovery.registry_helper.clone(),
+                timeout: Duration::from_secs(self.params.registry_timeout_secs),
+                poll_interval: Duration::from_secs(self.params.poll_interval_secs),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
+            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
         };
 
         Ok(step)
@@ -906,6 +1007,7 @@ mod tests {
             StepType::DownloadStateFromDestinationSubnet,
             StepType::UploadStateToDestinationSubnet,
             StepType::RestartDestinationReplica,
+            StepType::WaitForCupOnDestinationSubnet,
         ] {
             let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
             assert!(err.contains("--destination-node"), "{err}");
@@ -947,8 +1049,8 @@ mod tests {
         assert!(SubnetMerging::check_nodes(&args).is_ok());
         args.destination_node = None;
 
-        // The validation steps need neither node, but the step uploading the
-        // merged state to the destination subnet after them needs its node.
+        // The validation steps need neither node, but the steps recovering the
+        // destination subnet after them need its node.
         args.next_step = Some(StepType::ValidateSourceSubnetCup);
         let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
         assert!(err.contains("--destination-node"), "{err}");
@@ -958,15 +1060,21 @@ mod tests {
         assert!(SubnetMerging::check_nodes(&args).is_ok());
         args.destination_node = None;
 
-        // Resuming after upload still needs the destination node for the restart.
+        // Resuming after upload still needs the destination node for the restart
+        // and for waiting for the recovery CUP.
         args.next_step = Some(StepType::RestartDestinationReplica);
         let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
         assert!(err.contains("--destination-node"), "{err}");
         assert!(err.contains("RestartDestinationReplica"), "{err}");
 
-        args.skip = Some(vec![StepType::RestartDestinationReplica]);
+        args.next_step = Some(StepType::WaitForCupOnDestinationSubnet);
+        let err = SubnetMerging::check_nodes(&args).unwrap_err().to_string();
+        assert!(err.contains("--destination-node"), "{err}");
+        assert!(err.contains("WaitForCupOnDestinationSubnet"), "{err}");
+
+        // Past the last step needing the destination node, no node is needed.
+        args.next_step = Some(StepType::UnhaltDestinationSubnet);
         assert!(SubnetMerging::check_nodes(&args).is_ok());
-        args.skip = None;
 
         // Without resuming, every step runs.
         args.next_step = None;
