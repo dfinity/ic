@@ -1,8 +1,12 @@
 use super::*;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::state_manager::lsmt_config_default;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::CHECKPOINTS;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_keys::make_subnet_record_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::{
     PageMap,
     page_map::{
@@ -202,4 +206,45 @@ fn copy_of_merged_state_shares_no_files() {
         .join("system_metadata.pbuf");
     assert_eq!(std::fs::read_to_string(&copied).unwrap(), "metadata");
     assert_eq!(std::fs::metadata(&copied).unwrap().nlink(), 1);
+}
+
+#[test]
+fn only_a_subnet_whose_record_was_deleted_is_deleted() {
+    let subnet_id = |id| SubnetId::from(PrincipalId::new_subnet_test_id(id));
+    let (deleted, remaining, unknown) = (subnet_id(1), subnet_id(2), subnet_id(3));
+    let (before, after) = (RegistryVersion::from(1), RegistryVersion::from(2));
+
+    let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+    for subnet_id in [deleted, remaining] {
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id),
+                before,
+                Some(SubnetRecord::default()),
+            )
+            .unwrap();
+    }
+    data_provider
+        .add::<SubnetRecord>(&make_subnet_record_key(deleted), after, None)
+        .unwrap();
+    let registry_client = FakeRegistryClient::new(data_provider);
+    registry_client.update_to_latest_version();
+
+    assert!(ensure_subnet_deleted(&registry_client, deleted, after).is_ok());
+
+    // Neither a subnet whose record is still there, nor one that never had a
+    // record, nor the deleted subnet as of a version that still holds it.
+    for (subnet_id, registry_version) in [(remaining, after), (unknown, after), (deleted, before)] {
+        let err = ensure_subnet_deleted(&registry_client, subnet_id, registry_version)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("does not record"), "{err}");
+        assert!(err.contains(&subnet_id.to_string()), "{err}");
+    }
+
+    // A version the registry client has not seen cannot confirm the deletion.
+    let err = ensure_subnet_deleted(&registry_client, deleted, RegistryVersion::from(3))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Failed to check"), "{err}");
 }

@@ -267,6 +267,19 @@ impl Layout {
         )
     }
 
+    /// Reads the registry version recorded by
+    /// [Self::write_merge_registry_version] for `source_subnet_id`, failing if
+    /// it was recorded for a different subnet.
+    pub(crate) fn read_merge_registry_version(
+        &self,
+        source_subnet_id: SubnetId,
+    ) -> RecoveryResult<u64> {
+        read_registry_version(
+            &self.root.join(MERGE_REGISTRY_VERSION_FILE),
+            source_subnet_id,
+        )
+    }
+
     /// The file holding the CUP `subnet_id` halts at, as a
     /// `types.v1.CatchUpPackage` protobuf, i.e. in the format of the CUP file
     /// of a replica.

@@ -9,6 +9,7 @@ use crate::{
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
+    signed_target::{representative_envelope, verify_signed_target},
 };
 use rosetta_core::objects::ObjectMap;
 
@@ -20,7 +21,7 @@ use ic_nns_governance_api::{
 use crate::{models::seconds::Seconds, request::Request};
 use ic_types::{
     PrincipalId,
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
+    messages::{Blob, HttpCanisterUpdate},
 };
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
@@ -38,12 +39,13 @@ impl RosettaRequestHandler {
             ParsedTransaction::Signed(signed_transaction) => signed_transaction
                 .requests
                 .iter()
-                .map(
-                    |(request_type, updates)| match updates[0].update.content.clone() {
-                        HttpCallContent::Call { update } => (request_type.clone(), update),
-                    },
-                )
-                .collect(),
+                .map(|(request_type, envelopes)| {
+                    Ok((
+                        request_type.clone(),
+                        representative_envelope(envelopes)?.clone(),
+                    ))
+                })
+                .collect::<Result<Vec<_>, ApiError>>()?,
             ParsedTransaction::Unsigned(unsigned_transaction) => unsigned_transaction.updates,
         };
 
@@ -51,7 +53,15 @@ impl RosettaRequestHandler {
         let mut from_ai = vec![];
         let mut metadata = serde_json::Map::new();
 
-        for (request_type, HttpCanisterUpdate { arg, sender, .. }) in updates {
+        for (request_type, update) in updates {
+            verify_signed_target(
+                &request_type,
+                &update,
+                self.ledger.ledger_canister_id(),
+                self.ledger.governance_canister_id(),
+            )?;
+
+            let HttpCanisterUpdate { arg, sender, .. } = update;
             let from = PrincipalId::try_from(sender.0)
                 .map_err(|e| ApiError::internal_error(e.to_string()))?
                 .into();
@@ -675,25 +685,18 @@ mod tests {
     use proptest::{
         prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
     };
-    use rand_chacha::rand_core::OsRng;
-    use rosetta_core::metrics::RosettaMetrics;
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
-    use std::{str::FromStr, time::SystemTime};
-    use url::Url;
+    use std::time::SystemTime;
 
     use crate::{
         errors::ApiError,
-        ledger_client::LedgerClient,
         models::{
-            Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
-            ConstructionParseRequest, ConstructionParseResponse, ConstructionPayloadsRequest,
-            ConstructionPayloadsRequestMetadata, Currency, CurveType, EnvelopePair,
-            NetworkIdentifier, Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
-            UnsignedTransaction, operation::OperationType,
+            ConstructionCombineRequest, ConstructionParseRequest, ConstructionParseResponse,
+            ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, CurveType,
+            EnvelopePair, NetworkIdentifier, PublicKey, Signature, SignatureType,
+            UnsignedTransaction,
         },
         request::Request,
-        request_handler::RosettaRequestHandler,
+        request_handler::{RosettaRequestHandler, tests::construction::setup_transfer_test},
         request_types::RequestType,
     };
     use candid::Encode;
@@ -704,8 +707,7 @@ mod tests {
     use ic_types::{
         PrincipalId,
         messages::{
-            Blob, HttpCallContent, HttpCanisterUpdate, HttpReadState, HttpReadStateContent,
-            HttpRequestEnvelope,
+            Blob, HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
         },
     };
     use rosetta_core::objects::ObjectMap;
@@ -878,14 +880,12 @@ mod tests {
         })
     }
 
-    fn submitted_set_dissolve_timestamp(arg: Vec<u8>) -> Result<Request, ApiError> {
+    fn submitted_set_dissolve_timestamp(
+        handler: &RosettaRequestHandler,
+        arg: Vec<u8>,
+    ) -> Result<Request, ApiError> {
         let update = set_dissolve_timestamp_update(arg);
-        let read_state = HttpReadState {
-            sender: update.sender.clone(),
-            paths: vec![],
-            nonce: None,
-            ingress_expiry: update.ingress_expiry,
-        };
+        let read_state = crate::convert::make_read_state_from_update(&update);
         let envelope_pair = EnvelopePair {
             update: HttpRequestEnvelope {
                 content: HttpCallContent::Call { update },
@@ -900,10 +900,14 @@ mod tests {
                 sender_delegation: None,
             },
         };
-        Request::try_from(&(
-            RequestType::SetDissolveTimestamp { neuron_index: 0 },
-            vec![envelope_pair],
-        ))
+        Request::from_signed_request(
+            &(
+                RequestType::SetDissolveTimestamp { neuron_index: 0 },
+                vec![envelope_pair],
+            ),
+            handler.ledger.ledger_canister_id(),
+            handler.ledger.governance_canister_id(),
+        )
     }
 
     #[test]
@@ -920,7 +924,7 @@ mod tests {
                 "{name}: unexpected parse error: {err:?}"
             );
 
-            let err = submitted_set_dissolve_timestamp(args).unwrap_err();
+            let err = submitted_set_dissolve_timestamp(&handler, args).unwrap_err();
             assert!(
                 format!("{err:?}").contains("Could not parse manage_neuron")
                     && format!("{err:?}").contains("Decoding cost exceeds the limit"),
@@ -949,7 +953,7 @@ mod tests {
         assert_eq!(parsed.operations.len(), 1);
 
         assert!(matches!(
-            submitted_set_dissolve_timestamp(args).unwrap(),
+            submitted_set_dissolve_timestamp(&handler, args).unwrap(),
             Request::SetDissolveTimestamp(_)
         ));
     }
@@ -1140,116 +1144,6 @@ mod tests {
 
             check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
         });
-    }
-
-    /// Builds a `RosettaRequestHandler` together with a single ICP transfer
-    /// (debit + credit + fee) and the signer's public and private keys, shared
-    /// by the construction tests below.
-    fn setup_transfer_test() -> (
-        RosettaRequestHandler,
-        NetworkIdentifier,
-        Vec<Operation>,
-        PublicKey,
-        ic_ed25519::PrivateKey,
-    ) {
-        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
-        let ledger_client = futures::executor::block_on(LedgerClient::new(
-            Url::from_str("http://localhost:1234").unwrap(),
-            CanisterId::from_u64(1),
-            "TKN".into(),
-            CanisterId::from_u64(2),
-            None,
-            None,
-            true,
-            None,
-            false,
-            false, // optimize_search_indexes: disabled for tests
-        ))
-        .unwrap();
-        let mock_canister_id_hex = "00000000000000000101";
-        let initial_sync_complete = AtomicBool::new(true);
-        let handler = RosettaRequestHandler::new(
-            "Internet Computer".into(),
-            ledger_client.into(),
-            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
-            Arc::new(initial_sync_complete),
-        );
-
-        let network_identifier = handler.network_id();
-        let currency = Currency {
-            symbol: "TKN".into(),
-            decimals: 8,
-            metadata: None,
-        };
-
-        let pub_key = PublicKey {
-            hex_bytes: hex::encode(key.public_key().serialize_raw()),
-            curve_type: CurveType::Edwards25519,
-        };
-        let account = handler
-            .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone(),
-                public_key: pub_key.clone(),
-                metadata: None,
-            })
-            .unwrap()
-            .account_identifier;
-
-        let operations = vec![
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 0,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Transaction.to_string(),
-                status: None,
-                account: account.clone(),
-                amount: Some(Amount {
-                    value: "-100000000".into(),
-                    currency: currency.clone(),
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 1,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Transaction.to_string(),
-                status: None,
-                account: account.clone(),
-                amount: Some(Amount {
-                    value: "100000000".into(),
-                    currency: currency.clone(),
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 2,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Fee.to_string(),
-                status: None,
-                account,
-                amount: Some(Amount {
-                    value: "-1000000".into(),
-                    currency,
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-        ];
-
-        (handler, network_identifier, operations, pub_key, key)
     }
 
     // When the caller does not specify a memo, `construction_payloads` uses a

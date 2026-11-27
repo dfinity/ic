@@ -9,7 +9,8 @@ help() {
 Usage: $0 <PROPOSAL_ID>
     PROPOSAL_ID: The ID of a recently proposed Governance backend canister upgrade proposal.
 
-    Moves the pending new changelog entry from unreleased_changelog.md to CHANGELOG.md.
+    Adds an entry to CHANGELOG.md, based on the \"Features & Fixes\" section of
+    the proposal. Also, clears out unreleased_changelog.md.
 
     The commit that the proposal is baded on MUST be currently check out.
     Otherwise, this script will do nothing, and terminate with a nonzero exit
@@ -108,14 +109,19 @@ fi
 # TODO: Also verify that unreleased_changelog.md exists.
 # TODO: Verify that there are no uncommited changes in this dir, the canister's primary code path.
 
-# Construct new entry for CHANGELOG.md
+# Construct new entry for CHANGELOG.md from the "Features & Fixes" section of
+# the proposal, i.e. what was actually proposed. In the proposal, headings are
+# one level deeper than in changelogs (e.g. "###  Added" vs. "## Added"), so
+# they get decremented here.
+PROPOSAL_SUMMARY=$(echo "${PROPOSAL_INFO}" | jq -r '.proposal[0].summary')
 NEW_FEATURES_AND_FIXES=$(
-    sed '1,/^# Next Upgrade Proposal$/d' \
-        unreleased_changelog.md \
-        | filter_out_empty_markdown_sections
+    echo "${PROPOSAL_SUMMARY}" \
+        | sed -n '/^## Features & Fixes$/,/^## /{/^## /d;p;}' \
+        | filter_out_empty_markdown_sections \
+        | decrement_markdown_heading_levels
 )
 if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
-    print_red "💀 ${GOVERNANCE_TYPE} ${CANISTER_NAME}'s unreleased_changelog.md is EMPTY." >&2
+    print_red "💀 Proposal ${PROPOSAL_ID} has no (or an empty) \"## Features & Fixes\" section." >&2
     exit 1
 fi
 NEW_ENTRY="# ${PROPOSED_ON}: Proposal ${PROPOSAL_ID}

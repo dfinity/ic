@@ -238,7 +238,7 @@ impl Scalar {
     /// targeting the scalar group.
     pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
         let mut s = [ic_bls12_381::Scalar::zero()];
-        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2_0_10::Sha256>>(
             input,
             domain_sep.as_bytes(),
             &mut s,
@@ -1420,7 +1420,7 @@ macro_rules! define_affine_and_projective_types {
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
                 let pt =
-                    <ic_bls12_381::$projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
+                    <ic_bls12_381::$projective as HashToCurve<ExpandMsgXmd<sha2_0_10::Sha256>>>::hash_to_curve(
                         input, domain_sep.as_bytes(),
                     );
                 Self::new(pt)

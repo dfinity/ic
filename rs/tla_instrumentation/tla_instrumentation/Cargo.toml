@@ -10,6 +10,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+hex = { workspace = true }
 sha2 = { workspace = true }
 uuid = { workspace = true }
 serde = { workspace = true }

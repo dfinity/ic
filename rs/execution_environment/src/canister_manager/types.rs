@@ -283,6 +283,7 @@ impl InstallCodeContext {
                 wasm_chunk_store: store.clone(),
                 chunk_hashes_list: args
                     .chunk_hashes_list
+                    .into_vec()
                     .into_iter()
                     .map(|h| h.hash.to_vec())
                     .collect(),

@@ -1490,13 +1490,23 @@ mod tests {
     use candid::Principal;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_management_canister_types_private::{
-        BoundedHttpHeaders, CanisterHttpRequestArgs, FlexibleCanisterHttpRequestArgs, HttpHeader,
-        HttpMethod, ReplicationCounts, TransformFunc,
+        BoundedHttpHeaders, CanisterHttpRequestArgs, FlexibleCanisterHttpRequestArgs,
+        HTTP_BODY_MAX_SIZE, HTTP_URL_MAX_SIZE, HttpHeader, HttpMethod, ReplicationCounts,
+        TransformFunc,
     };
     use ic_types_test_utils::ids::node_test_id;
     use rstest::rstest;
     use std::str::FromStr;
     use strum::IntoEnumIterator;
+
+    /// A request exceeding these bounds is rejected when decoding it, i.e.
+    /// before the limits are validated, so that a bound lower than its limit
+    /// would reject valid requests.
+    #[test]
+    fn decoding_bounds_match_limits() {
+        assert_eq!(HTTP_URL_MAX_SIZE, MAX_CANISTER_HTTP_URL_SIZE);
+        assert_eq!(HTTP_BODY_MAX_SIZE as u64, MAX_CANISTER_HTTP_REQUEST_BYTES);
+    }
 
     #[test]
     fn replication_kind_all_as_str_is_stable_and_distinct() {
