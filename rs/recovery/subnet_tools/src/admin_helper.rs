@@ -30,15 +30,19 @@ pub fn get_halt_subnet_at_cup_height_command(
 ) -> IcAdmin {
     let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
+    let summary = match key {
+        Some(_) => {
+            format!(
+                "Halt subnet {subnet_id} at cup height and replace its ssh readonly access keys"
+            )
+        }
+        None => format!("Halt subnet {subnet_id} at cup height"),
+    };
+
     ic_admin
         .add_positional_argument("propose-to-update-subnet")
         .add_argument(SUBNET_ARG, subnet_id)
-        .add_argument(
-            SUMMARY_ARG,
-            quote(format!(
-                "Halt subnet {subnet_id} at cup height and optionally update ssh readonly access",
-            )),
-        )
+        .add_argument(SUMMARY_ARG, quote(summary))
         .add_argument("halt-at-cup-height", true);
 
     if let Some(key) = key {
@@ -183,9 +187,30 @@ mod tests {
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and optionally update ssh readonly access\" \
+            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and replace its ssh readonly access keys\" \
             --halt-at-cup-height true \
             --ssh-readonly-access \"fake ssh key\" \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_halt_subnet_at_cup_height_command_without_key_test() {
+        let result = get_halt_subnet_at_cup_height_command(
+            &fake_admin_helper(),
+            subnet_id_from_str(FAKE_SUBNET_ID_1),
+            &None,
+        )
+        .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-subnet \
+            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height\" \
+            --halt-at-cup-height true \
             --test-neuron-proposer"
         );
     }

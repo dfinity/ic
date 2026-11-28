@@ -396,17 +396,14 @@ pub struct SubnetTopology {
     ///  * it executes no canister messages and no canister tasks (`Heartbeat`,
     ///    `GlobalTimer` or the on-low-wasm-memory hook), only draining its subnet
     ///    queues;
-    ///  * (on all subnets) no messages are routed to a cooling down subnet --
-    ///    including into the cooling down subnet's own loopback stream -- but
-    ///    retained in their respective output queues, so that streams to the
-    ///    cooling down subnet can be emptied;
-    ///  * it routes no messages from its canisters' output queues into streams
-    ///    -- including its own loopback stream -- but retains them in output
-    ///    queues, so streams from the cooling down subnet can be emptied;
-    ///  * (on all subnets) no refunds are routed to or from a cooling down
-    ///    subnet -- including into the cooling down subnet's own loopback
-    ///    stream -- but retained in the refund pool, so that their cycles are
-    ///    not lost.
+    ///  * no messages from canister output queues are routed to or from it, not
+    ///    even into its own loopback stream; they are retained in their output
+    ///    queues, so that streams to and from it can be emptied;
+    ///  * responses from subnet output queues and refunds are still routed,
+    ///    except from subnets that are not cooling down to it (these retain
+    ///    them in their subnet output queues and refund pool, respectively),
+    ///    so that it still responds to the calls it has accepted and hands back
+    ///    its cycles.
     pub cooling_down: bool,
 }
 

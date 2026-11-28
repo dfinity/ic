@@ -9,7 +9,7 @@ use ic_recovery::{
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use ic_types::{Time, consensus::CatchUpPackage};
-use slog::{Logger, error, warn};
+use slog::{Logger, error, info, warn};
 use url::Url;
 
 use std::{fmt::Display, path::Path};
@@ -104,11 +104,24 @@ pub fn find_expected_state_hash_for_subnet_id(
 
 /// Prints a dashboard URL and waits until the operator confirms that what it
 /// shows allows the next step to be taken.
+///
+/// Skips the dashboard for a known non-mainnet registry. An unknown network
+/// still gets the dashboard and confirmation prompt.
 pub fn print_url_and_ask_for_confirmation(
     logger: &Logger,
-    url: String,
+    is_mainnet: Option<bool>,
+    url: impl FnOnce() -> String,
     text_to_display: impl std::fmt::Display,
 ) {
+    if is_mainnet == Some(false) {
+        info!(
+            logger,
+            "Skipping the dashboard check, since the subnets do not belong to mainnet"
+        );
+        return;
+    }
+
+    let url = url();
     match Url::parse(&url) {
         Ok(url) => {
             warn!(logger, "{}", text_to_display);
@@ -127,6 +140,25 @@ mod tests {
 
     use ic_recovery::file_sync_helper::write_file;
     use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn dashboard_is_requested_on_mainnet_and_when_the_network_is_unknown() {
+        let logger = Logger::root(slog::Discard, slog::o!());
+        for (is_mainnet, expected) in [(Some(true), true), (None, true), (Some(false), false)] {
+            let mut requested = false;
+            print_url_and_ask_for_confirmation(
+                &logger,
+                is_mainnet,
+                || {
+                    requested = true;
+                    // An invalid URL avoids waiting for stdin in this test.
+                    String::new()
+                },
+                "Check the dashboard",
+            );
+            assert_eq!(requested, expected);
+        }
+    }
 
     #[test]
     fn find_expected_state_hash_for_subnet_id_test() {

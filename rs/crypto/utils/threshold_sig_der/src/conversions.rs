@@ -36,7 +36,23 @@ pub fn parse_threshold_sig_key_from_pem_file(
     pem_file: &Path,
 ) -> Result<ThresholdSigPublicKey, KeyConversionError> {
     let buf = std::fs::read(pem_file).map_err(|e| KeyConversionError::IoError(e.to_string()))?;
-    let pem = pem::parse(&buf).map_err(|e| KeyConversionError::InvalidPem(format!("{e:?}")))?;
+    parse_threshold_sig_key_from_pem(&buf)
+}
+
+/// Parse a PEM format threshold signature public key from bytes.
+///
+/// # Arguments
+/// * `pem_bytes` PEM encoded public key
+/// # Returns
+/// The decoded `ThresholdSigPublicKey`
+/// # Error
+/// * `KeyConversionError` if the data is not PEM, or if the encoded key is not
+///   BLS12-381.
+pub fn parse_threshold_sig_key_from_pem(
+    pem_bytes: &[u8],
+) -> Result<ThresholdSigPublicKey, KeyConversionError> {
+    let pem =
+        pem::parse(pem_bytes).map_err(|e| KeyConversionError::InvalidPem(format!("{e:?}")))?;
 
     if pem.tag() != "PUBLIC KEY" {
         return Err(KeyConversionError::InvalidPem(format!(
