@@ -248,3 +248,30 @@ fn only_a_subnet_whose_record_was_deleted_is_deleted() {
         .to_string();
     assert!(err.contains("Failed to check"), "{err}");
 }
+
+#[test]
+fn deletion_requires_a_matching_merge_record_and_current_routing_table() {
+    let tmp = tempfile::tempdir().unwrap();
+    let layout = Layout::for_test(tmp.path().to_owned());
+    let source = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+    let other = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+    let mut routes = RoutingTable::new();
+    ic_registry_routing_table::routing_table_insert_subnet(&mut routes, other).unwrap();
+    let check = |id, version, table| {
+        check_deletion_preconditions(&layout, id, RegistryVersion::from(version), table)
+    };
+
+    assert!(check(source, 11, Some(routes.clone())).is_err());
+    layout.write_merge_registry_version(source, 10).unwrap();
+    assert!(check(source, 10, Some(routes.clone())).is_ok());
+    assert!(check(source, 11, Some(routes.clone())).is_ok());
+    assert!(check(source, 9, Some(routes.clone())).is_err());
+    assert!(check(source, 11, None).is_err());
+
+    // Even a subnet with no ranges must match the source recorded on disk.
+    let wrong = SubnetId::from(PrincipalId::new_subnet_test_id(3));
+    assert!(check(wrong, 11, Some(routes.clone())).is_err());
+    // Even the recorded source must still have no ranges in the live table.
+    ic_registry_routing_table::routing_table_insert_subnet(&mut routes, source).unwrap();
+    assert!(check(source, 11, Some(routes)).is_err());
+}

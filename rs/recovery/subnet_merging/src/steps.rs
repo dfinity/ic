@@ -26,6 +26,7 @@ use ic_recovery::{
     util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser, block_on},
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_routing_table::RoutingTable;
 use ic_state_layout::{CheckpointStatus, StateLayout};
 use ic_subnet_tools::{
     agent_helper::AgentHelper,
@@ -666,17 +667,11 @@ impl Step for CheckRoutingTableStep {
             &self.logger,
             || {
                 let (registry_version, routing_table) = self.registry_helper.get_routing_table()?;
-                let Some(routing_table) = routing_table else {
-                    return Err(RecoveryError::RegistryError(format!(
-                        "No routing table at registry version {registry_version}"
-                    )));
-                };
-                if !routing_table.ranges(source_subnet_id).is_empty() {
-                    return Err(RecoveryError::RegistryError(format!(
-                        "Subnet {source_subnet_id} still hosts canister id ranges at registry \
-                         version {registry_version}"
-                    )));
-                }
+                let routing_table = routing_table_without_source_ranges(
+                    source_subnet_id,
+                    registry_version,
+                    routing_table,
+                )?;
                 Ok((registry_version, routing_table))
             },
         )?;
@@ -692,6 +687,22 @@ impl Step for CheckRoutingTableStep {
         self.layout
             .write_merge_registry_version(source_subnet_id, merge_registry_version.get())
     }
+}
+
+fn routing_table_without_source_ranges(
+    source_subnet_id: SubnetId,
+    version: RegistryVersion,
+    routing_table: Option<RoutingTable>,
+) -> RecoveryResult<RoutingTable> {
+    let routing_table = routing_table.ok_or_else(|| {
+        RecoveryError::RegistryError(format!("No routing table at registry version {version}"))
+    })?;
+    if !routing_table.ranges(source_subnet_id).is_empty() {
+        return Err(RecoveryError::RegistryError(format!(
+            "Subnet {source_subnet_id} still hosts canister ID ranges at registry version {version}"
+        )));
+    }
+    Ok(routing_table)
 }
 
 /// The height of the merged state assembled by [MergeStatesStep], which follows
@@ -1019,6 +1030,46 @@ impl Step for CheckRegistryVersionOnAllSubnetsStep {
     }
 }
 
+pub(crate) struct DeleteSourceSubnetStep {
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) layout: Layout,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) proposal: AdminStep,
+}
+
+impl Step for DeleteSourceSubnetStep {
+    fn descr(&self) -> String {
+        format!(
+            "Check the recorded merge is for subnet {} and that it still hosts no canister ID ranges, then run {}",
+            self.source_subnet_id,
+            self.proposal.descr(),
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        // Resuming directly at deletion skips the earlier routing checks.
+        let (version, routing_table) = self.registry_helper.get_routing_table()?;
+        check_deletion_preconditions(&self.layout, self.source_subnet_id, version, routing_table)?;
+        self.proposal.exec()
+    }
+}
+
+fn check_deletion_preconditions(
+    layout: &Layout,
+    source_subnet_id: SubnetId,
+    version: RegistryVersion,
+    routing_table: Option<RoutingTable>,
+) -> RecoveryResult<()> {
+    let merge_version = layout.read_merge_registry_version(source_subnet_id)?;
+    if version.get() < merge_version {
+        return Err(RecoveryError::RegistryError(format!(
+            "Registry version {version} precedes the recorded merge version {merge_version}"
+        )));
+    }
+    routing_table_without_source_ranges(source_subnet_id, version, routing_table)?;
+    Ok(())
+}
+
 /// Waits until the registry no longer holds the source subnet, i.e. until the
 /// proposal deleting it has been executed. `ic-admin` returns once the proposal
 /// is submitted, which does not mean that it is adopted and executed.
@@ -1087,4 +1138,26 @@ fn ensure_subnet_deleted(
         )));
     }
     Ok(())
+}
+
+/// Starts the services stopped for the download so the orchestrator can handle
+/// unassignment. Starting them again on a retry leaves running services alone.
+pub(crate) struct StartSourceNodeStep {
+    pub(crate) node: ExecutionMode,
+    pub(crate) require_confirmation: bool,
+    pub(crate) logger: Logger,
+}
+
+impl Step for StartSourceNodeStep {
+    fn descr(&self) -> String {
+        format!("Start the crypto vault and orchestrator on {}.", self.node)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        self.node.execute(
+            "sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service && sudo systemctl start ic-replica".to_string(),
+            self.require_confirmation.then_some(&self.logger),
+        )?;
+        Ok(())
+    }
 }

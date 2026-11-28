@@ -75,30 +75,35 @@ pub(crate) async fn check_merged_state_running(
     });
 }
 
-/// Checks that the registry no longer holds the source subnet, after syncing
-/// `topology` to the newest registry version.
-///
-/// Precondition: the registry canister has already deleted the source subnet,
-/// so a single sync suffices and the check does not wait for the deletion.
+/// Waits for the driver's registry to observe the deletion. Its queries can
+/// reach an NNS replica that still serves a version from before the deletion.
 pub(crate) async fn check_source_subnet_deleted(
     logger: &Logger,
     topology: &TopologySnapshot,
     source_subnet_id: SubnetId,
+    timeout: Duration,
 ) {
-    let topology = topology
-        .block_for_newest_mainnet_registry_version()
-        .await
-        .expect("failed to sync the registry with the NNS");
-    let remaining: Vec<_> = topology.subnets().map(|subnet| subnet.subnet_id).collect();
-    assert!(
-        !remaining.contains(&source_subnet_id),
-        "subnet {source_subnet_id} is still in the registry at version {}: {remaining:?}",
-        topology.get_registry_version(),
-    );
+    let mut snapshot = topology.clone();
+    tokio::time::timeout(timeout, async {
+        while snapshot.subnets().any(|subnet| subnet.subnet_id == source_subnet_id) {
+            snapshot = snapshot
+                .block_for_min_registry_version_within_duration(
+                    snapshot.get_registry_version().increment(),
+                    timeout,
+                    RETRY_BACKOFF,
+                )
+                .await
+                .expect("failed to sync the registry with the NNS");
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!(
+        "subnet {source_subnet_id} is still in the driver's registry at version {} after {timeout:?}",
+        snapshot.get_registry_version()
+    ));
     info!(
         logger,
-        "Subnet {source_subnet_id} is gone as of registry version {}; the remaining subnets are \
-         {remaining:?}",
-        topology.get_registry_version(),
+        "Subnet {source_subnet_id} is gone as of registry version {}",
+        snapshot.get_registry_version()
     );
 }

@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/recovery",
     "//rs/recovery/subnet_tools",
     "//rs/registry/helpers",
+    "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/state_layout",
     "//rs/types/base_types",
