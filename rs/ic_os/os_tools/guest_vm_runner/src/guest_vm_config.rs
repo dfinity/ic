@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
-use config_types::{GuestOSConfig, HostOSConfig, VmSlot};
+use config_types::{GuestOSConfig, HostOSConfig, VmSlot, guest_vm_count, is_multi_vm_node};
 use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
@@ -13,8 +13,8 @@ use tracing::info;
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
-const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
-const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
+const DEFAULT_SERIAL_LOG_PREFIX: &str = "/var/log/libvirt/qemu/guestos-serial";
+const UPGRADE_SERIAL_LOG_PREFIX: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial";
 
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_MEMORY_GIB: u32 = 480;
@@ -148,11 +148,11 @@ pub fn generate_vm_config(
         vm_memory >= UPGRADE_VM_MEMORY_GIB,
         "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
-    let vm_memory_gib = match (guest_vm_type, &config.icos_settings.node_reward_type) {
-        (GuestVMType::Default, Some(val)) if val.starts_with("type4") => vm_memory,
-        (GuestVMType::Default, _) => vm_memory - UPGRADE_VM_MEMORY_GIB,
-        (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
-    };
+    let vm_memory_gib = vm_memory_gib(
+        guest_vm_type,
+        config.icos_settings.node_reward_type.as_deref(),
+        vm_memory,
+    );
 
     // Enable hugepages if enough are available for this VM and TEE is disabled (hugepages are not
     // supported by the kernel for confidential VMs)
@@ -205,6 +205,17 @@ pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
     ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
 }
 
+/// Multi-VM nodes run no upgrade VM, so nothing has to be held back for one.
+/// `type4`/`type4.5` are cloud engine types that still run the single-VM flow,
+/// so they do hold it back.
+fn vm_memory_gib(guest_vm_type: GuestVMType, reward_type: Option<&str>, vm_memory: u32) -> u32 {
+    match (guest_vm_type, reward_type) {
+        (GuestVMType::Default, Some(val)) if is_multi_vm_node(val) => vm_memory,
+        (GuestVMType::Default, _) => vm_memory - UPGRADE_VM_MEMORY_GIB,
+        (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
+    }
+}
+
 fn split_resources_for_type_4(
     config: &HostOSConfig,
     memory: u32,
@@ -214,16 +225,17 @@ fn split_resources_for_type_4(
     /* vcpus */ u32,
     /* topology */ Topology,
 ) {
-    let (memory, vcpus) = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.1" => (memory / 60, 2 /* Overcommit vCPUs */),
-        Some(val) if val == "type4.2" => (memory / 15, 8 /* Overcommit vCPUs */),
-        Some(val) if val == "type4.3" => (memory / 4, vcpus / 4),
-        Some(val) if val == "type4.4" => (memory / 2, vcpus / 2),
-        _ => (memory, vcpus),
+    let reward_type = config.icos_settings.node_reward_type.as_deref();
+    let count = reward_type.map_or(1, guest_vm_count);
+
+    let (memory, vcpus) = match reward_type {
+        Some("type4.1") => (memory / count, 2 /* Overcommit vCPUs */),
+        Some("type4.2") => (memory / count, 8 /* Overcommit vCPUs */),
+        _ => (memory / count, vcpus / count),
     };
 
-    let topology = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.1" => Topology {
+    let topology = match reward_type {
+        Some("type4.1") => Topology {
             nr_of_sockets: 1,
             nr_of_cores: vcpus,
             nr_of_threads: 1,
@@ -263,16 +275,12 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
 }
 
 pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
-    match guest_vm_type {
-        GuestVMType::Default => PathBuf::from(format!(
-            "{DEFAULT_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-        GuestVMType::Upgrade => PathBuf::from(format!(
-            "{UPGRADE_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-    }
+    let prefix = match guest_vm_type {
+        GuestVMType::Default => DEFAULT_SERIAL_LOG_PREFIX,
+        GuestVMType::Upgrade => UPGRADE_SERIAL_LOG_PREFIX,
+    };
+
+    PathBuf::from(format!("{prefix}{suffix}.log", suffix = slot.to_suffix()))
 }
 
 #[cfg(all(test, not(feature = "skip_default_tests")))]
@@ -572,6 +580,50 @@ mod tests {
         assert!(
             media_path.metadata().unwrap().size() > 0,
             "Config media file is empty"
+        );
+    }
+
+    #[test]
+    fn test_vm_memory_gib() {
+        const TOTAL: u32 = 480;
+
+        // One guest, so an upgrade VM is provisioned and its memory held back.
+        for reward_type in [None, Some("type0"), Some("type4"), Some("type4.5")] {
+            assert_eq!(
+                vm_memory_gib(GuestVMType::Default, reward_type, TOTAL),
+                TOTAL - UPGRADE_VM_MEMORY_GIB,
+                "{reward_type:?}"
+            );
+        }
+
+        // Many guests, no upgrade VM: the slot gets its whole share.
+        for reward_type in ["type4.1", "type4.2", "type4.3", "type4.4"] {
+            assert_eq!(
+                vm_memory_gib(GuestVMType::Default, Some(reward_type), TOTAL),
+                TOTAL,
+                "{reward_type}"
+            );
+        }
+
+        assert_eq!(
+            vm_memory_gib(GuestVMType::Upgrade, Some("type0"), TOTAL),
+            UPGRADE_VM_MEMORY_GIB
+        );
+    }
+
+    #[test]
+    fn test_serial_log_path() {
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(16)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial16.log")
         );
     }
 

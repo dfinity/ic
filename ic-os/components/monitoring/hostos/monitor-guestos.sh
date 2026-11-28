@@ -30,24 +30,11 @@ Arguments:
 done
 
 function monitor_guestos() {
-    node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
+    COUNT=$(get_guest_vm_count)
 
-    case "${node_reward_type}" in
-        type4.0) COUNT=32 ;;
-        type4.1) COUNT=60 ;;
-        type4.2) COUNT=8 ;;
-        type4.3) COUNT=4 ;;
-        type4.4) COUNT=2 ;;
-        *) COUNT=1 ;;
-    esac
-
-    for i in $(seq 0 "$((COUNT - 1))"); do
-        # A single GuestOS keeps the guestos name
-        if [ "$COUNT" -eq 1 ]; then
-            s=""
-        else
-            s=$i
-        fi
+    # Slots are 1-based. There is no guestos0.
+    for i in $(seq 1 "${COUNT}"); do
+        s=$(get_guest_vm_suffix "$i" "$COUNT")
 
         vm="guestos$s"
 

@@ -26,6 +26,7 @@ proxies:
       - regex: mr_blocks_not_proposed_total
         actions:
           - keep
+    cache_duration: 8s
   # Expose selected GuestOS node exporter metrics to chainloaded HostOS metrics proxy.
   - listen_on:
       url: https://[::]:42372/metrics/guestos_node_exporter
@@ -52,6 +53,7 @@ proxies:
       - regex: node_timex_sync_status
         actions:
           - keep
+    cache_duration: 8s
 metrics:
   # Telemetry of metrics-proxy itself (port open for GuestOS in ic.json5.template, see nftables.conf in HostOS for context).
   url: https://[::]:19100/metrics

@@ -3114,6 +3114,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "serde_yaml",
  "sev_guest",
  "strum 0.28.0",
  "tempfile",

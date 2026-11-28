@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -17,4 +17,9 @@ rust_shared_library(
         "@crate_index//:serde",
         "@crate_index//:serde_json",
     ],
+)
+
+rust_test(
+    name = "tests",
+    crate = ":nss_icos",
 )

@@ -99,8 +99,12 @@ function resize_partition() {
 
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    # Configure multiple GuestOS if type4.X
-    if [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+    # One logical volume per GuestOS VM.
+    local guest_vm_count
+    guest_vm_count=$(/opt/ic/bin/config_tool guest-vm-count --node-reward-type "${node_reward_type}")
+    log_and_halt_installation_on_error "${?}" "Unable to determine GuestOS VM count."
+
+    if ((guest_vm_count > 1)); then
         # Cleanup the initial GuestOS
         lvremove -f hostlvm/guestos >/dev/null 2>&1
         log_and_halt_installation_on_error "${?}" "Unable to cleanup initial GuestOS volume"
@@ -119,12 +123,7 @@ function resize_partition() {
             done
         }
 
-        case "${node_reward_type}" in
-            type4.1) create_guestos_lvs 60 ;;
-            type4.2) create_guestos_lvs 15 ;;
-            type4.3) create_guestos_lvs 4 ;;
-            type4.4) create_guestos_lvs 2 ;;
-        esac
+        create_guestos_lvs "${guest_vm_count}"
     # "Normal" behavior
     else
         # Extend GuestOS LV to fill VG space
