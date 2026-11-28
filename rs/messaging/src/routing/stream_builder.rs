@@ -770,8 +770,14 @@ impl StreamBuilderImpl {
             ));
         }
 
+        // Put the updated CanisterStates (outgoing messages removed) and Streams
+        // (messages added) into the ReplicatedState to be returned.
+        state.put_streams(streams);
+
         // Export the total number of enqueued messages and byte size, per stream.
-        streams
+        state
+            .metadata
+            .streams()
             .iter()
             .map(|(subnet, stream)| {
                 (
@@ -810,9 +816,9 @@ impl StreamBuilderImpl {
         self.observe_misrouted_messages(&state);
 
         {
-            // Record the enqueuing time of any messages newly enqueued into `streams`.
+            // Record the enqueuing time of any messages newly enqueued into the streams.
             let mut time_in_stream_metrics = self.time_in_stream_metrics.lock().unwrap();
-            for (subnet_id, stream) in streams.iter() {
+            for (subnet_id, stream) in state.metadata.streams().iter() {
                 if *subnet_id == self.subnet_id {
                     continue;
                 }
@@ -820,9 +826,6 @@ impl StreamBuilderImpl {
             }
         }
 
-        // Put the updated CanisterStates (outgoing messages removed) and Streams
-        // (messages added) into the ReplicatedState to be returned.
-        state.put_streams(streams);
         state
     }
 

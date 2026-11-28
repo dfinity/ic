@@ -2585,6 +2585,66 @@ fn test_observe_misrouted_messages_on_third_party_subnet() {
     });
 }
 
+/// Tests that `build_streams()` exports the misrouted messages metric for the
+/// streams it returns.
+#[test]
+fn test_misrouted_messages_metric_exported() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
+
+        let local_canister = canister_test_id(100);
+        // Already migrated from the local subnet to `REMOTE_SUBNET`.
+        let migrated_canister = canister_test_id(200);
+
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                    CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
+            network_topology.canister_migrations = Arc::new(
+                CanisterMigrations::try_from(btreemap! {
+                    CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET],
+                })
+                .unwrap(),
+            );
+        });
+
+        let message_to = |receiver: CanisterId| {
+            RequestBuilder::default()
+                .sender(local_canister)
+                .receiver(receiver)
+                .build()
+                .into()
+        };
+
+        // The message to `migrated_canister` in the loopback stream is misrouted; the
+        // one in the stream to `REMOTE_SUBNET` is not.
+        let mut loopback_stream = Stream::default();
+        loopback_stream.push(message_to(local_canister));
+        loopback_stream.push(message_to(migrated_canister));
+        let mut stream_to_remote_subnet = Stream::default();
+        stream_to_remote_subnet.push(message_to(migrated_canister));
+
+        state.with_streams(btreemap! {
+            LOCAL_SUBNET => loopback_stream,
+            REMOTE_SUBNET => stream_to_remote_subnet,
+        });
+
+        stream_builder.build_streams(state);
+
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 1),
+                (&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 0)
+            ]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MISROUTED_MESSAGES)
+        );
+    });
+}
+
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
 /// be used by a test using specific stream limits.
 fn new_fixture_with_limits(
