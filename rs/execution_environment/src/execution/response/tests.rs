@@ -8,7 +8,6 @@ use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_execution_environment::{
     ExecutionResponse, ExecutionTest, ExecutionTestBuilder, check_ingress_status,
@@ -134,13 +133,6 @@ fn execute_response_refunds_cycles() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::RequestAndResponseTransmission)
-            .unwrap();
-        let consumed_cycles_before_counter = *test
-            .canister_state(a_id)
-            .system_state
-            .canister_metrics()
             .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
@@ -151,13 +143,6 @@ fn execute_response_refunds_cycles() {
         let instructions_executed = instructions_after - instructions_before;
         let balance_after = test.canister_state(a_id).system_state.balance();
         let consumed_cycles_after = *test
-            .canister_state(a_id)
-            .system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::RequestAndResponseTransmission)
-            .unwrap();
-        let consumed_cycles_after_counter = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
@@ -201,32 +186,22 @@ fn execute_response_refunds_cycles() {
         }
         assert_eq!(
             consumed_cycles_after,
-            consumed_cycles_before - response_transmission_refund.nominal(),
-        );
-        assert_eq!(
-            consumed_cycles_after_counter,
-            consumed_cycles_before_counter
+            consumed_cycles_before
                 + (test.call_fee("update", &b_callback) + actual_response_transmission_fee)
                     .nominal(),
         );
-        assert_eq!(consumed_cycles_after, consumed_cycles_after_counter);
     }
 }
 
 /// A callback created before April 2026 carries no `prepayment_for_call_transmission`,
-/// so `prepayment_for_response_transmission` stands in for it. The refund path and
-/// `SystemState::outstanding_prepayments()` fall back on it independently of each
-/// other, and the two must agree on the amount that executing the response settles.
+/// so the refund path falls back on `prepayment_for_response_transmission` instead.
 ///
-/// Note that the fallback leaves the call fee out: the gauge holds the whole call
-/// transmission prepayment, of which the response transmission prepayment accounts
-/// for only a part, and nothing ever refunds the rest. The monotonic amounts thus
-/// stay short of the gauges by exactly that fee once the response is executed.
-///
-/// The call fee is a `RequestAndResponseTransmission` charge, so the by-use-case
-/// amounts are checked alongside the scalar ones throughout.
+/// The fallback leaves the call fee out: the response transmission prepayment only
+/// stands in for a part of the call transmission prepayment, so executing the
+/// response settles just the response transmission and the call fee is never
+/// accounted for as consumed.
 #[test]
-fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
+fn execute_response_of_legacy_callback_settles_the_response_transmission() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
 
@@ -260,87 +235,54 @@ fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     test.induct_messages();
     test.execute_message(b_id);
 
-    // The `xnet_call_performed_fee` plus the fee for transmitting the request: the
-    // part of the call transmission prepayment that the response transmission
-    // prepayment cannot stand in for.
-    let call_fee = test.call_fee("update", &b_callback).nominal();
-    // Non-zero, or the offset it stands for below would be vacuous.
-    assert_ne!(call_fee, NominalCycles::zero());
-
     let system_state = &test.canister_state(a_id).system_state;
-    let callback = system_state
-        .call_context_manager()
-        .unwrap()
-        .callback(callback_id)
-        .unwrap()
-        .clone();
-    assert!(callback.prepayment_for_call_transmission.is_zero());
-    // The prepayments that the refund path is expected to report, with the response
-    // transmission prepayment standing in for the missing call transmission one.
-    let outstanding_before = system_state.outstanding_prepayments().unwrap();
-    assert_eq!(
-        outstanding_before,
-        OutstandingPrepayments {
-            instructions: callback.prepayment_for_response_execution.nominal(),
-            transmission: callback.prepayment_for_response_transmission.nominal(),
-        }
-    );
-    let gauge_before = system_state.canister_metrics().consumed_cycles();
-    let monotonic_before = system_state.canister_metrics().consumed_cycles_monotonic();
-    assert_eq!(
-        gauge_before,
-        monotonic_before + outstanding_before.total() + call_fee
-    );
-    // The call fee sits in the `RequestAndResponseTransmission` amounts, so the same
-    // offset shows up there.
-    let transmission_gauge_before = transmission(
+    assert!(
         system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases(),
+            .call_context_manager()
+            .unwrap()
+            .callback(callback_id)
+            .unwrap()
+            .prepayment_for_call_transmission
+            .is_zero()
     );
-    let transmission_monotonic_before = transmission(
+    let consumed_before = system_state.canister_metrics().consumed_cycles_monotonic();
+    let transmission_before = transmission(
         system_state
             .canister_metrics()
             .consumed_cycles_by_use_cases_monotonic(),
-    );
-    assert_eq!(
-        transmission_gauge_before,
-        transmission_monotonic_before + outstanding_before.transmission + call_fee
     );
 
     // Execute the response on A.
     test.induct_messages();
     test.execute_message(a_id);
 
-    // Nothing is outstanding any more, and the monotonic amounts are short of the
-    // gauges by just the call fee: the refund path reported the very prepayments
-    // predicted above.
+    // Only the response transmission is settled, on top of the instructions for
+    // executing the response.
+    let response_transmission_fee = test
+        .cycles_account_manager()
+        .xnet_call_bytes_transmitted_fee(
+            NumBytes::from(b_callback.len() as u64),
+            test.get_own_subnet_cycles_config(),
+        )
+        .nominal();
     let system_state = &test.canister_state(a_id).system_state;
-    assert_eq!(
-        system_state.outstanding_prepayments(),
-        Some(OutstandingPrepayments::default())
-    );
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
-    );
-    let mut gauges = system_state
-        .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .clone();
-    *gauges
-        .get_mut(&CyclesUseCase::RequestAndResponseTransmission)
-        .unwrap() -= call_fee;
-    assert_eq!(
-        &gauges,
+    let transmission_after = transmission(
         system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic()
+            .consumed_cycles_by_use_cases_monotonic(),
+    );
+    assert_eq!(
+        transmission_after,
+        transmission_before + response_transmission_fee
+    );
+    assert_gt!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        consumed_before + response_transmission_fee
     );
 }
 
-/// The `RequestAndResponseTransmission` entry of one of the by-use-case consumed
-/// cycles maps.
+/// The `RequestAndResponseTransmission` entry of the by-use-case consumed cycles
+/// map.
 fn transmission(amounts: &BTreeMap<CyclesUseCase, NominalCycles>) -> NominalCycles {
     *amounts
         .get(&CyclesUseCase::RequestAndResponseTransmission)
@@ -1827,7 +1769,7 @@ fn dts_response_concurrent_cycles_change_persists_canister_log() {
         test.canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );

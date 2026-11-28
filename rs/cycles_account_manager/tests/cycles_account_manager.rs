@@ -458,28 +458,17 @@ fn subnet_cycles_config(
     )
 }
 
-/// The consumed cycles gauge and the monotonic consumed cycles counter of the
-/// given use case.
-fn consumed_cycles(
-    system_state: &SystemState,
-    use_case: CyclesUseCase,
-) -> (NominalCycles, NominalCycles) {
-    let gauge = system_state
-        .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .get(&use_case)
-        .copied()
-        .unwrap_or_else(NominalCycles::zero);
-    let counter = system_state
+/// The consumed cycles of the given use case.
+fn consumed_cycles(system_state: &SystemState, use_case: CyclesUseCase) -> NominalCycles {
+    system_state
         .canister_metrics()
         .consumed_cycles_by_use_cases_monotonic()
         .get(&use_case)
         .copied()
-        .unwrap_or_else(NominalCycles::zero);
-    (gauge, counter)
+        .unwrap_or_else(NominalCycles::zero)
 }
 
-fn consumed_cycles_for_instructions(system_state: &SystemState) -> (NominalCycles, NominalCycles) {
+fn consumed_cycles_for_instructions(system_state: &SystemState) -> NominalCycles {
     consumed_cycles(system_state, CyclesUseCase::Instructions)
 }
 
@@ -552,7 +541,7 @@ fn response_execution_cycles_match_response_execution_setting() {
         // counter is only updated once the prepayment is refunded, i.e. not yet.
         assert_eq!(
             consumed_cycles_for_instructions(&system_state),
-            (required.nominal(), NominalCycles::zero()),
+            NominalCycles::zero(),
             "unexpected consumed cycles after the adjustment for {context}"
         );
 
@@ -584,7 +573,7 @@ fn response_execution_cycles_match_response_execution_setting() {
         );
         assert_eq!(
             consumed_cycles_for_instructions(&system_state),
-            (expected.nominal(), expected.nominal()),
+            expected.nominal(),
             "unexpected consumed cycles after the refund for {context}"
         );
     }
@@ -598,8 +587,8 @@ fn response_execution_cycles_match_response_execution_setting() {
 /// In the second setting below the prepayment falls short of the requirement in
 /// the real part while exceeding it in the nominal one, so that the excess to be
 /// refunded is not zero. That is what pins down the order of the two: were the
-/// refund performed before the failing withdrawal, it would lower the consumed
-/// cycles gauge by that excess.
+/// refund performed before the failing withdrawal, it would record the settled part
+/// of the prepayment as consumed.
 #[test]
 fn adjust_prepayment_for_response_execution_leaves_state_unchanged_on_failure() {
     // The third component is the direction of the nominal part of the prepayment
@@ -709,10 +698,9 @@ fn settle_prepayment_for_unexecuted_response_charges_only_the_base_fee() {
             balance_before,
             "unexpected balance for {context}"
         );
-        let (gauge, counter) = consumed_cycles_for_instructions(&system_state);
         assert_eq!(
-            (gauge, counter),
-            (charged.nominal(), charged.nominal()),
+            consumed_cycles_for_instructions(&system_state),
+            charged.nominal(),
             "unexpected consumed cycles for {context}"
         );
     }
@@ -785,7 +773,7 @@ fn response_transmission_refund_never_exceeds_the_prepayment() {
                 );
                 assert_eq!(
                     consumed_cycles(&system_state, CyclesUseCase::RequestAndResponseTransmission),
-                    (charged.nominal(), charged.nominal()),
+                    charged.nominal(),
                     "unexpected consumed cycles for {context}"
                 );
                 // The nominal parts do not depend on the cost schedule, so the
@@ -1485,15 +1473,18 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
     );
 }
 
+/// Prepaying for execution takes the cycles out of the balance, but they only count
+/// as consumed once the refund is known.
 #[test]
-fn withdraw_execution_cycles_consumes_cycles() {
+fn prepay_execution_cycles_does_not_consume_cycles_yet() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut system_state = SystemStateBuilder::new().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles();
+    let balance_before = system_state.balance();
+    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles_monotonic();
     cycles_account_manager
         .prepay_execution_cycles(
             &mut system_state,
@@ -1510,8 +1501,9 @@ fn withdraw_execution_cycles_consumes_cycles() {
             WASM_EXECUTION_MODE,
         )
         .unwrap();
-    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
-    assert!(consumed_cycles_before < consumed_cycles_after);
+    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles_monotonic();
+    assert!(system_state.balance() < balance_before);
+    assert_eq!(consumed_cycles_before, consumed_cycles_after);
 }
 
 #[test]
@@ -1522,7 +1514,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
     let mut balance = Cycles::new(5_000_000_000_000);
-    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles();
+    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles_monotonic();
     cycles_account_manager
         .withdraw_cycles_for_transfer(
             system_state.canister_id(),
@@ -1542,7 +1534,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
+    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles_monotonic();
 
     // Cycles are not consumed
     assert_eq!(consumed_cycles_before, consumed_cycles_after);
@@ -1556,7 +1548,7 @@ fn consume_cycles_updates_consumed_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles();
+    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles_monotonic();
     cycles_account_manager
         .consume_cycles(
             &mut system_state,
@@ -1571,7 +1563,7 @@ fn consume_cycles_updates_consumed_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
+    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles_monotonic();
 
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,

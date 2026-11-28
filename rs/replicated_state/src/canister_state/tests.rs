@@ -9,7 +9,7 @@ use crate::canister_state::execution_state::{CustomSection, CustomSectionType, W
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LruConnectionMetrics,
-    MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
+    MAX_CONNECTION_METRICS_ENTRIES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -25,8 +25,8 @@ use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, CanisterTask,
-    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
+    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES,
+    NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -847,13 +847,16 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles().get(),
+        system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic()
+            .get(),
         ingress_induction_debit.get()
     );
     assert_eq!(
         *system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         NominalCycles::new(ingress_induction_debit.get()),
@@ -902,13 +905,16 @@ fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
     // Only the charged part of the debit is reported as consumed; the dropped part
     // must not show up in the consumed cycles metrics.
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles().get(),
+        system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic()
+            .get(),
         remaining_balance.get()
     );
     assert_eq!(
         *system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         NominalCycles::new(remaining_balance.get()),
@@ -929,9 +935,10 @@ fn update_balance_and_consumed_cycles_correctly() {
         system_state.balance(),
         INITIAL_CYCLES - initial_consumed_cycles
     );
+    // Nothing is consumed for good until the refund is known.
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        prepaid_cycles.nominal()
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        NominalCycles::zero()
     );
 
     let refund = CompoundCycles::<Instructions>::new(Cycles::new(100), cost_schedule);
@@ -941,7 +948,7 @@ fn update_balance_and_consumed_cycles_correctly() {
         INITIAL_CYCLES - initial_consumed_cycles + refund.real()
     );
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
+        system_state.canister_metrics().consumed_cycles_monotonic(),
         (prepaid_cycles - refund).nominal()
     );
 }
@@ -963,190 +970,17 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     assert_eq!(
         *system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         (prepaid_cycles - refund).nominal()
     );
 }
 
-/// A full refund (i.e. a refund equal to its prepayment) must still lower the
-/// consumed cycles gauges by the refunded amount, even though it contributes
-/// nothing to the monotonic counters.
+/// Prepayments whose refund is still outstanding are not part of the consumed
+/// cycles. Covers the scalar total and the by-use-case map alike.
 #[test]
-fn full_refund_resets_consumed_cycles() {
-    fn test<T: CyclesUseCaseRefundableKind>(cost_schedule: CanisterCyclesCostSchedule) {
-        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-        let use_case = T::cycles_use_case();
-        let ctx = format!("{use_case:?} with {cost_schedule:?} cost schedule");
-        // An earlier prepayment for the same use case that is never refunded, so the
-        // gauges must fall back to it (rather than all the way down to zero) once the
-        // prepayment below is refunded in full.
-        let outstanding_cycles = CompoundCycles::<T>::new(Cycles::from(500_u128), cost_schedule);
-        let cycles_to_consume = Cycles::from(1000_u128);
-        let prepaid_cycles = CompoundCycles::<T>::new(cycles_to_consume, cost_schedule);
-        // The cost schedule only waives the real amount charged to the balance;
-        // the nominal amount recorded in the metrics is the same either way.
-        assert_eq!(
-            prepaid_cycles.nominal(),
-            NominalCycles::new(cycles_to_consume.get()),
-            "{ctx}"
-        );
-
-        system_state.consume_cycles(outstanding_cycles);
-        system_state.consume_cycles(prepaid_cycles);
-        assert_eq!(
-            system_state.balance(),
-            INITIAL_CYCLES - outstanding_cycles.real() - prepaid_cycles.real(),
-            "{ctx}"
-        );
-        assert_eq!(
-            system_state.canister_metrics().consumed_cycles(),
-            outstanding_cycles.nominal() + prepaid_cycles.nominal(),
-            "{ctx}"
-        );
-
-        // Refund the whole prepayment, e.g. because nothing was transmitted or executed.
-        system_state.refund_cycles(prepaid_cycles, prepaid_cycles);
-
-        // Nothing was consumed by this prepayment in the end, so the balance and the
-        // gauges must be back to where they were before it, i.e. only the outstanding
-        // prepayment is left.
-        assert_eq!(
-            system_state.balance(),
-            INITIAL_CYCLES - outstanding_cycles.real(),
-            "{ctx}"
-        );
-        assert_eq!(
-            system_state.canister_metrics().consumed_cycles(),
-            outstanding_cycles.nominal(),
-            "{ctx}"
-        );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .consumed_cycles_by_use_cases()
-                .get(&use_case),
-            Some(&outstanding_cycles.nominal()),
-            "{ctx}"
-        );
-        // And the monotonic counter must not have moved at all: for a refundable use
-        // case it is bumped at refund time only, by `prepayment - refund`.
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .consumed_cycles_by_use_cases_monotonic()
-                .get(&use_case),
-            Some(&NominalCycles::zero()),
-            "{ctx}"
-        );
-    }
-
-    for cost_schedule in [
-        CanisterCyclesCostSchedule::Normal,
-        CanisterCyclesCostSchedule::Free,
-    ] {
-        test::<Instructions>(cost_schedule);
-        test::<RequestAndResponseTransmission>(cost_schedule);
-    }
-}
-
-/// The prepayments of an open callback are outstanding until its response is
-/// executed: `prepayment_for_response_execution` plus `prepayment_for_call_transmission`.
-#[test]
-fn outstanding_prepayments_of_open_callbacks() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    assert_eq!(
-        system_state.outstanding_prepayments(),
-        Some(OutstandingPrepayments::default())
-    );
-
-    // `SystemStateTesting::with_callback` prepays 42 for the response execution, 84
-    // for the response transmission and 168 for the call transmission. Only the
-    // first and the last are outstanding: the call transmission prepayment covers
-    // the transmission of both the request and the response, so the response
-    // transmission prepayment is not counted on top of it; it is the fallback for
-    // legacy callbacks only, see
-    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`.
-    //
-    // The response execution prepayment is outstanding for `Instructions`, the call
-    // transmission one for `RequestAndResponseTransmission`.
-    fixture.make_callback(NO_DEADLINE);
-    assert_eq!(
-        fixture
-            .canister_state
-            .system_state
-            .outstanding_prepayments(),
-        Some(OutstandingPrepayments {
-            instructions: NominalCycles::new(42),
-            transmission: NominalCycles::new(168),
-        })
-    );
-
-    fixture.make_callback(SOME_DEADLINE);
-    assert_eq!(
-        fixture
-            .canister_state
-            .system_state
-            .outstanding_prepayments(),
-        Some(OutstandingPrepayments {
-            instructions: NominalCycles::new(2 * 42),
-            transmission: NominalCycles::new(2 * 168),
-        })
-    );
-}
-
-/// The prepayment of an aborted execution is outstanding until the execution is
-/// retried and completed; a paused execution's is not part of the replicated state.
-#[test]
-fn outstanding_prepayments_of_paused_and_aborted_executions() {
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
-    let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
-    let input = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
-
-    let mut fixture = CanisterStateFixture::new();
-    fixture
-        .canister_state
-        .system_state
-        .task_queue
-        .enqueue(ExecutionTask::AbortedExecution {
-            input: input.clone(),
-            prepaid_execution_cycles: prepaid,
-        });
-    assert_eq!(
-        fixture
-            .canister_state
-            .system_state
-            .outstanding_prepayments(),
-        Some(OutstandingPrepayments {
-            instructions: prepaid.nominal(),
-            ..Default::default()
-        })
-    );
-
-    let mut fixture = CanisterStateFixture::new();
-    fixture
-        .canister_state
-        .system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(0),
-            input,
-        });
-    assert_eq!(
-        fixture
-            .canister_state
-            .system_state
-            .outstanding_prepayments(),
-        None
-    );
-}
-
-/// A gauge exceeds its monotonic counterpart by exactly the prepayments outstanding
-/// for it. Covers the scalar total and the by-use-case map alike.
-#[test]
-fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
+fn consumed_cycles_monotonic_excludes_outstanding_prepayments() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut fixture = CanisterStateFixture::new();
     let system_state = &mut fixture.canister_state.system_state;
@@ -1174,10 +1008,6 @@ fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
     let settled_memory = final_charge.nominal();
     let settled_instructions = (prepaid - refund).nominal();
     let settled = settled_memory + settled_instructions;
-    let outstanding = OutstandingPrepayments {
-        instructions: outstanding_instructions.nominal(),
-        transmission: outstanding_transmission.nominal(),
-    };
 
     /// Asserts that the monotonic amounts are exactly what was settled.
     fn assert_settled(
@@ -1203,74 +1033,7 @@ fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
         );
     }
 
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        settled + outstanding.total()
-    );
-    assert_eq!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases(),
-        &BTreeMap::from([
-            (CyclesUseCase::Memory, settled_memory),
-            (
-                CyclesUseCase::Instructions,
-                settled_instructions + outstanding.instructions
-            ),
-            (
-                CyclesUseCase::RequestAndResponseTransmission,
-                outstanding.transmission
-            ),
-        ])
-    );
-    assert_eq!(system_state.outstanding_prepayments(), Some(outstanding));
     assert_settled(system_state, settled, settled_memory, settled_instructions);
-}
-
-#[test]
-fn consume_cycles_exceeding_balance_reports_only_the_charged_amount() {
-    fn test(cost_schedule: CanisterCyclesCostSchedule) {
-        let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-        let ctx = format!("{cost_schedule:?} cost schedule");
-        // Request more cycles than the balance can cover.
-        let requested_cycles =
-            CompoundCycles::<Instructions>::new(INITIAL_CYCLES + Cycles::new(1000), cost_schedule);
-        system_state.consume_cycles(requested_cycles);
-
-        // Under the normal cost schedule the balance is drained and only the drained
-        // amount is reported as consumed, i.e. the part of the request that the balance
-        // could not cover is not. Under the free cost schedule this use case is not
-        // charged at all, so there is nothing to cap: the balance is untouched and the
-        // full nominal amount is reported.
-        let (expected_balance, expected_consumed) = match cost_schedule {
-            CanisterCyclesCostSchedule::Normal => {
-                (Cycles::zero(), NominalCycles::new(INITIAL_CYCLES.get()))
-            }
-            CanisterCyclesCostSchedule::Free => (INITIAL_CYCLES, requested_cycles.nominal()),
-        };
-        assert_eq!(expected_balance, system_state.balance(), "{ctx}");
-        assert_eq!(
-            expected_consumed,
-            system_state.canister_metrics().consumed_cycles(),
-            "{ctx}"
-        );
-        assert_eq!(
-            *system_state
-                .canister_metrics()
-                .consumed_cycles_by_use_cases()
-                .get(&CyclesUseCase::Instructions)
-                .unwrap(),
-            expected_consumed,
-            "{ctx}"
-        );
-    }
-
-    for cost_schedule in [
-        CanisterCyclesCostSchedule::Normal,
-        CanisterCyclesCostSchedule::Free,
-    ] {
-        test(cost_schedule);
-    }
 }
 
 #[test]
@@ -1310,13 +1073,13 @@ fn consume_cycles_exceeding_balance_and_reserved_balance_reports_only_the_charge
         );
         assert_eq!(
             expected_consumed,
-            system_state.canister_metrics().consumed_cycles(),
+            system_state.canister_metrics().consumed_cycles_monotonic(),
             "{ctx}"
         );
         assert_eq!(
             *system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::Memory)
                 .unwrap(),
             expected_consumed,
@@ -1654,8 +1417,7 @@ fn drops_aborted_canister_install_after_split() {
 }
 
 /// `consumed_cycles_monotonic` is only bumped once the refund of a prepayment is
-/// known, by the actually consumed amount; unlike the gauge, which is bumped by the
-/// prepayment and lowered again by the refund.
+/// known, by the actually consumed amount.
 #[test]
 fn consumed_cycles_monotonic_accounts_for_refundable_use_cases_at_refund() {
     fn test<T: CyclesUseCaseRefundableKind>(cost_schedule: CanisterCyclesCostSchedule) {
@@ -1668,11 +1430,6 @@ fn consumed_cycles_monotonic_accounts_for_refundable_use_cases_at_refund() {
         let refund = CompoundCycles::<T>::new(Cycles::new(100), cost_schedule);
 
         system_state.consume_cycles(prepaid);
-        assert_eq!(
-            system_state.canister_metrics().consumed_cycles(),
-            prepaid.nominal(),
-            "{ctx}"
-        );
         // Nothing accounted for yet, the refund is not known.
         assert_eq!(
             system_state.canister_metrics().consumed_cycles_monotonic(),
@@ -1681,11 +1438,6 @@ fn consumed_cycles_monotonic_accounts_for_refundable_use_cases_at_refund() {
         );
 
         system_state.refund_cycles(prepaid, refund);
-        assert_eq!(
-            system_state.canister_metrics().consumed_cycles(),
-            (prepaid - refund).nominal(),
-            "{ctx}"
-        );
         assert_eq!(
             system_state.canister_metrics().consumed_cycles_monotonic(),
             (prepaid - refund).nominal(),
@@ -1713,17 +1465,13 @@ fn consumed_cycles_monotonic_accounts_for_direct_charges_right_away() {
     system_state.consume_cycles(charge);
 
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        charge.nominal()
-    );
-    assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         charge.nominal()
     );
 }
 
-/// A full refund lowers the gauge back to zero but must not lower
-/// `consumed_cycles_monotonic`, which was never bumped in the first place.
+/// A full refund must not lower `consumed_cycles_monotonic`, which was never
+/// bumped by the prepayment in the first place.
 #[test]
 fn full_refund_does_not_lower_consumed_cycles_monotonic() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
@@ -1736,10 +1484,6 @@ fn full_refund_does_not_lower_consumed_cycles_monotonic() {
     system_state.refund_cycles(prepaid, prepaid);
 
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        direct_charge.nominal()
-    );
-    assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         direct_charge.nominal()
     );
@@ -1747,10 +1491,7 @@ fn full_refund_does_not_lower_consumed_cycles_monotonic() {
 
 /// The cycles prepaid for an `install_code` that a subnet split drops are refunded
 /// in full: the execution is never retried (subnet A' rejects the corresponding
-/// call), so the canister has nothing to show for them. This also keeps the
-/// consumed cycles metrics consistent -- leaving the prepayment in the gauge with
-/// nothing in the state to account for it would break the invariant on
-/// `SystemState::outstanding_prepayments`.
+/// call), so the canister has nothing to show for them.
 #[test]
 fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
@@ -1767,20 +1508,8 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
             prepaid_execution_cycles: prepaid,
         });
 
-    // The prepayment was taken out of the balance and is in the consumed cycles
-    // gauge; nothing has been consumed for good yet, so the monotonic amount is
-    // still zero.
-    assert_eq!(
-        system_state.outstanding_prepayments(),
-        Some(OutstandingPrepayments {
-            instructions: prepaid.nominal(),
-            ..Default::default()
-        })
-    );
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        prepaid.nominal()
-    );
+    // The prepayment was taken out of the balance; nothing has been consumed for
+    // good yet, so the consumed cycles are still zero.
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         NominalCycles::zero()
@@ -1797,20 +1526,10 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
 
     canister_state.drop_in_progress_management_calls_after_split();
 
-    // The prepayment is refunded in full, so the balance is whole again and the gauge
-    // is back to zero. Nothing was consumed, so the monotonic amounts stay at zero
-    // too -- and with the prepayment no longer outstanding, the invariant still
-    // holds.
+    // The prepayment is refunded in full, so the balance is whole again. Nothing was
+    // consumed, so the consumed cycles stay at zero.
     let system_state = &canister_state.system_state;
     assert_eq!(system_state.balance(), balance_before + prepaid.real());
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::zero()
-    );
-    assert_eq!(
-        system_state.outstanding_prepayments(),
-        Some(OutstandingPrepayments::default())
-    );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
         NominalCycles::zero()

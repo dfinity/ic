@@ -250,9 +250,8 @@ impl ResponseHelper {
         // `self.prepayment_for_call_transmission` might be zero for any responses
         // to requests that were produced before this field was stored in callbacks.
         // In that scenario, use `self.prepayment_for_response_transmission` for some
-        // partial update to consumed metrics (the ones that behave like counters)
-        // during refund phase. This does not affect the refund to balance or the
-        // metrics that behave like gauges as these are updated based on the refund amount.
+        // partial update to the consumed cycles metrics during refund phase. This does
+        // not affect the refund to balance, which is based on the refund amount.
         // This code can be dropped when all callbacks have the `prepayment_for_call_transmission`
         // field set.
         let prepayment_for_call_transmission = if self.prepayment_for_call_transmission.is_zero() {

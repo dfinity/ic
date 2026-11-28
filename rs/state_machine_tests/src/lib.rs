@@ -5307,7 +5307,7 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .clone()
     }
 

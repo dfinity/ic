@@ -287,7 +287,7 @@ fn consumed_cycles_for_instructions(
     test.canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::Instructions)
         .cloned()
         .unwrap_or_default()

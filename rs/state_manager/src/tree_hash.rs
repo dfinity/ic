@@ -370,11 +370,8 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-            // Exercise the monotonic canisters' part. (In production, the
-            // monotonic part never exceeds the gauge part, but that is irrelevant
-            // here.)
-            subnet_metrics
-                .refresh_consumed_cycles(NominalCycles::zero(), NominalCycles::new(30_000_000_000));
+            // Exercise the canisters' part.
+            subnet_metrics.refresh_consumed_cycles(NominalCycles::new(30_000_000_000));
 
             state.metadata.subnet_metrics = subnet_metrics;
 

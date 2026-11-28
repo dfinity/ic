@@ -458,9 +458,13 @@ fn is_controller_test() {
     }
 }
 
+/// Performing a call prepays for transmitting it and for executing the response.
+/// The prepayments are taken out of the balance, but they only count as consumed
+/// once the response is executed and the refunds are known.
 #[test]
-fn call_increases_cycles_consumed_metric() {
+fn call_prepayments_are_not_consumed_cycles_yet() {
     let mut system_state = SystemStateBuilder::default().build();
+    let balance_before = system_state.balance();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -483,14 +487,17 @@ fn call_increases_cycles_consumed_metric() {
             &no_op_logger(),
         )
         .unwrap();
-    assert!(system_state.canister_metrics().consumed_cycles().get() > 0);
-    assert_ne!(
-        *system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::RequestAndResponseTransmission)
-            .unwrap(),
+    assert!(system_state.balance() < balance_before);
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
         NominalCycles::zero()
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::RequestAndResponseTransmission),
+        Some(&NominalCycles::zero())
     );
 }
 

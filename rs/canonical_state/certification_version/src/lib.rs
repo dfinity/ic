@@ -4,9 +4,8 @@ use strum_macros::{EnumCount, EnumIter};
 pub enum CertificationVersion {
     /// Report the cycles consumed by non-deleted canisters in
     /// `/subnet/<subnet_id>/metrics` as the sum of the monotonic
-    /// `CanisterMetrics::consumed_cycles_monotonic` instead of the
-    /// `CanisterMetrics::consumed_cycles` gauge (which includes outstanding
-    /// prepayments).
+    /// `CanisterMetrics::consumed_cycles_monotonic`, which excludes outstanding
+    /// prepayments.
     V30 = 30,
 }
 

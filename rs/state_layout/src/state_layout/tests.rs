@@ -44,7 +44,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         executed: 0,
         interrupted_during_execution: 0,
         certified_data: vec![],
-        consumed_cycles: NominalCycles::zero(),
         consumed_cycles_monotonic: NominalCycles::zero(),
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
@@ -54,7 +53,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         global_timer_nanos: None,
         canister_version: 0,
         canister_creation_timestamp_nanos: None,
-        consumed_cycles_by_use_cases: BTreeMap::new(),
         consumed_cycles_by_use_cases_monotonic: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
@@ -139,7 +137,6 @@ fn test_encode_decode_non_empty_controllers() {
 #[test]
 fn test_encode_decode_consumed_cycles_monotonic() {
     let canister_state_bits = CanisterStateBits {
-        consumed_cycles: NominalCycles::new(1000),
         consumed_cycles_monotonic: NominalCycles::new(900),
         ..default_canister_state_bits()
     };
@@ -147,7 +144,6 @@ fn test_encode_decode_consumed_cycles_monotonic() {
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
     let decoded = CanisterStateBits::try_from(pb_bits.clone()).unwrap();
 
-    assert_eq!(decoded.consumed_cycles, NominalCycles::new(1000));
     assert_eq!(decoded.consumed_cycles_monotonic, NominalCycles::new(900));
 
     // The field is absent in checkpoints written before it was introduced; it
@@ -156,7 +152,6 @@ fn test_encode_decode_consumed_cycles_monotonic() {
     pb_bits.consumed_cycles_monotonic = None;
     let decoded = CanisterStateBits::try_from(pb_bits).unwrap();
 
-    assert_eq!(decoded.consumed_cycles, NominalCycles::new(1000));
     assert_eq!(decoded.consumed_cycles_monotonic, NominalCycles::zero());
 }
 

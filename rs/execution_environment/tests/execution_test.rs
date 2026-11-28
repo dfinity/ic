@@ -3557,11 +3557,10 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
     (tree, certification.signed.content.hash)
 }
 
-/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
+/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`
 /// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
-/// canisters it loads, exactly as the refresh on every committed state does. Its
-/// monotonic counterpart is what `/subnet/<subnet_id>/metrics` certifies, so a
-/// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
+/// canisters it loads, exactly as the refresh on every committed state does. The
+/// total is what `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a checkpoint has to certify byte-for-byte the same leaf
 /// as one that kept running.
 #[test]
 fn subnet_metrics_are_unchanged_across_a_restart() {
@@ -3601,7 +3600,7 @@ fn subnet_metrics_are_unchanged_across_a_restart() {
     assert_gt!(metrics_before.consumed_cycles_total().get(), 0);
     assert_gt!(
         metrics_before
-            .consumed_cycles_total_including_canisters()
+            .consumed_cycles_total_including_canisters_monotonic()
             .get(),
         metrics_before.consumed_cycles_total().get()
     );
@@ -3626,11 +3625,15 @@ fn consumed_by_canisters(env: &StateMachine) -> NominalCycles {
     env.get_latest_state()
         .canisters_iter()
         .fold(NominalCycles::zero(), |total, canister| {
-            total + canister.system_state.canister_metrics().consumed_cycles()
+            total
+                + canister
+                    .system_state
+                    .canister_metrics()
+                    .consumed_cycles_monotonic()
         })
 }
 
-/// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
+/// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic` of the
 /// latest state is what it is defined to be, and returns it.
 ///
 /// No test using this helper makes an outcall, requests a threshold signature or
@@ -3650,7 +3653,7 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
         consumed_by_deleted_canisters
     );
 
-    let total = subnet_metrics.consumed_cycles_total_including_canisters();
+    let total = subnet_metrics.consumed_cycles_total_including_canisters_monotonic();
     assert_eq!(
         total,
         consumed_by_deleted_canisters + consumed_by_canisters(env)
@@ -3658,9 +3661,9 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
     total
 }
 
-/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
+/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`
 /// is refreshed on every committed state, not only on the rounds that happen to
-/// touch the subnet-level fields. Its monotonic counterpart is certified at
+/// touch the subnet-level fields. The total is certified at
 /// `/subnet/<subnet_id>/metrics`, so a stale one would be served to
 /// users as the current consumption of the subnet.
 ///
@@ -3708,7 +3711,7 @@ fn consumed_cycles_in_subnet_metrics_are_refreshed_every_round() {
 }
 
 /// Deleting a canister moves its consumption out of the canisters' part of
-/// `SubnetMetrics::consumed_cycles_total_including_canisters` and into
+/// `SubnetMetrics::consumed_cycles_total_including_canisters_monotonic` and into
 /// `consumed_cycles_by_deleted_canisters`, and burns its remaining balance on top.
 /// The refresh has to pick up both in the same round: counting the canister on both
 /// sides, or on neither, leaves the total off by exactly its consumption.
@@ -3738,7 +3741,7 @@ fn consumed_cycles_in_subnet_metrics_are_refreshed_when_a_canister_is_deleted() 
             victim_state
                 .system_state
                 .canister_metrics()
-                .consumed_cycles(),
+                .consumed_cycles_monotonic(),
             victim_state.system_state.balance(),
         )
     };
@@ -4551,26 +4554,20 @@ impl CallInFlight {
             .instructions_executed()
     }
 
-    /// Returns the cycles consumed by the caller for the `Instructions` use case,
-    /// both on the gauge and on the monotonic counter.
-    fn consumed_instructions_cycles(&self) -> (Cycles, Cycles) {
+    /// Returns the cycles consumed by the caller for the `Instructions` use case.
+    fn consumed_instructions_cycles(&self) -> Cycles {
         let state = self.env.get_latest_state();
-        let metrics = state
-            .canister_state(&self.caller_id)
-            .unwrap()
-            .system_state
-            .canister_metrics();
-        let get = |m: &std::collections::BTreeMap<CyclesUseCase, NominalCycles>| {
-            Cycles::new(
-                m.get(&CyclesUseCase::Instructions)
-                    .copied()
-                    .unwrap_or_else(NominalCycles::zero)
-                    .get(),
-            )
-        };
-        (
-            get(metrics.consumed_cycles_by_use_cases()),
-            get(metrics.consumed_cycles_by_use_cases_monotonic()),
+        Cycles::new(
+            state
+                .canister_state(&self.caller_id)
+                .unwrap()
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_monotonic()
+                .get(&CyclesUseCase::Instructions)
+                .copied()
+                .unwrap_or_else(NominalCycles::zero)
+                .get(),
         )
     }
 
@@ -4619,7 +4616,7 @@ fn response_execution_prepayment_is_topped_up_after_upgrade_to_wasm64() {
 
     let balance_before = call.balance();
     let instructions_before = call.instructions_executed();
-    let (gauge_before, counter_before) = call.consumed_instructions_cycles();
+    let consumed_before = call.consumed_instructions_cycles();
     // The response is processed by the Wasm64 canister.
     call.tick_until_response_execution_paused();
     assert_eq!(call.wasm_execution_mode(), Some(WasmExecutionMode::Wasm64));
@@ -4631,7 +4628,7 @@ fn response_execution_prepayment_is_topped_up_after_upgrade_to_wasm64() {
         balance_before,
         call.balance(),
     );
-    let (gauge_after, counter_after) = call.consumed_instructions_cycles();
+    let consumed_after = call.consumed_instructions_cycles();
 
     assert_eq!(reply, WasmResult::Reply(vec![]));
 
@@ -4642,11 +4639,8 @@ fn response_execution_prepayment_is_topped_up_after_upgrade_to_wasm64() {
     // would have been clamped to (and thus fully refunded from) the prepayment
     // without the top-up.
     assert_gt!(charged, prepaid_for_execution);
-    // The consumed cycles of the caller reflect the charge: the gauge was raised by
-    // the prepayment when the call was performed and by the additional prepayment
-    // before the response was executed, and lowered by the refund afterwards.
-    assert_eq!(counter_after, counter_before + charged);
-    assert_eq!(gauge_after + prepaid_for_execution, gauge_before + charged);
+    // The consumed cycles of the caller reflect the charge.
+    assert_eq!(consumed_after, consumed_before + charged);
 }
 
 /// If the caller is upgraded from Wasm64 to Wasm32 while a call is in flight, then
@@ -4662,7 +4656,7 @@ fn response_execution_prepayment_excess_is_refunded_after_upgrade_to_wasm32() {
 
     let balance_before = call.balance();
     let instructions_before = call.instructions_executed();
-    let (gauge_before, counter_before) = call.consumed_instructions_cycles();
+    let consumed_before = call.consumed_instructions_cycles();
     // The response is processed by the Wasm32 canister.
     call.tick_until_response_execution_paused();
     assert_eq!(call.wasm_execution_mode(), Some(WasmExecutionMode::Wasm32));
@@ -4674,7 +4668,7 @@ fn response_execution_prepayment_excess_is_refunded_after_upgrade_to_wasm32() {
         balance_before,
         call.balance(),
     );
-    let (gauge_after, counter_after) = call.consumed_instructions_cycles();
+    let consumed_after = call.consumed_instructions_cycles();
 
     assert_eq!(reply, WasmResult::Reply(vec![]));
 
@@ -4689,8 +4683,7 @@ fn response_execution_prepayment_excess_is_refunded_after_upgrade_to_wasm32() {
     // refunded in full.
     assert_eq!(charged, call.execution_cost(instructions_used, false));
     // The consumed cycles of the caller reflect the charge.
-    assert_eq!(counter_after, counter_before + charged);
-    assert_eq!(gauge_after + prepaid_for_execution, gauge_before + charged);
+    assert_eq!(consumed_after, consumed_before + charged);
 }
 
 /// Under the `Free` cost schedule, the caller is charged no real cycles, but the
@@ -4716,7 +4709,7 @@ fn response_execution_nominal_prepayment_is_adjusted_after_upgrade_on_free_cost_
 
         let balance_before = call.balance();
         let instructions_before = call.instructions_executed();
-        let (gauge_before, counter_before) = call.consumed_instructions_cycles();
+        let consumed_before = call.consumed_instructions_cycles();
         call.tick_until_response_execution_paused();
         assert_eq!(
             call.wasm_execution_mode(),
@@ -4728,7 +4721,7 @@ fn response_execution_nominal_prepayment_is_adjusted_after_upgrade_on_free_cost_
         );
         let reply = call.await_response().unwrap();
         let instructions_used = call.instructions_executed() - instructions_before;
-        let (gauge_after, counter_after) = call.consumed_instructions_cycles();
+        let consumed_after = call.consumed_instructions_cycles();
 
         assert_eq!(reply, WasmResult::Reply(vec![]));
         // No real cycles are charged.
@@ -4750,13 +4743,8 @@ fn response_execution_nominal_prepayment_is_adjusted_after_upgrade_on_free_cost_
             );
         }
         assert_eq!(
-            counter_after,
-            counter_before + nominal_charged,
-            "wasm64_before: {wasm64_before}"
-        );
-        assert_eq!(
-            gauge_after + nominal_prepaid,
-            gauge_before + nominal_charged,
+            consumed_after,
+            consumed_before + nominal_charged,
             "wasm64_before: {wasm64_before}"
         );
     }

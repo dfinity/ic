@@ -54,7 +54,7 @@ use ic_types_cycles::{
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
+use more_asserts::{assert_ge, assert_gt, assert_le};
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem::size_of;
 use std::sync::Arc;
@@ -2646,7 +2646,7 @@ fn ingress_deducts_execution_cost_from_canister_balance_and_updates_consumed_met
             .canister_state(canister)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap_or(&NominalCycles::zero());
         test.ingress(canister, "update", run).unwrap();
@@ -2656,7 +2656,7 @@ fn ingress_deducts_execution_cost_from_canister_balance_and_updates_consumed_met
             .canister_state(canister)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap_or(&NominalCycles::zero());
 
@@ -5292,18 +5292,10 @@ fn replicated_query_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::BurnedCycles)
-        .unwrap();
-    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
-    let burned_cycles_monotonic = *test
-        .canister_state(canister_id)
-        .system_state
-        .canister_metrics()
         .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles_monotonic, burned_cycles);
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]
@@ -5340,14 +5332,6 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
         test.canister_state(canister_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::BurnedCycles)
-            .is_none()
-    );
-    assert!(
-        test.canister_state(canister_id)
-            .system_state
-            .canister_metrics()
             .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
@@ -5376,7 +5360,7 @@ fn canister_init_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -5408,7 +5392,7 @@ fn canister_post_upgrade_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -5442,7 +5426,7 @@ fn canister_pre_upgrade_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -5474,7 +5458,7 @@ fn reply_callback_can_burn_cycles() {
         .canister_state(caller_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .clone();
     let transmission_cost = Cycles::new(
         use_cases
@@ -5520,7 +5504,7 @@ fn reject_callback_can_burn_cycles() {
         .canister_state(caller_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .clone();
     let transmission_cost = Cycles::new(
         use_cases
@@ -5569,7 +5553,7 @@ fn cleanup_callback_can_burn_cycles() {
         .canister_state(caller_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .clone();
     let transmission_cost = Cycles::new(
         use_cases
@@ -5616,7 +5600,7 @@ fn heartbeat_can_burn_cycles() {
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
@@ -5652,7 +5636,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             )
             .build();
 
-        let instruction_consumption_initial_counters = *test
+        let instruction_consumption_initial = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
@@ -5664,7 +5648,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
         // Canister A sends the message to canister B.
         test.execute_message(a_id);
-        let instruction_consumption_after_message_execution_counters = *test
+        let instruction_consumption_after_message_execution = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
@@ -5673,8 +5657,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .unwrap();
         let execution_cost_after_message = test.canister_execution_cost(a_id);
         assert_eq!(
-            instruction_consumption_after_message_execution_counters,
-            instruction_consumption_initial_counters
+            instruction_consumption_after_message_execution,
+            instruction_consumption_initial
                 + (execution_cost_after_message - execution_cost_initial).nominal(),
         );
         test.induct_messages();
@@ -5700,49 +5684,30 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         }
 
         // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
-        // before receiving a response on canister A for gauges.
+        // before receiving a response on canister A. The prepayments for the
+        // response do not count until it is executed.
         let transmission_consumption_before_response = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_before_response = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::Instructions)
-            .unwrap();
-
-        assert_gt!(transmission_consumption_before_response.get(), 0);
-        assert_gt!(instruction_consumption_before_response.get(), 0);
-
-        // // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
-        // before receiving a response on canister A for counters.
-        let transmission_consumption_before_response_counters = *test
-            .canister_state(a_id)
-            .system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic()
-            .get(&CyclesUseCase::RequestAndResponseTransmission)
-            .unwrap();
-        let instruction_consumption_before_response_counters = *test
-            .canister_state(a_id)
-            .system_state
-            .canister_metrics()
             .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
         assert_eq!(
-            transmission_consumption_before_response_counters,
+            transmission_consumption_before_response,
             NominalCycles::zero()
         );
         assert_eq!(
-            instruction_consumption_after_message_execution_counters,
-            instruction_consumption_before_response_counters,
+            instruction_consumption_after_message_execution,
+            instruction_consumption_before_response,
         );
 
         // Canister A executed the response.
@@ -5777,7 +5742,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             test.canister_state(a_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .len(),
             2
         );
@@ -5786,25 +5751,10 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::RequestAndResponseTransmission)
-            .unwrap();
-        let instruction_consumption_after_response = *test
-            .canister_state(a_id)
-            .system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::Instructions)
-            .unwrap();
-
-        let transmission_consumption_after_response_counters = *test
-            .canister_state(a_id)
-            .system_state
-            .canister_metrics()
             .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
-        let instruction_consumption_after_response_counters = *test
+        let instruction_consumption_after_response = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
@@ -5817,43 +5767,19 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             transmission_consumption_after_response,
             transmission_cost.nominal(),
         );
-
         assert_eq!(
             instruction_consumption_after_response,
             execution_cost_after_response.nominal(),
         );
-
-        // Consumed cycles after the response should be smaller than before
-        // the response because we expect a refund for prepaid cycles.
-        assert_lt!(
+        assert_eq!(
             transmission_consumption_after_response,
-            transmission_consumption_before_response
+            transmission_consumption_before_response + transmission_cost.nominal(),
         );
-        assert_lt!(
+
+        assert_eq!(
             instruction_consumption_after_response,
             instruction_consumption_before_response
-        );
-
-        // Check that consumed cycles are correct for both use cases for counter metrics.
-        assert_eq!(
-            transmission_consumption_after_response_counters,
-            transmission_consumption_before_response_counters + transmission_cost.nominal(),
-        );
-
-        assert_eq!(
-            instruction_consumption_after_response_counters,
-            instruction_consumption_before_response_counters
                 + (execution_cost_after_response - execution_cost_after_message).nominal(),
-        );
-
-        // Both the gauge and counter metrics should show the same consumption.
-        assert_eq!(
-            transmission_consumption_after_response,
-            transmission_consumption_after_response_counters,
-        );
-        assert_eq!(
-            instruction_consumption_after_response,
-            instruction_consumption_after_response_counters,
         );
 
         // Check that canister B's balance is updated correctly.
@@ -5867,7 +5793,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             test.canister_state(b_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .len(),
             1
         );
@@ -5877,7 +5803,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
                 .canister_state(b_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::Instructions)
                 .unwrap(),
             test.canister_execution_cost(b_id).nominal(),
@@ -6943,11 +6869,10 @@ fn list_canisters_via_ingress_fails_at_execution() {
 /// to check the accounting of a paused execution that fails to resume.
 #[derive(Clone, Copy)]
 struct ExecutionAccounting {
-    /// The counter metric is used because it only records the cycles consumed
-    /// for instructions when the prepaid execution cycles are refunded at the
-    /// end of a message execution: unlike the gauge metric, which is bumped
-    /// already by the prepayment, it thus does not depend on whether the
-    /// snapshot is taken before or after the prepayment.
+    /// The cycles consumed for instructions are only recorded when the prepaid
+    /// execution cycles are refunded at the end of a message execution, so this
+    /// does not depend on whether the snapshot is taken before or after the
+    /// prepayment.
     consumed_cycles: NominalCycles,
     /// The instructions executed by all the slices of the canister, including
     /// slices of an execution that was paused and did not finish (yet).
