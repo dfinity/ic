@@ -5,7 +5,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-
 ### Fixed
 - `/account/balance` no longer answers above the highest block for which account balances have been
   computed. Previously the response was labelled with the highest *stored* block while the balance
@@ -21,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Limit the memo length in `/construction/payloads` to 1024 bytes ([#11886](https://github.com/dfinity/ic/pull/11886))
 - Limit the length of amounts to 78 digits and the size of the ledger method arguments in `/construction/payloads` to 4 KiB ([#12095](https://github.com/dfinity/ic/pull/12095))
 - Bound the Candid decoding of ledger method arguments in `/construction/parse`, `/construction/hash` and `/construction/submit` ([#12106](https://github.com/dfinity/ic/pull/12106))
+- Cap the `limit` of `/search/transactions` requests to the maximum of 10,000 transactions per request ([#11892](https://github.com/dfinity/ic/pull/11892))
 
 ## [1.2.10] - 2026-07-02
 ### Added

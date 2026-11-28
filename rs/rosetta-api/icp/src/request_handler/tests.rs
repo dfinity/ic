@@ -11,7 +11,7 @@ use crate::{
         QueryBlockRangeResponse, SearchTransactionsRequest,
     },
     request::Request,
-    request_handler::RosettaRequestHandler,
+    request_handler::{MAX_SEARCH_LIMIT, RosettaRequestHandler},
     request_types::{AddHotKey, Follow, PublicKeyOrPrincipal, Stake, StartDissolve},
 };
 use async_trait::async_trait;
@@ -819,6 +819,124 @@ async fn test_search_transactions_in_pruned_store() {
         vec![9, 8, 7, 6, 5, 0]
     );
     assert_eq!(response.next_offset, None);
+}
+
+/// Test that `search_transactions` caps a caller-supplied `limit` to `MAX_SEARCH_LIMIT`.
+#[tokio::test]
+async fn test_search_transactions_caps_limit() {
+    // Fund the accounts generously so that fees do not drain them while generating transactions.
+    let mut scribe = Scribe::new();
+    scribe.gen_accounts(10, 1_000_000_000_000);
+    for _ in 0..MAX_SEARCH_LIMIT {
+        scribe.gen_transaction();
+    }
+    let num_blocks = scribe.blockchain.len() as u64;
+    assert!(num_blocks > MAX_SEARCH_LIMIT as u64);
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    blockchain
+        .push_batch(scribe.blockchain.into_iter().collect(), None)
+        .unwrap();
+    blockchain
+        .set_hashed_block_to_verified(&(num_blocks - 1))
+        .unwrap();
+    let req_handler = handler(blockchain);
+    let request = |limit: i64, offset: Option<i64>| SearchTransactionsRequest {
+        network_identifier: req_handler.network_id(),
+        limit: Some(limit),
+        offset,
+        ..Default::default()
+    };
+
+    // A limit above the maximum is capped to the maximum
+    let result = req_handler
+        .search_transactions(request(i64::MAX, None))
+        .await
+        .unwrap();
+    assert_eq!(result.transactions.len(), MAX_SEARCH_LIMIT);
+    assert_eq!(result.total_count, MAX_SEARCH_LIMIT as i64);
+    assert_eq!(result.next_offset, Some(MAX_SEARCH_LIMIT as i64));
+
+    // The remaining transactions can be fetched using the returned offset
+    let result = req_handler
+        .search_transactions(request(i64::MAX, result.next_offset))
+        .await
+        .unwrap();
+    assert_eq!(
+        result.transactions.len() as u64,
+        num_blocks - MAX_SEARCH_LIMIT as u64
+    );
+    assert_eq!(result.next_offset, None);
+
+    // Paging with a max_block below the tip returns every matching transaction exactly once
+    let max_block = MAX_SEARCH_LIMIT as u64 + 2;
+    assert!(max_block < num_blocks - 1);
+    let mut block_indices = vec![];
+    let mut offset = None;
+    for _ in 0..3 {
+        let result = req_handler
+            .search_transactions(SearchTransactionsRequest {
+                max_block: Some(max_block as i64),
+                ..request(i64::MAX, offset)
+            })
+            .await
+            .unwrap();
+        block_indices.extend(
+            result
+                .transactions
+                .iter()
+                .map(|tx| tx.block_identifier.index),
+        );
+        offset = result.next_offset;
+        if offset.is_none() {
+            break;
+        }
+    }
+    assert_eq!(offset, None);
+    assert_eq!(block_indices, (0..=max_block).rev().collect::<Vec<_>>());
+
+    // A negative limit is still rejected
+    assert!(
+        req_handler
+            .search_transactions(request(-1, None))
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn test_search_transactions_excludes_unverified_blocks() {
+    let mut scribe = Scribe::new();
+    scribe.gen_accounts(2, 1_000_000);
+    for _ in 0..10 {
+        scribe.gen_transaction();
+    }
+    let num_blocks = scribe.blockchain.len() as u64;
+    let verified_tip = num_blocks / 2;
+    let mut blockchain = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+    blockchain
+        .push_batch(scribe.blockchain.into_iter().collect(), None)
+        .unwrap();
+    blockchain
+        .set_hashed_block_to_verified(&verified_tip)
+        .unwrap();
+    let req_handler = handler(blockchain);
+
+    // A max_block above the verified tip only returns verified blocks
+    let result = req_handler
+        .search_transactions(SearchTransactionsRequest {
+            network_identifier: req_handler.network_id(),
+            max_block: Some((num_blocks - 1) as i64),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let block_indices: Vec<u64> = result
+        .transactions
+        .iter()
+        .map(|tx| tx.block_identifier.index)
+        .collect();
+    assert_eq!(block_indices, (0..=verified_tip).rev().collect::<Vec<_>>());
+    assert_eq!(result.next_offset, None);
 }
 
 const MAX_INGRESS_WINDOW_NANOS: u64 = 24 * 60 * 60 * 1_000_000_000;

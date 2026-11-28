@@ -425,10 +425,12 @@ pub async fn search_transactions(
             Error::request_processing_error(&format!("Max block has to be a valid u64: {err}"))
         })?;
 
+    // Cap the limit to MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST to bound the number of blocks fetched in a single request.
     let limit: u64 = request
         .limit
         .unwrap_or(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
         .try_into()
+        .map(|limit: u64| limit.min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST))
         .map_err(|err| {
             Error::request_processing_error(&format!("Limit has to be a valid u64: {err}"))
         })?;
@@ -465,11 +467,11 @@ pub async fn search_transactions(
         })
         .transpose()?;
 
-    let start_idx = max_block.min(
-        rosetta_block_with_highest_block_index
-            .index
-            .saturating_sub(offset),
-    );
+    // The offset is counted from max_block, consistent with how next_offset is computed below.
+    // The start index is clamped to the highest stored block.
+    let start_idx = max_block
+        .saturating_sub(offset)
+        .min(rosetta_block_with_highest_block_index.index);
 
     if limit == 0 {
         return Ok(SearchTransactionsResponse {
@@ -1413,6 +1415,139 @@ mod test {
                 },
             )
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_search_transactions_caps_limit() {
+        use crate::common::storage::types::{IcrcBlock, IcrcTransaction};
+
+        let storage_client = StorageClient::new_in_memory().await.unwrap();
+        let num_blocks = MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST + 10;
+        let to = Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        };
+        let blocks = (0..num_blocks)
+            .map(|index| {
+                RosettaBlock::from_icrc_ledger_block(
+                    IcrcBlock {
+                        parent_hash: None,
+                        transaction: IcrcTransaction {
+                            operation: IcrcOperation::Mint {
+                                to,
+                                amount: Nat::from(1_u64),
+                                fee: None,
+                            },
+                            created_at_time: Some(index),
+                            memo: None,
+                        },
+                        effective_fee: None,
+                        timestamp: index,
+                        fee_collector: None,
+                        fee_collector_block_index: None,
+                        btype: None,
+                    },
+                    index,
+                )
+            })
+            .collect::<Vec<_>>();
+        storage_client.store_blocks(blocks).await.unwrap();
+
+        // A limit above the maximum is capped to the maximum
+        let result = search_transactions(
+            &storage_client,
+            SearchTransactionsRequest {
+                limit: Some(i64::MAX),
+                ..Default::default()
+            },
+            "ICP".to_string(),
+            8,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result.transactions.len() as u64,
+            MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST
+        );
+        assert_eq!(
+            result.total_count as u64,
+            MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST
+        );
+        assert_eq!(
+            result.next_offset,
+            Some(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
+        );
+
+        // The remaining transactions can be fetched using the returned offset
+        let result = search_transactions(
+            &storage_client,
+            SearchTransactionsRequest {
+                limit: Some(i64::MAX),
+                offset: result.next_offset,
+                ..Default::default()
+            },
+            "ICP".to_string(),
+            8,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result.transactions.len() as u64,
+            num_blocks - MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST
+        );
+        assert_eq!(
+            result.transactions.last().unwrap().block_identifier.index,
+            0
+        );
+        assert_eq!(result.next_offset, None);
+
+        // Paging with a max_block below the tip returns every matching transaction exactly once
+        let max_block = MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST + 2;
+        assert!(max_block < num_blocks - 1);
+        let mut block_indices = vec![];
+        let mut offset = None;
+        for _ in 0..3 {
+            let result = search_transactions(
+                &storage_client,
+                SearchTransactionsRequest {
+                    limit: Some(i64::MAX),
+                    max_block: Some(max_block as i64),
+                    offset,
+                    ..Default::default()
+                },
+                "ICP".to_string(),
+                8,
+            )
+            .await
+            .unwrap();
+            block_indices.extend(
+                result
+                    .transactions
+                    .iter()
+                    .map(|tx| tx.block_identifier.index),
+            );
+            offset = result.next_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+        assert_eq!(offset, None);
+        assert_eq!(block_indices, (0..=max_block).rev().collect::<Vec<_>>());
+
+        // A negative limit is still rejected
+        assert!(
+            search_transactions(
+                &storage_client,
+                SearchTransactionsRequest {
+                    limit: Some(-1),
+                    ..Default::default()
+                },
+                "ICP".to_string(),
+                8,
+            )
+            .await
+            .is_err()
+        );
     }
 
     #[tokio::test]

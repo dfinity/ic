@@ -762,10 +762,12 @@ impl RosettaRequestHandler {
                 ApiError::invalid_request(format!("Max block has to be a valid u64: {err}"))
             })?;
 
+        // Cap the limit to MAX_SEARCH_LIMIT to bound the number of blocks fetched in a single request.
         let limit: u64 = request
             .limit
             .unwrap_or(MAX_SEARCH_LIMIT as i64)
             .try_into()
+            .map(|limit: u64| limit.min(MAX_SEARCH_LIMIT as u64))
             .map_err(|err| {
                 ApiError::invalid_request(format!("Limit has to be a valid u64: {err}"))
             })?;
@@ -793,7 +795,11 @@ impl RosettaRequestHandler {
             })
             .transpose()?;
 
-        let start_idx = max_block.min(block_with_highest_block_index.index.saturating_sub(offset));
+        // The offset is counted from max_block, consistent with how next_offset is computed below.
+        // The start index is clamped to the verified tip so that unverified blocks are never returned.
+        let start_idx = max_block
+            .saturating_sub(offset)
+            .min(block_with_highest_block_index.index);
 
         if limit == 0 {
             return Ok(SearchTransactionsResponse {
