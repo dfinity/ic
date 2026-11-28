@@ -7,18 +7,28 @@ Ensure that Subnet Splitting V2 works
 
 Runbook::
 . Deploy an IC with NNS and one Application subnet, with 8 nodes.
-. Install some canistes on the Application subnet.
+. Install some canisters on the Application subnet.
 . Execute an NNS proposal to split the subnet.
+. Wait until no stream on any subnet holds messages that were routed according to the routing
+  table from before the split.
+. Execute an NNS proposal to complete the canister migration, i.e. to remove the
+  `canister_migrations` entries added by the split.
 
 Success::
 . Both subnets are functional after the split and the canisters are migrated.
+. New canisters can be created on both subnets after the split, both before and after the canister
+  migration is completed.
+. The canisters remain available and keep exchanging messages without errors while the canister
+  migration is completed.
 
 end::catalog[] */
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use candid::CandidType;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_agent::AgentError;
@@ -31,8 +41,10 @@ use ic_nns_common::types::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_routing_table::{
-    CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, canister_id_into_u64, difference,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
+    canister_id_into_u64, difference,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -48,12 +60,16 @@ use ic_system_test_driver::{
     },
     nns::vote_and_execute_proposal,
     retry_with_msg_async, retry_with_msg_async_quiet, systest,
-    util::{create_agent, runtime_from_url},
+    util::{MetricsFetcher, create_agent, runtime_from_url},
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use rand::seq::IteratorRandom;
 use registry_canister::{
-    init::RegistryCanisterInitPayload, mutations::do_split_subnet::SplitSubnetPayload,
+    init::RegistryCanisterInitPayload,
+    mutations::{
+        complete_canister_migration::CompleteCanisterMigrationPayload,
+        do_split_subnet::SplitSubnetPayload,
+    },
 };
 use slog::info;
 use xnet_test::{Metrics, StartArgs};
@@ -75,6 +91,19 @@ const CHATTING_CANISTERS_ON_SOURCE_SUBNET_COUNT: usize = 10;
 const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
+
+/// The registry version that a replica's message routing currently uses.
+const REGISTRY_VERSION_METRIC: &str = "mr_registry_version";
+/// The number of messages in a replica's streams, by remote subnet, that are misrouted according
+/// to the current routing table, i.e. that were routed according to an earlier routing table.
+const MISROUTED_MESSAGES_METRIC: &str = "mr_stream_misrouted_messages";
+
+/// How long no stream may hold misrouted messages before the canister migration is completed.
+const NO_MISROUTED_MESSAGES_PERIOD: Duration = Duration::from_secs(30);
+/// How long to wait until no stream holds misrouted messages for `NO_MISROUTED_MESSAGES_PERIOD`.
+const CANISTER_MIGRATION_COMPLETABLE_TIMEOUT: Duration = Duration::from_secs(300);
+/// How long to wait until all replicas use a new registry version.
+const REGISTRY_VERSION_ADOPTION_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -186,14 +215,18 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
     // Flag used to stop the concurrent calls probe (see below).
     let stop_calls_probe = AtomicBool::new(false);
 
-    let split_and_check = async {
+    let split_and_complete_canister_migration = async {
         info!(env.logger(), "Proposing to split the source subnet.");
-        propose_to_split_subnet(
+        let split_registry_version = submit_and_execute_proposal(
             &env,
-            &source_subnet,
-            test_params.canister_migration_list.clone(),
-            destination_subnet_nodes.clone(),
-            Some(initial_dkg_subnet.subnet_id),
+            NnsFunction::SplitSubnet,
+            SplitSubnetPayload {
+                destination_canister_ranges: test_params.canister_migration_list.clone(),
+                destination_node_ids: destination_subnet_nodes.clone(),
+                source_subnet_id: source_subnet.subnet_id,
+                initial_dkg_subnet_id: Some(initial_dkg_subnet.subnet_id),
+            },
+            "Split Subnet",
         )
         .await;
 
@@ -219,17 +252,86 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         )
         .await;
         check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
+        check_canister_creation(&env, &test_params.canister_migration_list).await;
 
-        // The split is done and all checks passed; stop the calls probe just before the
-        // chatting canisters' metrics are measured and the canisters are stopped.
+        // The split records the migrated canister ranges as migrating from the source to the
+        // destination subnet.
+        let migration_trace = vec![
+            source_subnet.subnet_id,
+            get_destination_subnet(&env).subnet_id,
+        ];
+        let canister_migrations_during_split = CanisterMigrations::try_from(
+            test_params
+                .canister_migration_list
+                .iter()
+                .map(|range| (*range, migration_trace.clone()))
+                .collect::<BTreeMap<CanisterIdRange, Vec<SubnetId>>>(),
+        )
+        .expect("The migrated canister ranges should be well formed");
+        check_canister_migrations(
+            &env,
+            split_registry_version,
+            &canister_migrations_during_split,
+        );
+
+        wait_until_canister_migration_is_completable(&env, split_registry_version).await;
+
+        // No reject responses are expected from here on.
+        let reject_response_counts_before_completion =
+            get_chatting_canister_reject_response_counts(&env, test_params).await;
+
+        info!(
+            env.logger(),
+            "Proposing to complete the canister migration."
+        );
+        let completion_registry_version = submit_and_execute_proposal(
+            &env,
+            NnsFunction::CompleteCanisterMigration,
+            CompleteCanisterMigrationPayload {
+                canister_id_ranges: test_params.canister_migration_list.clone(),
+                migration_trace,
+            },
+            "Complete Canister Migration",
+        )
+        .await;
+
+        info!(
+            env.logger(),
+            "Running checks to make sure the canister migration was completed correctly."
+        );
+        check_canister_migrations(
+            &env,
+            completion_registry_version,
+            &CanisterMigrations::default(),
+        );
+        // Make sure the remaining checks (and the calls probe) run against replicas that no
+        // longer know about the canister migration.
+        wait_until_all_replicas_use_registry_version(&env, completion_registry_version).await;
+        check_routing_table(
+            &env,
+            source_subnet.subnet_id,
+            &original_source_subnet_canister_ranges,
+            &nns_canister_ranges,
+            &initial_dkg_canister_ranges,
+            &test_params.canister_migration_list,
+        );
+        check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
+        check_canister_creation(&env, &test_params.canister_migration_list).await;
+
+        // The split and the canister migration are done and all checks passed; stop the calls
+        // probe just before the chatting canisters' metrics are measured and the canisters are
+        // stopped.
         stop_calls_probe.store(true, Ordering::Relaxed);
+
+        reject_response_counts_before_completion
     };
 
     // Continuously make calls to all the counter canisters for the entire duration of the split
-    // (starting before the split is proposed, stopping just before measuring the chatting
-    // canisters' metrics), asserting that every single one of them succeeds.
-    tokio::join!(
-        split_and_check,
+    // and of the canister migration (starting before the split is proposed, stopping just before
+    // measuring the chatting canisters' metrics), asserting that every single one of them
+    // succeeds.
+    let (reject_response_counts_before_completion, ()) = tokio::join!(
+        split_and_complete_canister_migration,
         call_counter_canisters_until_stopped(
             &env,
             &test_params.source_subnet_counting_canister_ids,
@@ -238,7 +340,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         ),
     );
 
-    check_chatting_canisters(&env, test_params).await;
+    check_chatting_canisters(&env, test_params, &reject_response_counts_before_completion).await;
 }
 
 /// Continuously makes calls to every counter canister — routing each call to whichever subnet
@@ -441,11 +543,54 @@ async fn stop_chatting_canisters(
     .await;
 }
 
+/// Returns the number of reject responses that each chatting canister has received so far.
+async fn get_chatting_canister_reject_response_counts(
+    env: &TestEnv,
+    test_params: &TestParams,
+) -> BTreeMap<CanisterId, usize> {
+    let source_subnet = get_source_subnet(env);
+    let destination_subnet = get_destination_subnet(env);
+    let third_subnet = get_third_subnet(env);
+    let canister_ids_by_subnet = [
+        (
+            &source_subnet,
+            &test_params.source_subnet_chatting_canister_ids,
+        ),
+        (
+            &destination_subnet,
+            &test_params.destination_subnet_chatting_canister_ids,
+        ),
+        (
+            &third_subnet,
+            &test_params.third_subnet_chatting_canister_ids,
+        ),
+    ];
+
+    futures::future::join_all(
+        canister_ids_by_subnet
+            .iter()
+            .flat_map(|(subnet, canister_ids)| {
+                canister_ids.iter().map(move |canister_id| async move {
+                    let runtime = runtime_from_subnet(subnet);
+                    let metrics: Metrics = Canister::new(&runtime, *canister_id)
+                        .query_("metrics", candid, ())
+                        .await
+                        .expect("Failed to make a query call");
+                    (*canister_id, metrics.reject_responses)
+                })
+            }),
+    )
+    .await
+    .into_iter()
+    .collect::<BTreeMap<CanisterId, usize>>()
+}
+
 async fn check_chatting_canisters_metrics(
     env: &TestEnv,
     subnet: &SubnetSnapshot,
     canister_ids: &[CanisterId],
     subnet_type: &str,
+    reject_response_counts_before_completion: &BTreeMap<CanisterId, usize>,
 ) {
     info!(
         env.logger(),
@@ -483,12 +628,13 @@ async fn check_chatting_canisters_metrics(
         );
         // Rejects are expected during the split (see below), but they can only happen between the
         // moment the other subnets adopt the splitting registry version and the splitting subnet
-        // reaching the splitting block. When the current function is called, the split has already
-        // completed since long (2 DKG intervals), so none are expected to happen anymore.
+        // reaching the splitting block. The canister migration is only completed once no stream
+        // holds messages routed according to the old routing table, so none are expected from
+        // just before its completion on.
         assert_eq!(
-            metrics_after.reject_responses - metrics_before.reject_responses,
-            0,
-            "Canister {canister_id} received some reject responses after the split: {}",
+            metrics_after.reject_responses, reject_response_counts_before_completion[canister_id],
+            "Canister {canister_id} received some reject responses during or after the completion \
+            of the canister migration: {}",
             metrics_after.log,
         );
 
@@ -650,7 +796,11 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
 /// First collects metrics from all the canister and checks that there are no reported errors in
 /// them, and then stops the canisters. Stopping a canister would fail if there is still an open
 /// call context.
-async fn check_chatting_canisters(env: &TestEnv, test_params: &TestParams) {
+async fn check_chatting_canisters(
+    env: &TestEnv,
+    test_params: &TestParams,
+    reject_response_counts_before_completion: &BTreeMap<CanisterId, usize>,
+) {
     let source_subnet = get_source_subnet(env);
     let destination_subnet = get_destination_subnet(env);
     let third_subnet = get_third_subnet(env);
@@ -661,18 +811,21 @@ async fn check_chatting_canisters(env: &TestEnv, test_params: &TestParams) {
             &third_subnet,
             &test_params.third_subnet_chatting_canister_ids,
             "third",
+            reject_response_counts_before_completion,
         ),
         check_chatting_canisters_metrics(
             env,
             &source_subnet,
             &test_params.source_subnet_chatting_canister_ids,
             "source",
+            reject_response_counts_before_completion,
         ),
         check_chatting_canisters_metrics(
             env,
             &destination_subnet,
             &test_params.destination_subnet_chatting_canister_ids,
             "destination",
+            reject_response_counts_before_completion,
         )
     );
 
@@ -778,6 +931,120 @@ async fn check_counter_canisters(
             }
         }
     }
+}
+
+/// Checks that a new canister can be created on each of the source and destination subnets, and
+/// that it is then hosted by the subnet that created it.
+async fn check_canister_creation(env: &TestEnv, migrated_canister_ranges: &[CanisterIdRange]) {
+    let source_subnet = get_source_subnet(env);
+    let destination_subnet = get_destination_subnet(env);
+
+    tokio::join!(
+        create_canister_and_check_it_is_hosted(
+            env,
+            &source_subnet,
+            "source",
+            migrated_canister_ranges
+        ),
+        create_canister_and_check_it_is_hosted(
+            env,
+            &destination_subnet,
+            "destination",
+            migrated_canister_ranges
+        ),
+    );
+}
+
+/// Creates a counter canister on `subnet` and checks that
+/// 1. its canister id is assigned to `subnet` by the routing table,
+/// 2. its canister id is not one of the migrated ones,
+/// 3. it executes update calls and answers queries on `subnet`.
+async fn create_canister_and_check_it_is_hosted(
+    env: &TestEnv,
+    subnet: &SubnetSnapshot,
+    subnet_type: &str,
+    migrated_canister_ranges: &[CanisterIdRange],
+) {
+    let node = subnet
+        .nodes()
+        .next()
+        .expect("Every subnet has at least one node");
+
+    // A failed attempt may leave behind a canister without code, which is harmless.
+    let canister_id = retry_with_msg_async!(
+        format!("Creating a counter canister on the {subnet_type} subnet"),
+        &env.logger(),
+        Duration::from_secs(60),
+        Duration::from_secs(5),
+        || async {
+            node.canister_installer_from_env("COUNTER_CANISTER_WAT_PATH")
+                .install()
+                .await
+                .map(|canister_id| CanisterId::unchecked_from_principal(PrincipalId(canister_id)))
+        }
+    )
+    .await
+    .unwrap_or_else(|err| {
+        panic!("Failed to create a canister on the {subnet_type} subnet: {err:#}")
+    });
+    info!(
+        env.logger(),
+        "Created canister {canister_id} on the {subnet_type} subnet {}", subnet.subnet_id
+    );
+
+    assert!(
+        subnet
+            .subnet_canister_ranges()
+            .iter()
+            .any(|range| range.contains(&canister_id)),
+        "Canister {canister_id}, created on the {subnet_type} subnet {}, is not assigned to it \
+        by the routing table",
+        subnet.subnet_id
+    );
+    assert!(
+        !migrated_canister_ranges
+            .iter()
+            .any(|range| range.contains(&canister_id)),
+        "Canister {canister_id}, created on the {subnet_type} subnet {}, has a migrated canister \
+        id: {migrated_canister_ranges:?}",
+        subnet.subnet_id
+    );
+
+    let agent = node.build_canister_agent().await;
+    agent
+        .get()
+        .update(&canister_id.get().0, "write".to_string())
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to make an update call to canister {canister_id} on the {subnet_type} \
+                subnet: {err}"
+            )
+        });
+    let counter = agent
+        .get()
+        .query(&canister_id.get().0, "read".to_string())
+        .call()
+        .await
+        .map(|response| u32::from_le_bytes(response.as_slice().try_into().unwrap()))
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to make a query call to canister {canister_id} on the {subnet_type} \
+                subnet: {err}"
+            )
+        });
+    assert_eq!(
+        counter, 1,
+        "The counter of the canister {canister_id} on the {subnet_type} subnet should have been \
+        incremented exactly once"
+    );
+
+    info!(
+        env.logger(),
+        "Verified that the new canister {canister_id} is hosted by the {subnet_type} subnet {}",
+        subnet.subnet_id
+    );
 }
 
 /// Checks that the nodes are assigned to the correct subnets both according to the registry and to
@@ -1088,42 +1355,209 @@ fn get_initial_dkg_subnet(env: &TestEnv) -> SubnetSnapshot {
         .expect("There should be at least one subnet for every subnet type")
 }
 
-async fn propose_to_split_subnet(
+/// Submits an NNS proposal to execute `nns_function` with `payload`, makes sure that it is adopted
+/// and executed, and waits until the test's view of the registry includes the resulting registry
+/// changes. Returns a registry version at which all those changes are applied.
+async fn submit_and_execute_proposal(
     env: &TestEnv,
-    source_subnet: &SubnetSnapshot,
-    canister_ranges_to_migrate: Vec<CanisterIdRange>,
-    node_ids_to_migrate: Vec<NodeId>,
-    initial_dkg_subnet_id: Option<SubnetId>,
-) {
+    nns_function: NnsFunction,
+    payload: impl CandidType,
+    title: &str,
+) -> RegistryVersion {
     let topology = env.topology_snapshot();
-    let nns_node = get_nns_subnet(env)
-        .nodes()
-        .next()
-        .expect("There should be at least one node on each subnet");
-
-    let proposal = SplitSubnetPayload {
-        destination_canister_ranges: canister_ranges_to_migrate,
-        destination_node_ids: node_ids_to_migrate,
-        source_subnet_id: source_subnet.subnet_id,
-        initial_dkg_subnet_id,
-    };
-
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let nns_runtime = runtime_from_subnet(&get_nns_subnet(env));
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     let proposal_id = submit_external_update_proposal(
         &governance,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::SplitSubnet,
-        proposal,
-        String::from("[SYSTEM TEST] Split Subnet Title"),
-        String::from("[SYSTEM TEST] Split Subnet Summary"),
+        nns_function,
+        payload,
+        format!("[SYSTEM TEST] {title} Title"),
+        format!("[SYSTEM TEST] {title} Summary"),
     )
     .await;
 
     let proposal_result = vote_and_execute_proposal(&governance, proposal_id).await;
-    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
+    assert_eq!(
+        proposal_result.status,
+        ProposalStatus::Executed as i32,
+        "The proposal to {title} was not executed: {proposal_result:?}"
+    );
 
-    topology.block_for_newer_registry_version().await.unwrap();
+    topology
+        .block_for_newer_registry_version()
+        .await
+        .expect("The registry version did not increase after the proposal was executed")
+        .get_registry_version()
+}
+
+/// Checks that the canister migrations in the registry at `registry_version` equal
+/// `expected_canister_migrations`. A missing record counts as one without any entries.
+fn check_canister_migrations(
+    env: &TestEnv,
+    registry_version: RegistryVersion,
+    expected_canister_migrations: &CanisterMigrations,
+) {
+    info!(
+        env.logger(),
+        "Checking that the canister migrations at registry version {registry_version} are \
+        {expected_canister_migrations:?}"
+    );
+    let canister_migrations = env
+        .get_registry()
+        .expect("Failed to open the local registry")
+        .get_canister_migrations(registry_version)
+        .expect("Failed to read the canister migrations from the local registry")
+        .unwrap_or_default();
+
+    assert_eq!(
+        &canister_migrations, expected_canister_migrations,
+        "The canister migrations in the registry are not as expected"
+    );
+}
+
+/// Waits until it is safe to complete the canister migration started by the split, i.e. until
+/// 1. every replica uses (at least) `split_registry_version`, and
+/// 2. no stream on any replica holds misrouted messages,
+///
+/// and both have held for `NO_MISROUTED_MESSAGES_PERIOD` without interruption.
+async fn wait_until_canister_migration_is_completable(
+    env: &TestEnv,
+    split_registry_version: RegistryVersion,
+) {
+    let (metrics_fetcher, replica_count) = new_metrics_fetcher_for_all_replicas(
+        env,
+        vec![
+            REGISTRY_VERSION_METRIC.to_string(),
+            MISROUTED_MESSAGES_METRIC.to_string(),
+        ],
+    );
+
+    retry_with_msg_async!(
+        format!(
+            "Waiting until all replicas use registry version {split_registry_version} and no \
+            stream holds misrouted messages for {NO_MISROUTED_MESSAGES_PERIOD:?}"
+        ),
+        &env.logger(),
+        CANISTER_MIGRATION_COMPLETABLE_TIMEOUT,
+        Duration::from_secs(5),
+        || async {
+            let period_start = Instant::now();
+            let mut is_misrouted_messages_metric_reported = false;
+            while period_start.elapsed() < NO_MISROUTED_MESSAGES_PERIOD {
+                let metrics = metrics_fetcher
+                    .fetch::<u64>()
+                    .await
+                    .context("Failed to fetch the replicas' metrics")?;
+                check_all_replicas_use_registry_version(
+                    &metrics,
+                    replica_count,
+                    split_registry_version,
+                )?;
+
+                let misrouted_message_counts: BTreeMap<&String, &Vec<u64>> = metrics
+                    .iter()
+                    .filter(|(name, _)| name.starts_with(MISROUTED_MESSAGES_METRIC))
+                    .collect();
+                is_misrouted_messages_metric_reported |= !misrouted_message_counts.is_empty();
+                let streams_with_misrouted_messages: BTreeMap<&String, &Vec<u64>> =
+                    misrouted_message_counts
+                        .into_iter()
+                        .filter(|(_, counts)| counts.iter().any(|count| *count > 0))
+                        .collect();
+                if !streams_with_misrouted_messages.is_empty() {
+                    bail!(
+                        "Some streams still hold misrouted messages: \
+                        {streams_with_misrouted_messages:?}"
+                    );
+                }
+
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+
+            // Otherwise the absence of misrouted messages would be vacuous.
+            if !is_misrouted_messages_metric_reported {
+                bail!("No replica reported {MISROUTED_MESSAGES_METRIC}");
+            }
+            Ok(())
+        }
+    )
+    .await
+    .expect("Timed out while waiting until the canister migration can be completed");
+}
+
+/// Waits until every replica uses (at least) `registry_version`.
+async fn wait_until_all_replicas_use_registry_version(
+    env: &TestEnv,
+    registry_version: RegistryVersion,
+) {
+    let (metrics_fetcher, replica_count) =
+        new_metrics_fetcher_for_all_replicas(env, vec![REGISTRY_VERSION_METRIC.to_string()]);
+
+    retry_with_msg_async!(
+        format!("Waiting until all replicas use registry version {registry_version}"),
+        &env.logger(),
+        REGISTRY_VERSION_ADOPTION_TIMEOUT,
+        Duration::from_secs(2),
+        || async {
+            let metrics = metrics_fetcher
+                .fetch::<u64>()
+                .await
+                .context("Failed to fetch the replicas' metrics")?;
+            check_all_replicas_use_registry_version(&metrics, replica_count, registry_version)
+        }
+    )
+    .await
+    .expect("Timed out while waiting until all replicas use the registry version");
+}
+
+/// Returns a [`MetricsFetcher`] for `metric_names` on every replica of every subnet, along with
+/// the number of those replicas.
+fn new_metrics_fetcher_for_all_replicas(
+    env: &TestEnv,
+    metric_names: Vec<String>,
+) -> (MetricsFetcher, usize) {
+    let replicas: Vec<IcNodeSnapshot> = env
+        .topology_snapshot()
+        .subnets()
+        .flat_map(|subnet| subnet.nodes())
+        .collect();
+    let replica_count = replicas.len();
+
+    (
+        MetricsFetcher::new(replicas.into_iter(), metric_names),
+        replica_count,
+    )
+}
+
+/// Fails unless all `replica_count` replicas report (via `REGISTRY_VERSION_METRIC` in `metrics`)
+/// that they use (at least) `registry_version`.
+fn check_all_replicas_use_registry_version(
+    metrics: &BTreeMap<String, Vec<u64>>,
+    replica_count: usize,
+    registry_version: RegistryVersion,
+) -> Result<()> {
+    let registry_versions: &[u64] = metrics
+        .get(REGISTRY_VERSION_METRIC)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+
+    if registry_versions.len() != replica_count {
+        bail!(
+            "{} out of {replica_count} replicas reported the registry version they use",
+            registry_versions.len()
+        );
+    }
+    if registry_versions
+        .iter()
+        .any(|version| *version < registry_version.get())
+    {
+        bail!(
+            "Not all replicas use registry version {registry_version} yet: {registry_versions:?}"
+        );
+    }
+
+    Ok(())
 }
