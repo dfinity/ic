@@ -275,8 +275,12 @@ impl IdKey {
         TypeKey::try_from(self.0[TYPE_OFFSET])
     }
 
-    fn hash(&self) -> CryptoHash {
-        CryptoHash::from(self.0[HASH_OFFSET..].to_vec())
+    fn hash(&self) -> Result<CryptoHash, String> {
+        let bytes = &self.0[HASH_OFFSET..];
+        bytes
+            .try_into()
+            .map(CryptoHash)
+            .map_err(|_| format!("Invalid hash length {} in IdKey", bytes.len()))
     }
 
     fn with_type_key(&self, type_key: TypeKey) -> Self {
@@ -961,7 +965,7 @@ impl From<&ConsensusMessageId> for ArtifactKey {
 impl TryFrom<ArtifactKey> for ConsensusMessageId {
     type Error = String;
     fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
-        let h = key.id_key.hash();
+        let h = key.id_key.hash()?;
         let hash = match key.type_key {
             TypeKey::RandomBeacon => ConsensusMessageHash::RandomBeacon(h.into()),
             TypeKey::Finalization => ConsensusMessageHash::Finalization(h.into()),
@@ -1398,7 +1402,7 @@ impl HasTypeKey for CertificationShare {
 impl TryFrom<ArtifactKey> for CertificationMessageId {
     type Error = String;
     fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
-        let h = key.id_key.hash();
+        let h = key.id_key.hash()?;
         let hash = match key.type_key {
             TypeKey::Certification => CertificationMessageHash::Certification(h.into()),
             TypeKey::CertificationShare => CertificationMessageHash::CertificationShare(h.into()),
@@ -2228,7 +2232,7 @@ mod tests {
         assert_eq!(Height::from(height_key), height, "height does not match");
         assert_eq!(id_key.height(), height, "Height of IdKey does not match");
         assert_eq!(
-            &id_key.hash(),
+            &id_key.hash().unwrap(),
             hash.digest(),
             "Hash of IdKey does not match"
         );
@@ -2236,6 +2240,36 @@ mod tests {
             id_key.type_key().expect("Should deserialize the key"),
             TypeKey::BlockPayload
         );
+    }
+
+    #[test]
+    fn test_decode_key_with_hash_of_wrong_length_fails() {
+        let height = Height::from(10);
+        for type_key in [TypeKey::RandomBeacon, TypeKey::Certification] {
+            let valid_key = IdKey::new(height, type_key, &CryptoHash::for_test());
+            for len in [0, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+                let mut bytes = valid_key.as_ref()[..HASH_OFFSET].to_vec();
+                bytes.extend(vec![7; len]);
+                let id_key = IdKey::from(bytes.as_slice());
+                let expected_error = format!("Invalid hash length {len} in IdKey");
+
+                assert_eq!(id_key.hash(), Err(expected_error.clone()));
+                let artifact_key = ArtifactKey {
+                    type_key,
+                    height_key: HeightKey::from(height),
+                    id_key,
+                };
+                let error = match type_key {
+                    TypeKey::Certification => CertificationMessageId::try_from(artifact_key)
+                        .map(|_| ())
+                        .unwrap_err(),
+                    _ => ConsensusMessageId::try_from(artifact_key)
+                        .map(|_| ())
+                        .unwrap_err(),
+                };
+                assert_eq!(error, expected_error);
+            }
+        }
     }
 
     #[test]

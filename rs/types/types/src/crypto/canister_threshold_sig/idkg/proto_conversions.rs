@@ -197,7 +197,9 @@ impl TryFrom<IDkgDealingSupportProto> for IDkgDealingSupport {
                 "IDkgDealingSupport::transcript_id",
             )?,
             dealer_id: node_id_try_from_option(proto.dealer)?,
-            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash::from(proto.dealing_hash)),
+            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash::try_from(
+                proto.dealing_hash,
+            )?),
             sig_share: try_from_option_field(proto.sig_share, "IDkgDealingSupport::sig_share")?,
         })
     }

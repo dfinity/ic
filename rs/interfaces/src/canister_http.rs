@@ -81,12 +81,6 @@ pub enum InvalidCanisterHttpPayloadReason {
         content_size: u32,
         limit: u64,
     },
-    /// A share's `content_hash` is not as long as a SHA-256 digest, as the hash of every
-    /// response is.
-    InvalidContentHashLength {
-        callback_id: CallbackId,
-        length: usize,
-    },
     /// The collective initial spent cycles included in the payload do not match
     /// the value recomputed from the request context's subnet size and the
     /// signed per-replica receipts.

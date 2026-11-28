@@ -603,7 +603,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             subnet_merged: false,
             canister_allocation_ranges,
             last_generated_canister_id,
-            prev_state_hash: item.prev_state_hash.map(|b| CryptoHash::from(b).into()),
+            prev_state_hash: item
+                .prev_state_hash
+                .map(|b| CryptoHash::try_from(b).map(Into::into))
+                .transpose()?,
             batch_time,
             // Ingress history is persisted separately. We rely on `load_checkpoint()` to
             // properly set this value.

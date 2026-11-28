@@ -6,14 +6,34 @@ mod crypto_hash_tests {
     use std::hash::Hash;
 
     #[test]
+    fn should_convert_bytes_of_crypto_hash_length_into_crypto_hash() {
+        assert_eq!(
+            CryptoHash::try_from(vec![7; CryptoHash::LEN]).unwrap(),
+            CryptoHash([7; CryptoHash::LEN])
+        );
+    }
+
+    #[test]
+    fn should_not_convert_bytes_of_other_length_into_crypto_hash() {
+        for len in [0, 1, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+            assert_matches::assert_matches!(
+                CryptoHash::try_from(vec![7; len]),
+                Err(ProxyDecodeError::InvalidDigestLength {
+                    expected: CryptoHash::LEN,
+                    actual,
+                }) if actual == len
+            );
+        }
+    }
+
+    #[test]
     fn crypto_hash_dependent_on_domain_and_bytes_from_hash_trait() {
         let struct_to_hash = CryptoHashableTestDummy(vec![1, 2, 3]);
         let hash_trait_bytes = bytes_fed_to_hasher_when_hashing_with_hash_trait(&struct_to_hash);
         let mut hash =
             Sha256::new_with_context(&DomainSeparationContext::new(struct_to_hash.domain()));
         hash.write(&hash_trait_bytes);
-        let expected_hash_incl_domain_and_bytes_from_hash_trait =
-            CryptoHash(hash.finish().to_vec());
+        let expected_hash_incl_domain_and_bytes_from_hash_trait = CryptoHash(hash.finish());
 
         let crypto_hash = crypto_hash(&struct_to_hash);
 

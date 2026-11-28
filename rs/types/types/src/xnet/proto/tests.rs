@@ -134,6 +134,20 @@ fn error_missing_field() {
     );
 }
 
+#[test]
+fn error_invalid_certification_content_hash_length() {
+    for len in [0, CryptoHash::LEN - 1, CryptoHash::LEN + 1] {
+        let content_vec =
+            v1::CertificationContent::proxy_encode(v1::CertificationContent { hash: vec![7; len] });
+
+        assert_matches!(
+            <v1::CertificationContent as ProtoProxy<CertificationContent>>::proxy_decode(&content_vec),
+            Err(ProxyDecodeError::InvalidDigestLength { expected, actual })
+                if expected == CryptoHash::LEN && actual == len
+        );
+    }
+}
+
 fn certified_stream_slice_for_test() -> CertifiedStreamSlice {
     CertifiedStreamSlice {
         certification: certification_for_test().signed,

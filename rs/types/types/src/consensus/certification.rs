@@ -164,11 +164,11 @@ impl TryFrom<pb::CertificationMessageHash> for CertificationMessageHash {
 
         Ok(match kind {
             Kind::Certification(x) => {
-                CertificationMessageHash::Certification(CryptoHashOf::new(CryptoHash::from(x)))
+                CertificationMessageHash::Certification(CryptoHashOf::new(CryptoHash::try_from(x)?))
             }
-            Kind::CertificationShare(x) => {
-                CertificationMessageHash::CertificationShare(CryptoHashOf::new(CryptoHash::from(x)))
-            }
+            Kind::CertificationShare(x) => CertificationMessageHash::CertificationShare(
+                CryptoHashOf::new(CryptoHash::try_from(x)?),
+            ),
         })
     }
 }
