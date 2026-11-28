@@ -88,6 +88,7 @@ fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     }
 }
 
@@ -1883,6 +1884,7 @@ mod metrics {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
+            allowed_poke_callers: None,
         }))
     }
 }
