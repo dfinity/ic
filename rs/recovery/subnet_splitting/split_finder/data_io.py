@@ -1,3 +1,5 @@
+import base64
+import zlib
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -6,6 +8,33 @@ import pandas as pd
 # A load type which isn't a column of the load data: every canister contributes one unit of load,
 # so balancing it balances the number of canisters on both post-split subnets.
 CANISTERS_INSTALLED = "canisters_installed"
+
+# The bytes which end every canister ID, after the 8 bytes of its number.
+CANISTER_ID_SUFFIX = b"\x01\x01"
+
+
+def number_to_canister_id(number: int) -> str:
+    """Returns the textual canister ID of the canister with the given number."""
+    principal = number.to_bytes(8, "big") + CANISTER_ID_SUFFIX
+    checksum = zlib.crc32(principal).to_bytes(4, "big")
+    text = base64.b32encode(checksum + principal).decode().rstrip("=").lower()
+    return "-".join(text[i : i + 5] for i in range(0, len(text), 5))
+
+
+def canister_id_to_number(canister_id: str) -> int:
+    """Returns the number of the canister with the given textual canister ID."""
+    text = canister_id.replace("-", "")
+    try:
+        principal = base64.b32decode(text + "=" * (-len(text) % 8), casefold=True)[4:]
+    except ValueError:
+        principal = b""
+    if len(principal) != 8 + len(CANISTER_ID_SUFFIX) or not principal.endswith(CANISTER_ID_SUFFIX):
+        raise ValueError(f"invalid canister ID: '{canister_id}'")
+    number = int.from_bytes(principal[:8], "big")
+    # This also rejects a wrong checksum.
+    if number_to_canister_id(number) != canister_id:
+        raise ValueError(f"invalid canister ID: '{canister_id}'")
+    return number
 
 
 def load_subnet_data(
@@ -18,7 +47,8 @@ def load_subnet_data(
     """
     Load canister metadata and communication edges for a subnet.
     Returns a mapping between canister edges and their weights: (i, j) => weight, a mapping from
-    each load type to its load vector, and index mappings.
+    each load type to its load vector, and index mappings. The canisters are indexed in increasing
+    order of their numbers (see `canister_id_to_number`), whatever the order of the load data.
 
     Arguments:
     load_path -- path to a file in the csv format which contains load metrics for each canister.
@@ -53,6 +83,11 @@ def load_subnet_data(
     # baseline was collected, so the fresh count is a lower bound on the number of messages
     # exchanged in the meantime. Use it instead of the delta.
     communication_data = communication_delta.where(communication_delta >= 0, communication_data).reset_index()
+    # Index the canisters in the routing table's order, i.e. by number: the textual canister IDs
+    # start with a checksum, so sorting them as strings would shuffle the canisters.
+    canister_data = canister_data.sort_values(
+        "canister_id", key=lambda canister_ids: canister_ids.map(canister_id_to_number)
+    ).reset_index(drop=True)
     canister_data["index"] = range(len(canister_data))
     canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
     index_to_canister_id = dict(zip(canister_data["index"], canister_data["canister_id"]))

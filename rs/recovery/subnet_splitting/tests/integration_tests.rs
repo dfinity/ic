@@ -111,6 +111,15 @@ fn load_metrics_e2e_test() {
             "Using `split-finder` to find candidate canister ranges to be migrated"
         );
         let split_output_path = dir.path().join("split_output.csv");
+        let subnet_canister_id_ranges: Vec<String> = state_machine
+            .get_latest_state()
+            .metadata
+            .network_topology
+            .routing_table()
+            .ranges(state_machine.get_subnet_id())
+            .iter()
+            .map(|range| format!("{}:{}", range.start, range.end))
+            .collect();
         let split_finder_path =
             std::env::var("SPLIT_FINDER_PATH").expect("SPLIT_FINDER_PATH not set");
         let output = std::process::Command::new(split_finder_path)
@@ -127,6 +136,8 @@ fn load_metrics_e2e_test() {
                 "--communication-baseline-data-path",
                 &communication_samples_baseline_path.display().to_string(),
             ])
+            .arg("--subnet-canister-id-ranges")
+            .args(&subnet_canister_id_ranges)
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])
             .args(["--epsilon-load", &EPSILON.to_string()])
@@ -147,13 +158,15 @@ fn load_metrics_e2e_test() {
             .collect();
         // With at most `MAX_CUTS` cuts, the canisters, ordered by ID, form at most `MAX_CUTS + 1`
         // segments, which alternate between the two subnets. The `split-finder` reports the
-        // segments of one of the subnets, so at most `MAX_CUTS / 2 + 1` ranges.
-        let max_ranges = MAX_CUTS / 2 + 1;
+        // segments of one of the subnets, so at most `MAX_CUTS / 2 + 1` ranges, except it can also
+        // split a segment where one of the subnet's canister ID ranges ends.
+        let max_ranges = MAX_CUTS / 2 + subnet_canister_id_ranges.len();
         assert!(
             canister_id_ranges.len() <= max_ranges,
             "The split-finder script should have produced at most {max_ranges} canister ranges \
-            because we passed {MAX_CUTS} as the `--max-cuts` argument, but it produced {}: \
-            {canister_id_ranges:?}",
+            because we passed {MAX_CUTS} as the `--max-cuts` argument and {} subnet canister ID \
+            ranges, but it produced {}: {canister_id_ranges:?}",
+            subnet_canister_id_ranges.len(),
             canister_id_ranges.len(),
         );
 

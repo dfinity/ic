@@ -4,10 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from data_io import CANISTERS_INSTALLED, load_subnet_data
+from data_io import CANISTERS_INSTALLED, canister_id_to_number, load_subnet_data, number_to_canister_id
 from split_finder import (
     DEFAULT_EPSILON_LOAD_DEFAULT,
     LOAD_TYPES,
+    assign_canisters_to_ranges,
     compute_max_allowed_load_per_subnet,
     find_split,
     parse_args,
@@ -18,6 +19,8 @@ FAKE_LOAD_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_sample.csv")
 FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_baseline_sample.csv")
 FAKE_COMMUNICATION_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_sample.csv")
 FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_baseline_sample.csv")
+# The canisters in "fake_load_sample.csv" are the canisters 0 to 19.
+FAKE_SUBNET_CANISTER_ID_RANGES = [(0, 19)]
 
 # The canisters in "fake_communication_sample.csv" form a cycling graph. Subtracting
 # "fake_communication_baseline_sample.csv" from it leaves one message per edge, except:
@@ -42,6 +45,8 @@ REQUIRED_ARGS = [
     FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
     "--communication-baseline-data-path",
     FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+    "--subnet-canister-id-ranges",
+    "rwlgt-iiaaa-aaaaa-aaaaa-cai:sp3hj-caaaa-aaaaa-aaajq-cai",
     "--output-path",
     "output.txt",
 ]
@@ -116,6 +121,31 @@ class TestCsvLoading(unittest.TestCase):
         self.assertEqual(result["loads"], {CANISTERS_INSTALLED: [1] * 20}, msg=f"`load_subnet_data` returned {result}")
         self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
 
+    def test_canisters_are_indexed_by_number(self):
+        header, *rows = Path(FAKE_LOAD_SAMPLE_CSV_PATH).read_text().splitlines()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            shuffled_load_path = Path(tmp_dir) / "load.csv"
+            # Sorting the textual canister IDs shuffles the canisters, e.g. canister 1 comes first.
+            shuffled_load_path.write_text("\n".join([header, *sorted(rows)]) + "\n")
+            result = load_subnet_data(
+                shuffled_load_path,
+                FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+                ["ingress_messages_executed"],
+                FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+                FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            )
+        expected = load_subnet_data(
+            FAKE_LOAD_SAMPLE_CSV_PATH,
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            ["ingress_messages_executed"],
+            FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+        )
+
+        self.assertEqual(result["index_to_canister_id"], {k: number_to_canister_id(k) for k in range(20)})
+        # The rows of "fake_load_sample.csv" are in increasing order.
+        self.assertEqual(result, expected, msg=f"`load_subnet_data` returned {result}")
+
     def test_communication_with_unknown_canisters_is_ignored(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             communication_path = Path(tmp_dir) / "communication.csv"
@@ -178,6 +208,7 @@ class TestCsvLoading(unittest.TestCase):
             FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            FAKE_SUBNET_CANISTER_ID_RANGES,
             {"instructions_executed": epsilon},
             100,
         )
@@ -200,7 +231,9 @@ class TestCsvLoading(unittest.TestCase):
     def test_solver_balances_every_load_type(self):
         epsilon = 0.01
         load_types = ["instructions_executed", "heartbeats_and_global_timers_executed"]
-        split = find_split(*FAKE_SAMPLE_PATHS, {load_type: epsilon for load_type in load_types}, 100)
+        split = find_split(
+            *FAKE_SAMPLE_PATHS, FAKE_SUBNET_CANISTER_ID_RANGES, {load_type: epsilon for load_type in load_types}, 100
+        )
 
         for load_type in load_types:
             self.assertLessEqual(
@@ -210,7 +243,9 @@ class TestCsvLoading(unittest.TestCase):
             )
 
         # Removing the heartbeats constraint makes split_finder ignore it
-        instructions_only_split = find_split(*FAKE_SAMPLE_PATHS, {"instructions_executed": epsilon}, 100)
+        instructions_only_split = find_split(
+            *FAKE_SAMPLE_PATHS, FAKE_SUBNET_CANISTER_ID_RANGES, {"instructions_executed": epsilon}, 100
+        )
         self.assertLessEqual(
             max_load_ratio(instructions_only_split, "instructions_executed"),
             1 + epsilon,
@@ -224,7 +259,7 @@ class TestCsvLoading(unittest.TestCase):
 
     def test_solver_applies_each_load_type_epsilon(self):
         load_epsilons = {"instructions_executed": 0.001, "heartbeats_and_global_timers_executed": 0.05}
-        split = find_split(*FAKE_SAMPLE_PATHS, load_epsilons, 100)
+        split = find_split(*FAKE_SAMPLE_PATHS, FAKE_SUBNET_CANISTER_ID_RANGES, load_epsilons, 100)
 
         for load_type, epsilon in load_epsilons.items():
             self.assertLessEqual(
@@ -235,11 +270,16 @@ class TestCsvLoading(unittest.TestCase):
 
         # Tightening the constraint becomes impossible
         with self.assertRaises(RuntimeError):
-            find_split(*FAKE_SAMPLE_PATHS, {load_type: 0.001 for load_type in load_epsilons}, 100)
+            find_split(
+                *FAKE_SAMPLE_PATHS,
+                FAKE_SUBNET_CANISTER_ID_RANGES,
+                {load_type: 0.001 for load_type in load_epsilons},
+                100,
+            )
 
     def test_solver_balances_canisters_installed(self):
         epsilon = 0.0
-        split = find_split(*FAKE_SAMPLE_PATHS, {CANISTERS_INSTALLED: epsilon}, 100)
+        split = find_split(*FAKE_SAMPLE_PATHS, FAKE_SUBNET_CANISTER_ID_RANGES, {CANISTERS_INSTALLED: epsilon}, 100)
 
         # With no allowed deviation (epsilon == 0.0), the 20 canisters must be split evenly.
         self.assertLessEqual(
@@ -250,7 +290,7 @@ class TestCsvLoading(unittest.TestCase):
 
     def test_solver_balances_all_load_types(self):
         load_epsilons = {load_type: DEFAULT_EPSILON_LOAD_DEFAULT for load_type in LOAD_TYPES}
-        split = find_split(*FAKE_SAMPLE_PATHS, load_epsilons, 100)
+        split = find_split(*FAKE_SAMPLE_PATHS, FAKE_SUBNET_CANISTER_ID_RANGES, load_epsilons, 100)
 
         for load_type, epsilon in load_epsilons.items():
             self.assertLessEqual(
@@ -258,6 +298,72 @@ class TestCsvLoading(unittest.TestCase):
                 1 + epsilon,
                 msg=f"`find_split` returned a split which doesn't balance {load_type}: {split}",
             )
+
+    def test_solver_splits_ranges_between_subnet_canister_id_ranges(self):
+        # The subnet hosts canister 100 in its first canister ID range, canisters 1000 and 1001 in its
+        # second one, and canister 2000 in its third one. Canister 100 talks to canister 1000 and
+        # canister 2000 to canister 1001, so each pair stays together. None of these canisters is in
+        # the baseline samples.
+        split = find_split(
+            str(TEST_DATA_DIR / "fake_multi_range_load_sample.csv"),
+            FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+            str(TEST_DATA_DIR / "fake_multi_range_communication_sample.csv"),
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            [(100, 199), (1000, 1099), (2000, 2099)],
+            {CANISTERS_INSTALLED: 0.0},
+            100,
+        )
+
+        # The range of canisters 1001 and 2000 would span the canister IDs of other subnets.
+        self.assertEqual(
+            split,
+            [
+                ("heic2-yaaaa-aaaaa-aapuq-cai", "heic2-yaaaa-aaaaa-aapuq-cai"),
+                ("txegi-kaaaa-aaaaa-aa7ia-cai", "txegi-kaaaa-aaaaa-aa7ia-cai"),
+            ],
+            msg=f"`find_split` returned unexpected split: {split}",
+        )
+
+
+class TestCanisterIdRanges(unittest.TestCase):
+    def test_canister_ids_convert_to_numbers(self):
+        for canister_id, number in [
+            ("rwlgt-iiaaa-aaaaa-aaaaa-cai", 0),
+            ("rrkah-fqaaa-aaaaa-aaaaq-cai", 1),
+            ("37pka-5h777-77777-7777q-cai", 2**64 - 1),
+        ]:
+            with self.subTest(canister_id=canister_id):
+                self.assertEqual(canister_id_to_number(canister_id), number)
+                self.assertEqual(number_to_canister_id(number), canister_id)
+
+    def test_invalid_canister_ids_are_rejected(self):
+        for canister_id in [
+            "",
+            "bogus",
+            # The management canister is not a canister ID.
+            "aaaaa-aa",
+            # Wrong checksum.
+            "rwlgt-iiaaa-aaaaa-aaaaa-caa",
+            # Not the canonical textual form.
+            "RWLGT-IIAAA-AAAAA-AAAAA-CAI",
+        ]:
+            with self.subTest(canister_id=canister_id), self.assertRaises(ValueError):
+                canister_id_to_number(canister_id)
+
+    def test_canisters_are_assigned_to_ranges(self):
+        self.assertEqual(assign_canisters_to_ranges([0, 1, 5, 9, 20], [(5, 9), (0, 1), (20, 20)]), [0, 0, 1, 1, 2])
+
+    def test_invalid_assignments_to_ranges_are_rejected(self):
+        for canister_numbers, ranges in [
+            # A canister lies between, before or after the ranges.
+            ([0, 5, 9], [(0, 1), (6, 9)]),
+            ([0, 5], [(1, 9)]),
+            ([5, 10], [(0, 9)]),
+            # The ranges overlap.
+            ([0, 5], [(0, 5), (5, 9)]),
+        ]:
+            with self.subTest(canister_numbers=canister_numbers, ranges=ranges), self.assertRaises(ValueError):
+                assign_canisters_to_ranges(canister_numbers, ranges)
 
 
 class TestArgParsing(unittest.TestCase):
@@ -288,6 +394,34 @@ class TestArgParsing(unittest.TestCase):
                 self.assertRaises(SystemExit),
             ):
                 parse_args(REQUIRED_ARGS + ["--load-type", *load_type_args])
+
+    def test_subnet_canister_id_ranges_are_parsed(self):
+        # The ranges given last replace those in `REQUIRED_ARGS`.
+        args = parse_args(
+            REQUIRED_ARGS
+            + ["--load-type", "instructions_executed"]
+            + ["--subnet-canister-id-ranges", "rwlgt-iiaaa-aaaaa-aaaaa-cai:rwlgt-iiaaa-aaaaa-aaaaa-cai"]
+            + ["rrkah-fqaaa-aaaaa-aaaaq-cai:sp3hj-caaaa-aaaaa-aaajq-cai"]
+        )
+        self.assertEqual(args.subnet_canister_id_ranges, [(0, 0), (1, 19)])
+
+    def test_invalid_subnet_canister_id_ranges_are_rejected(self):
+        for range_args in [
+            [],
+            ["bogus"],
+            ["rwlgt-iiaaa-aaaaa-aaaaa-cai"],
+            ["rwlgt-iiaaa-aaaaa-aaaaa-cai:bogus"],
+            ["rrkah-fqaaa-aaaaa-aaaaq-cai:rwlgt-iiaaa-aaaaa-aaaaa-cai"],
+        ]:
+            with (
+                self.subTest(range_args=range_args),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                # The ranges given last replace those in `REQUIRED_ARGS`.
+                parse_args(
+                    REQUIRED_ARGS + ["--load-type", "instructions_executed", "--subnet-canister-id-ranges", *range_args]
+                )
 
 
 if __name__ == "__main__":
