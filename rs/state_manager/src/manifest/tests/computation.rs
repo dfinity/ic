@@ -1,14 +1,15 @@
 use crate::manifest::{
-    AlignedBuffer, BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE,
-    DIRECT_IO_ALIGN, DiffScript, FileWithSize, MANIFEST_SPAN_CHUNKS, MAX_FILE_SIZE_TO_GROUP_V3,
-    MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics, ManifestValidationError, RehashManifest,
-    StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest,
-    compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
-    filter_out_zero_chunks,
+    AlignedBuffer, BaseManifestInfo, ChunkAction, ChunkToHash, ChunkValidationError,
+    DEFAULT_CHUNK_SIZE, DIRECT_IO_ALIGN, DiffScript, FileWithSize, MANIFEST_SPAN_CHUNKS,
+    MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics, ManifestValidationError,
+    RehashManifest, StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks,
+    build_meta_manifest, compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes,
+    files_with_sizes, filter_out_zero_chunks,
     hash::{ManifestHash, chunk_hasher},
     hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
-    observe_file_sizes, open_for_hashing, read_chunk, validate_chunk, validate_manifest,
-    validate_manifest_internal_consistency, validate_meta_manifest, validate_sub_manifest,
+    observe_file_sizes, open_for_hashing, read_chunk, sample_rehash, validate_chunk,
+    validate_manifest, validate_manifest_internal_consistency, validate_meta_manifest,
+    validate_sub_manifest,
 };
 use crate::state_sync::types::{
     ChunkInfo, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo, Manifest, MetaManifest,
@@ -426,25 +427,22 @@ fn test_chunk_actions_follow_their_chunks_over_several_spans() {
     // hash of their own, so that rereading and recomputing them would show.
     let reused_hash = |index: usize| [(index % 255) as u8 + 1; 32];
     let is_reused = |index: usize| index.is_multiple_of(3) && index != MANIFEST_SPAN_CHUNKS;
-    let chunk_actions = manifest
-        .chunk_table
-        .iter()
-        .enumerate()
-        .map(|(index, chunk_info)| {
-            if index == MANIFEST_SPAN_CHUNKS {
-                ChunkAction::RecomputeAndCompare([0; 32])
-            } else if is_reused(index) {
-                ChunkAction::UseHash(reused_hash(index))
-            } else if index % 3 == 1 {
-                ChunkAction::RecomputeAndCompare(chunk_info.hash)
-            } else {
-                ChunkAction::Recompute
-            }
-        })
-        .collect();
     let mut files =
         files_with_sizes(root, "".into(), &mut thread_pool).expect("failed to traverse the files");
     files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+    let mut chunks = hash_plan(&files, SPAN_TEST_CHUNK_SIZE, None);
+    for chunk in &mut chunks {
+        let index = chunk.index;
+        chunk.action = if index == MANIFEST_SPAN_CHUNKS {
+            ChunkAction::RecomputeAndCompare([0; 32])
+        } else if is_reused(index) {
+            ChunkAction::UseHash(reused_hash(index))
+        } else if index % 3 == 1 {
+            ChunkAction::RecomputeAndCompare(manifest.chunk_table[index].hash)
+        } else {
+            ChunkAction::Recompute
+        };
+    }
     let (file_table, chunk_table) = build_chunk_table_parallel(
         &mut thread_pool,
         &manifest_metrics,
@@ -452,7 +450,7 @@ fn test_chunk_actions_follow_their_chunks_over_several_spans() {
         root,
         files,
         SPAN_TEST_CHUNK_SIZE,
-        chunk_actions,
+        chunks,
         CURRENT_STATE_SYNC_VERSION,
     );
 
@@ -1129,7 +1127,7 @@ fn test_hash_plan() {
         PathBuf::from("root.bin"),
     };
 
-    let build_manifest_from_hash_plan = |hash_plan| {
+    let build_manifest_from_hash_plan = |chunks| {
         let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
         let (file_table, chunk_table) = build_chunk_table_parallel(
             &mut thread_pool,
@@ -1138,25 +1136,32 @@ fn test_hash_plan() {
             &next_dir,
             files.clone(),
             max_chunk_size,
-            hash_plan,
+            chunks,
             CURRENT_STATE_SYNC_VERSION,
         );
 
         Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table)
     };
+    // The chunks of the new files, reusing the hashes of `root.bin` and rehashing
+    // every `rehash_every_nth` chunk (from an offset seeded with `seed`).
+    let plan = |seed, rehash_every_nth| {
+        let mut chunks = hash_plan(
+            &files,
+            max_chunk_size,
+            Some((&manifest_old, &files_with_same_inodes)),
+        );
+        sample_rehash(&mut chunks, seed, rehash_every_nth);
+        chunks
+    };
+    let actions = |chunks: &[ChunkToHash]| -> Vec<ChunkAction> {
+        chunks.iter().map(|c| c.action.clone()).collect()
+    };
 
     // Hash plan with recompute_period == 1
-    let chunk_actions = hash_plan(
-        &manifest_old,
-        &files,
-        files_with_same_inodes.clone(),
-        max_chunk_size,
-        0,
-        1,
-    );
+    let chunks = plan(0, 1);
 
     assert_eq!(
-        chunk_actions,
+        actions(&chunks),
         vec![
             ChunkAction::RecomputeAndCompare(manifest_old.chunk_table[0].hash),
             ChunkAction::Recompute,
@@ -1167,22 +1172,15 @@ fn test_hash_plan() {
         ]
     );
 
-    let incremental_manifest = build_manifest_from_hash_plan(chunk_actions);
+    let incremental_manifest = build_manifest_from_hash_plan(chunks);
 
     assert_eq!(manifest_new, incremental_manifest);
 
     // Hash plan with recompute_period == 0
-    let chunk_actions = hash_plan(
-        &manifest_old,
-        &files,
-        files_with_same_inodes.clone(),
-        max_chunk_size,
-        0,
-        u64::MAX,
-    );
+    let chunks = plan(0, u64::MAX);
 
     assert_eq!(
-        chunk_actions,
+        actions(&chunks),
         vec![
             ChunkAction::UseHash(manifest_old.chunk_table[0].hash),
             ChunkAction::Recompute,
@@ -1193,7 +1191,7 @@ fn test_hash_plan() {
         ]
     );
 
-    let incremental_manifest = build_manifest_from_hash_plan(chunk_actions);
+    let incremental_manifest = build_manifest_from_hash_plan(chunks);
 
     assert_eq!(manifest_new, incremental_manifest);
 
@@ -1203,20 +1201,13 @@ fn test_hash_plan() {
     let repetitions = 1000;
     let mut seen_used = 0;
     for seed in 0..repetitions {
-        let chunk_actions = hash_plan(
-            &manifest_old,
-            &files,
-            files_with_same_inodes.clone(),
-            max_chunk_size,
-            seed,
-            2,
-        );
+        let chunks = plan(seed, 2);
 
         // It's random, so there could be two possible hash plans
-        if let ChunkAction::UseHash(_) = chunk_actions[0] {
+        if let ChunkAction::UseHash(_) = chunks[0].action {
             seen_used += 1;
             assert_eq!(
-                chunk_actions,
+                actions(&chunks),
                 vec![
                     ChunkAction::UseHash(manifest_old.chunk_table[0].hash),
                     ChunkAction::Recompute,
@@ -1228,7 +1219,7 @@ fn test_hash_plan() {
             );
         } else {
             assert_eq!(
-                chunk_actions,
+                actions(&chunks),
                 vec![
                     ChunkAction::RecomputeAndCompare(manifest_old.chunk_table[0].hash),
                     ChunkAction::Recompute,
@@ -1240,7 +1231,7 @@ fn test_hash_plan() {
             );
         }
 
-        let incremental_manifest = build_manifest_from_hash_plan(chunk_actions);
+        let incremental_manifest = build_manifest_from_hash_plan(chunks);
 
         assert_eq!(manifest_new, incremental_manifest);
     }
