@@ -355,7 +355,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             let past_payloads = vec![PastPayload {
                 height: Height::from(0),
                 time: UNIX_EPOCH,
-                block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                block_hash: CryptoHashOf::from(CryptoHash::for_test()),
                 payload: &past_payload,
             }];
 
@@ -657,7 +657,7 @@ fn validation_rejects_duplicate_responses() {
                 &[PastPayload {
                     height: Height::from(0),
                     time: UNIX_EPOCH,
-                    block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                    block_hash: CryptoHashOf::from(CryptoHash::for_test()),
                     payload: &past_payload,
                 }],
             );

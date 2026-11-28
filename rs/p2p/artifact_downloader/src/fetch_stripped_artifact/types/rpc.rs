@@ -32,7 +32,7 @@ impl TryFrom<pb::GetIngressMessageInBlockRequest> for GetIngressMessageInBlockRe
             value.block_proposal_id,
             "GetIngressMessageInBlockRequest::block_proposal_id",
         )?;
-        let ingress_bytes_hash = CryptoHashOf::from(CryptoHash(value.ingress_bytes_hash));
+        let ingress_bytes_hash = CryptoHashOf::from(CryptoHash::from(value.ingress_bytes_hash));
 
         match &consensus_message_id.hash {
             ConsensusMessageHash::BlockProposal(_) => {}
@@ -59,7 +59,7 @@ impl From<GetIngressMessageInBlockRequest> for pb::GetIngressMessageInBlockReque
         Self {
             ingress_message_id: Some(value.signed_ingress_id.ingress_message_id.into()),
             block_proposal_id: Some(value.block_proposal_id.into()),
-            ingress_bytes_hash: value.signed_ingress_id.ingress_bytes_hash.get().0,
+            ingress_bytes_hash: value.signed_ingress_id.ingress_bytes_hash.get().into_vec(),
         }
     }
 }
@@ -196,7 +196,7 @@ impl TryFrom<pb::GetCanisterHttpResponseInBlockRequest> for GetCanisterHttpRespo
         };
 
         Ok(Self {
-            content_hash: CryptoHashOf::from(CryptoHash(value.content_hash)),
+            content_hash: CryptoHashOf::from(CryptoHash::from(value.content_hash)),
             block_proposal_id: consensus_message_id,
         })
     }
@@ -205,7 +205,7 @@ impl TryFrom<pb::GetCanisterHttpResponseInBlockRequest> for GetCanisterHttpRespo
 impl From<GetCanisterHttpResponseInBlockRequest> for pb::GetCanisterHttpResponseInBlockRequest {
     fn from(value: GetCanisterHttpResponseInBlockRequest) -> Self {
         Self {
-            content_hash: value.content_hash.get().0,
+            content_hash: value.content_hash.get().into_vec(),
             block_proposal_id: Some(value.block_proposal_id.into()),
         }
     }
@@ -265,7 +265,7 @@ mod tests {
 
     fn make_proposal_id() -> ConsensusMessageId {
         ConsensusMessageId {
-            hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::from(CryptoHash(Vec::new()))),
+            hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::from(CryptoHash::for_test())),
             height: Height::new(101),
         }
     }
@@ -275,7 +275,7 @@ mod tests {
         let request = GetIngressMessageInBlockRequest {
             signed_ingress_id: SignedIngressId {
                 ingress_message_id: IngressMessageId::new(UNIX_EPOCH, message_test_id(42)),
-                ingress_bytes_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                ingress_bytes_hash: CryptoHashOf::from(CryptoHash::for_test()),
             },
             block_proposal_id: make_proposal_id(),
         };
@@ -292,7 +292,7 @@ mod tests {
         let request = GetIngressMessageInBlockRequest {
             signed_ingress_id: SignedIngressId {
                 ingress_message_id: IngressMessageId::new(UNIX_EPOCH, message_test_id(42)),
-                ingress_bytes_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                ingress_bytes_hash: CryptoHashOf::from(CryptoHash::for_test()),
             },
             block_proposal_id: fake_finalization_consensus_message_id(),
         };
@@ -329,7 +329,7 @@ mod tests {
                 dealing_prefix(&transcript_id, &NODE_1),
                 IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
                     height: Height::new(101),
-                    hash: CryptoHash(Vec::new()),
+                    hash: CryptoHash::for_test(),
                     subnet_id: SUBNET_0,
                 }),
             ),
@@ -352,7 +352,7 @@ mod tests {
                 dealing_prefix(&transcript_id, &NODE_1),
                 IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
                     height: Height::new(101),
-                    hash: CryptoHash(Vec::new()),
+                    hash: CryptoHash::for_test(),
                     subnet_id: SUBNET_0,
                 }),
             ),
@@ -390,7 +390,7 @@ mod tests {
     #[test]
     fn get_canister_http_response_in_block_request_serialization_test() {
         let request = GetCanisterHttpResponseInBlockRequest {
-            content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            content_hash: CryptoHashOf::from(CryptoHash::for_test()),
             block_proposal_id: make_proposal_id(),
         };
 
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn get_canister_http_response_in_block_request_serialization_fails_if_not_proposal_test() {
         let request = GetCanisterHttpResponseInBlockRequest {
-            content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            content_hash: CryptoHashOf::from(CryptoHash::for_test()),
             block_proposal_id: fake_finalization_consensus_message_id(),
         };
 

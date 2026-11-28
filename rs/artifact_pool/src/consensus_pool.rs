@@ -1102,7 +1102,7 @@ mod tests {
 
     fn fake_block(height: Height, rank: Rank) -> Block {
         Block::new(
-            CryptoHashOf::from(CryptoHash(vec![])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload::fake()),
@@ -1135,7 +1135,7 @@ mod tests {
 
             let mut random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(0),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let msg_0 = random_beacon.clone().into_message();
@@ -1195,21 +1195,21 @@ mod tests {
 
             let random_beacon_1 = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ))
             .into_message();
 
             let random_beacon_2 = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(2),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ))
             .into_message();
 
             let random_beacon_3 = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(3),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ))
             .into_message();
@@ -1280,7 +1280,7 @@ mod tests {
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
 
@@ -1353,7 +1353,7 @@ mod tests {
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let id = random_beacon.get_id();
@@ -1472,7 +1472,7 @@ mod tests {
                 RandomBeacon::fake(RandomBeaconContent {
                     version: test_replica_version(),
                     height,
-                    parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    parent: CryptoHashOf::from(CryptoHash::for_test()),
                 })
                 .into_message()
             };
@@ -1530,10 +1530,10 @@ mod tests {
                     RandomBeacon::fake(RandomBeaconContent {
                         version: test_replica_version(),
                         height: Height::from(height_offset),
-                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                        parent: CryptoHashOf::from(CryptoHash::for_test()),
                     }),
                 ),
-                CryptoHashOf::from(CryptoHash(vec![])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 None,
             ));
             // Sign the CUP, as unsigned CUPs are not broadcast
@@ -1778,7 +1778,7 @@ mod tests {
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let random_tape = RandomTape::fake(RandomTapeContent::new(
@@ -1787,18 +1787,18 @@ mod tests {
             ));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(2),
-                CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let finalization = Finalization::fake(FinalizationContent::new(
                 Height::from(3),
-                CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
 
             // height 3, non-final
             let block = Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(SummaryPayload::fake()),
@@ -1816,7 +1816,7 @@ mod tests {
 
             // height 3, final
             let block = Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(SummaryPayload::fake()),
@@ -1861,7 +1861,7 @@ mod tests {
 
             // non finalized one
             let block = Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(SummaryPayload::fake()),
@@ -1883,7 +1883,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 RandomBeacon::fake(RandomBeaconContent::new(
                     Height::from(4),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    CryptoHashOf::from(CryptoHash::for_test()),
                     test_replica_version(),
                 )),
             );
@@ -2161,7 +2161,7 @@ mod tests {
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let random_tape = RandomTape::fake(RandomTapeContent::new(
@@ -2174,11 +2174,11 @@ mod tests {
             ));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(3),
-                CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let block = Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(SummaryPayload::fake()),
@@ -2410,10 +2410,10 @@ mod tests {
                     RandomBeacon::fake(RandomBeaconContent {
                         version: test_replica_version(),
                         height,
-                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                        parent: CryptoHashOf::from(CryptoHash::for_test()),
                     }),
                 ),
-                CryptoHashOf::from(CryptoHash(vec![])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 None,
             ));
             let notarization = Notarization::fake(NotarizationContent {
@@ -2423,7 +2423,7 @@ mod tests {
             });
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 height,
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             ));
             let cup_id = cup.get_id();

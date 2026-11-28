@@ -298,7 +298,9 @@ pub(crate) fn make_certified_slice_for(
         payload: stream_encoding::encode_tree(tree),
         merkle_proof: v1::Witness::proxy_encode(witness),
         certification: Signed {
-            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+            content: CertificationContent::new(CryptoHashOfPartialState::from(
+                CryptoHash::for_test(),
+            )),
             signature: ThresholdSignature::fake(),
         },
     }

@@ -949,7 +949,7 @@ mod tests {
         let finalization =
             ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
                 Height::new(100),
-                CryptoHashOf::from(CryptoHash(vec![])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             )));
         let pools = mock_pools(
@@ -1442,7 +1442,7 @@ mod tests {
         let finalization =
             ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
                 Height::new(100),
-                CryptoHashOf::from(CryptoHash(vec![])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 test_replica_version(),
             )));
         let pools = mock_pools(

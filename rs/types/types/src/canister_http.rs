@@ -1334,7 +1334,7 @@ impl CountBytes for CanisterHttpResponseMetadata {
             replica_version,
         } = self;
         size_of_val(id)
-            + content_hash.get_ref().0.len()
+            + content_hash.get_ref().as_ref().len()
             + size_of_val(content_size)
             + size_of_val(is_reject)
             + replica_version.as_ref().len()
@@ -1558,7 +1558,7 @@ mod tests {
             CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::new(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![0; 32])),
+                    content_hash: CryptoHashOf::new(CryptoHash::from([0; 32])),
                     content_size: 0,
                     is_reject: false,
                     replica_version: ReplicaVersion::from_str("foobar_version").unwrap(),

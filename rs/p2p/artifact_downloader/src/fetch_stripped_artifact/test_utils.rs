@@ -255,14 +255,14 @@ pub(crate) fn fake_summary_block_proposal() -> ConsensusMessage {
 
 fn fake_consensus_message_id() -> ConsensusMessageId {
     ConsensusMessageId {
-        hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash(vec![]))),
+        hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash::for_test())),
         height: Height::new(42),
     }
 }
 
 pub(crate) fn fake_finalization_consensus_message_id() -> ConsensusMessageId {
     ConsensusMessageId {
-        hash: ConsensusMessageHash::Finalization(CryptoHashOf::from(CryptoHash(Vec::new()))),
+        hash: ConsensusMessageHash::Finalization(CryptoHashOf::from(CryptoHash::for_test())),
         height: Height::new(101),
     }
 }
@@ -273,7 +273,7 @@ pub(crate) fn fake_idkg_dealing_support_artifact_id() -> IDkgArtifactId {
         dealing_support_prefix(&transcript_id, &NODE_1, &NODE_2),
         IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
             height: Height::new(101),
-            hash: CryptoHash(Vec::new()),
+            hash: CryptoHash::for_test(),
             subnet_id: SUBNET_0,
         }),
     )

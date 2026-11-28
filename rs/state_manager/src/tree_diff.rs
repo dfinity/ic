@@ -27,7 +27,7 @@ impl RoseHashTree {
     }
 
     pub fn crypto_hash(&self) -> CryptoHash {
-        CryptoHash(self.digest().0.to_vec())
+        CryptoHash::from(self.digest().0)
     }
 }
 

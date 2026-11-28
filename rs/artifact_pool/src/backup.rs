@@ -654,7 +654,7 @@ mod tests {
     fn test_finalization_conversion() {
         let artifact = Finalization::fake(FinalizationContent::new(
             Height::from(22),
-            CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             test_replica_version(),
         ));
         let mut buf = Vec::new();
@@ -671,7 +671,7 @@ mod tests {
     fn test_notarization_conversion() {
         let artifact = Notarization::fake(NotarizationContent::new(
             Height::from(22),
-            CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            CryptoHashOf::from(CryptoHash::for_test()),
             test_replica_version(),
         ));
         let mut buf = Vec::new();
@@ -688,7 +688,7 @@ mod tests {
     fn test_block_proposal_conversion() {
         let artifact = BlockProposal::fake(
             Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(SummaryPayload::fake()),

@@ -2745,7 +2745,7 @@ mod tests {
                 ))];
                 idkg_pool.apply(change_set);
 
-                support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
+                support.dealing_hash = CryptoHashOf::new(CryptoHash::for_test());
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message: IDkgMessage::DealingSupport(support),
@@ -2786,7 +2786,7 @@ mod tests {
                 ))];
                 idkg_pool.apply(change_set);
 
-                support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
+                support.dealing_hash = CryptoHashOf::new(CryptoHash::for_test());
                 support.dealer_id = NODE_4;
                 let msg_id = support.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {

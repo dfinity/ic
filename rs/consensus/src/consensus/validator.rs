@@ -2392,7 +2392,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash::from([1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -2527,7 +2527,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash::from([1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -2806,7 +2806,7 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
             let expected_batch_height = Arc::new(RwLock::new(Height::from(1)));
             let expected_batch_height_clone = expected_batch_height.clone();
             message_routing
@@ -3408,7 +3408,7 @@ pub mod test {
                         summary.content.get_value().clone(),
                     ),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    CryptoHashOf::from(CryptoHash::for_test()),
                     None,
                 ),
                 signature: ThresholdSignature {
@@ -4364,7 +4364,7 @@ pub mod test {
             pool.advance_round_normal_operation_no_cup_n(finalized_height.get());
 
             let fake_block = Block::new(
-                CryptoHashOf::from(CryptoHash(vec![])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
                     BlockPayload::Summary(SummaryPayload::fake()),
@@ -4381,7 +4381,7 @@ pub mod test {
             let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
                 version: replica_config.replica_version().clone(),
                 height: cup_height,
-                parent: CryptoHashOf::from(CryptoHash(vec![])),
+                parent: CryptoHashOf::from(CryptoHash::for_test()),
             });
             let pool_reader = PoolReader::new(&pool);
 
@@ -4394,7 +4394,7 @@ pub mod test {
             let catch_up_package = fake_catch_up_package(CatchUpContent::new(
                 HashedBlock::new(ic_types::crypto::crypto_hash, block),
                 HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon),
-                CryptoHashOf::from(CryptoHash(vec![])),
+                CryptoHashOf::from(CryptoHash::for_test()),
                 None,
             ));
             pool.insert_unvalidated(catch_up_package.clone());
@@ -4402,7 +4402,7 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -4448,7 +4448,7 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash::for_test())));
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -4935,9 +4935,10 @@ pub mod test {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Insert two different proofs for the same height and signer
             pool.insert_unvalidated(proof.clone());
-            let mut hash = proof.hash1.clone().get();
-            hash.0[0] = !hash.0[0];
-            proof.hash2 = CryptoHashOf::new(hash);
+            let mut bytes: [u8; CryptoHash::LEN] =
+                proof.hash1.get_ref().as_ref().try_into().unwrap();
+            bytes[0] = !bytes[0];
+            proof.hash2 = CryptoHashOf::new(CryptoHash::from(bytes));
             pool.insert_unvalidated(proof.clone());
 
             // We should validate only a single equivocation proof, the other
@@ -5615,7 +5616,7 @@ pub mod test {
                 );
                 registry.reload();
 
-                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash::for_test());
                 state_manager
                     .get_mut()
                     .expect_get_state_hash_at()
@@ -5675,7 +5676,7 @@ pub mod test {
                 match &malform_share {
                     Some(MalformShare::StateHash) => {
                         share.content.state_hash =
-                            CryptoHashOfState::from(CryptoHash(vec![3, 1, 4]));
+                            CryptoHashOfState::from(CryptoHash::from([3; 32]));
                     }
                     Some(MalformShare::RandomBeacon) => {
                         let mut invalid_beacon = share.content.random_beacon.into_inner();

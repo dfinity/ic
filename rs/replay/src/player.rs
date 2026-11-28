@@ -729,7 +729,7 @@ impl Player {
                 (height, hash_raw)
             }
         };
-        let hash = hex::encode(hash_raw.get().0);
+        let hash = hex::encode(hash_raw.get_ref());
 
         StateParams {
             height,
@@ -1843,12 +1843,12 @@ mod tests {
 
     use super::*;
 
-    fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
+    fn make_share(height: u64, hash: u8, node_id: u64) -> CertificationMessage {
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
             height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
-                content: CertificationContent::new(CryptoHash(hash).into()),
+                content: CertificationContent::new(CryptoHash::from([hash; 32]).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
         })
@@ -1870,29 +1870,29 @@ mod tests {
         let shares = vec![
             // Height 1:
             // 3 shares for hash "1"
-            make_share(1, vec![1], 1),
-            make_share(1, vec![1], 2),
-            make_share(1, vec![1], 3),
+            make_share(1, 1, 1),
+            make_share(1, 1, 2),
+            make_share(1, 1, 3),
             // 3 shares for hash "2", but one of them is from malicious node 7
             // (should be ignored)
-            make_share(1, vec![2], 4),
-            make_share(1, vec![2], 5),
-            make_share(1, vec![2], 7),
+            make_share(1, 2, 4),
+            make_share(1, 2, 5),
+            make_share(1, 2, 7),
             // Height 2:
             // 1 share for hash "2"
-            make_share(2, vec![2], 5),
+            make_share(2, 2, 5),
             // Height 3:
             // 3 shares for hash "1"
-            make_share(3, vec![1], 1),
-            make_share(3, vec![1], 2),
-            make_share(3, vec![1], 3),
+            make_share(3, 1, 1),
+            make_share(3, 1, 2),
+            make_share(3, 1, 3),
             // 4 shares for hash "2"
-            make_share(3, vec![2], 4),
-            make_share(3, vec![2], 5),
-            make_share(3, vec![2], 6),
-            make_share(3, vec![2], 7),
+            make_share(3, 2, 4),
+            make_share(3, 2, 5),
+            make_share(3, 2, 6),
+            make_share(3, 2, 7),
             // 1 share for hash "3" by malicious node 7
-            make_share(3, vec![3], 7),
+            make_share(3, 3, 7),
         ];
 
         shares.into_iter().for_each(|s| pool.validated.insert(s));
@@ -1903,19 +1903,19 @@ mod tests {
 
         let hashes = get_share_certified_hashes(Height::from(1), f, &pool, &malicious);
         assert_eq!(hashes.len(), 1);
-        assert_eq!(hashes[0].get_ref().0, vec![1]);
+        assert_eq!(hashes[0].get_ref(), &CryptoHash::from([1; 32]));
         assert!(!is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(1),
-            CryptoHash(vec![1]).into(),
+            CryptoHash::from([1; 32]).into(),
             f
         ));
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(1),
-            CryptoHash(vec![2]).into(),
+            CryptoHash::from([2; 32]).into(),
             f
         ));
 
@@ -1924,7 +1924,7 @@ mod tests {
             &pool,
             &malicious,
             Height::from(2),
-            CryptoHash(vec![1]).into(),
+            CryptoHash::from([1; 32]).into(),
             f
         ));
         assert!(hashes.is_empty());
@@ -1935,28 +1935,28 @@ mod tests {
         assert!(
             hashes
                 .into_iter()
-                .map(|h| h.get().0)
-                .all(|h| h == vec![1] || h == vec![2])
+                .map(|h| h.get().into_vec())
+                .all(|h| h == [1; 32] || h == [2; 32])
         );
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(3),
-            CryptoHash(vec![1]).into(),
+            CryptoHash::from([1; 32]).into(),
             f
         ));
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(3),
-            CryptoHash(vec![2]).into(),
+            CryptoHash::from([2; 32]).into(),
             f
         ));
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
             Height::from(3),
-            CryptoHash(vec![3]).into(),
+            CryptoHash::from([3; 32]).into(),
             f
         ));
     }
@@ -2034,7 +2034,7 @@ mod tests {
     }
 
     fn fake_state_hash() -> CryptoHashOfState {
-        CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))
+        CryptoHashOfState::from(CryptoHash::for_test())
     }
 
     // This test is maybe a bit of a mockery. Realistic testing is hard...

@@ -1255,9 +1255,9 @@ pub fn validate_manifest(
 
     let hash = manifest_hash(manifest);
 
-    if root_hash.get_ref().0 != hash {
+    if root_hash.get_ref().as_ref() != hash {
         return Err(ManifestValidationError::InvalidRootHash {
-            expected_hash: root_hash.get_ref().0.clone(),
+            expected_hash: root_hash.get_ref().as_ref().to_vec(),
             actual_hash: hash.to_vec(),
         });
     }
@@ -1428,7 +1428,7 @@ pub(crate) fn compute_bundled_manifest(manifest: Manifest) -> BundledManifest {
     } else {
         manifest_hash_v1(&manifest)
     };
-    let root_hash = CryptoHashOfState::from(CryptoHash(hash.to_vec()));
+    let root_hash = CryptoHashOfState::from(CryptoHash::from(hash));
     BundledManifest {
         root_hash,
         manifest,
@@ -1450,9 +1450,9 @@ pub fn validate_meta_manifest(
 
     let hash = meta_manifest_hash(meta_manifest);
 
-    if root_hash.get_ref().0 != hash {
+    if root_hash.get_ref().as_ref() != hash {
         return Err(ManifestValidationError::InvalidRootHash {
-            expected_hash: root_hash.get_ref().0.clone(),
+            expected_hash: root_hash.get_ref().as_ref().to_vec(),
             actual_hash: hash.to_vec(),
         });
     }

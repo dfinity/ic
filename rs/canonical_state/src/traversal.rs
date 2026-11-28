@@ -109,7 +109,7 @@ mod tests {
     ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
         let height = vec![edge("height"), leb_num(height)];
         let prev_state_hash = if let Some(hash) = prev_state_hash {
-            vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
+            vec![edge("prev_state_hash"), E::VisitBlob(hash.get().into_vec())]
         } else {
             vec![]
         };
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_traverse_metadata() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        let prev_state_hash = Some(CryptoHashOfPartialState::from(CryptoHash(vec![42; 32])));
+        let prev_state_hash = Some(CryptoHashOfPartialState::from(CryptoHash::from([42; 32])));
         state.metadata.prev_state_hash = prev_state_hash.clone();
         let height = 42;
 

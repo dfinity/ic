@@ -214,7 +214,9 @@ pub fn default_read_certified_state(
                 },
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
             },
-            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+            content: CertificationContent::new(CryptoHashOfPartialState::from(
+                CryptoHash::for_test(),
+            )),
         },
     };
 

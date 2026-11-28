@@ -39,11 +39,8 @@ pub fn do_split_manifest(
 
     // Sanity check: ensure that the parsed manifest is internally consistent; and
     // that the parsed hash matches the one computed from the manifest.
-    validate_manifest(
-        &manifest,
-        &CryptoHashOfState::from(CryptoHash(hash.to_vec())),
-    )
-    .map_err(|e| format!("Invalid manifest: {e}"))?;
+    validate_manifest(&manifest, &CryptoHashOfState::from(CryptoHash::from(hash)))
+        .map_err(|e| format!("Invalid manifest: {e}"))?;
 
     let mut routing_table = RoutingTable::new();
     // Assigns the given ranges in `routing_table` to the given subnet.

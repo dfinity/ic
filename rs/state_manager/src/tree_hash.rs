@@ -334,7 +334,7 @@ mod tests {
                 network_topology.set_routing_table(routing_table);
             });
             state.metadata.prev_state_hash =
-                Some(CryptoHashOfPartialState::new(CryptoHash(vec![3, 2, 1])));
+                Some(CryptoHashOfPartialState::new(CryptoHash::for_test()));
 
             state.metadata.certification_version = certification_version;
 
@@ -400,7 +400,7 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes = ["C81D47E2FDC5822705E25AE2C06C11FDE4E3EE0ECE4187A5089A27C7B1688392"];
+        let expected_hashes = ["1A14CFF2F41EEE29B233C1EBB8028853756BF79CFA653C781AC08E859A052C6A"];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 
         for (certification_version, expected_hash) in

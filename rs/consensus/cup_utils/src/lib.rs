@@ -20,10 +20,11 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage, CupType,
-        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload, idkg,
+        HashedBlock, HashedRandomBeacon, NonexistentHash, Payload, RandomBeacon,
+        RandomBeaconContent, Rank, SummaryPayload, idkg,
     },
     crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHashOf, Signable, Signed,
         canister_threshold_sig::MasterPublicKey,
         crypto_hash,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
@@ -31,7 +32,6 @@ use ic_types::{
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
 };
-use phantom_newtype::Id;
 use std::{collections::BTreeMap, fmt};
 
 /// The reasons why a [`CatchUpPackage`] can fail verification.
@@ -197,11 +197,7 @@ pub fn make_registry_cup_from_cup_contents(
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
     let (cup_height, time, state_hash) = match CupType::try_from(&cup_contents) {
-        Ok(CupType::Genesis) => (
-            Height::new(0),
-            UNIX_EPOCH,
-            CryptoHashOfState::from(CryptoHash(Vec::new())),
-        ),
+        Ok(CupType::Genesis) => (Height::new(0), UNIX_EPOCH, CryptoHashOfState::nonexistent()),
         Ok(CupType::Recovery {
             height,
             time,
@@ -300,7 +296,7 @@ pub fn make_registry_cup_from_cup_contents(
         .unwrap_or(registry_version);
     let block = Block {
         version: replica_version.clone(),
-        parent: Id::from(CryptoHash(Vec::new())),
+        parent: CryptoHashOf::<Block>::nonexistent(),
         payload: Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
@@ -320,7 +316,7 @@ pub fn make_registry_cup_from_cup_contents(
         content: RandomBeaconContent {
             version: replica_version,
             height: cup_height,
-            parent: Id::from(CryptoHash(Vec::new())),
+            parent: CryptoHashOf::<RandomBeacon>::nonexistent(),
         },
         signature: ThresholdSignature {
             signer: low_dkg_id,
@@ -567,7 +563,7 @@ mod tests {
             Some(CupType::Recovery(RecoveryArgs {
                 height: 54321,
                 time: 1,
-                state_hash: vec![1, 2, 3, 4, 5],
+                state_hash: CryptoHash::for_test().into_vec(),
             })),
         )
     }
@@ -777,18 +773,18 @@ mod tests {
     #[rstest]
     #[case::genesis(
         Some(CupType::Genesis(GenesisArgs {})),
-        Some((Height::from(0), UNIX_EPOCH, CryptoHash(vec![]))),
+        Some((Height::from(0), UNIX_EPOCH, CryptoHashOfState::nonexistent())),
     )]
     #[case::recovery(
         Some(CupType::Recovery(RecoveryArgs {
             height: 54321,
             time: 1,
-            state_hash: vec![1, 2, 3, 4, 5],
+            state_hash: vec![1; 32],
         })),
         Some((
             Height::from(54321),
             Time::from_nanos_since_unix_epoch(1),
-            CryptoHash(vec![1, 2, 3, 4, 5]),
+            CryptoHashOfState::from(CryptoHash::from([1; 32])),
         )),
     )]
     #[case::subnet_splitting(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
@@ -797,7 +793,7 @@ mod tests {
     #[case::missing(None, None)]
     fn test_make_registry_cup(
         #[case] cup_type: Option<CupType>,
-        #[case] expected: Option<(Height, Time, CryptoHash)>,
+        #[case] expected: Option<(Height, Time, CryptoHashOfState)>,
     ) {
         let subnet_id = subnet_test_id(0);
         let registry_client =
@@ -818,7 +814,7 @@ mod tests {
         };
 
         let block = cup.content.block.get_value();
-        assert_eq!(cup.content.state_hash.get_ref(), &state_hash);
+        assert_eq!(cup.content.state_hash, state_hash);
         assert_eq!(block.height, height);
         assert_eq!(block.context.certified_height, height);
         assert_eq!(block.context.time, time);

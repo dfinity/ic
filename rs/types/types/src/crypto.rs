@@ -5,7 +5,9 @@ pub mod vetkd;
 
 mod hash;
 
+pub use hash::CryptoHash;
 pub use hash::CryptoHashDomain;
+pub use hash::CryptoHashOf;
 pub use hash::CryptoHashable;
 pub use hash::CryptoHashableTestDummy;
 pub use hash::crypto_hash;
@@ -72,19 +74,6 @@ impl<'a> From<&'a Vec<u8>> for HexEncoding<'a> {
         HexEncoding { bytes }
     }
 }
-
-/// A cryptographic hash.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
-pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
-impl fmt::Debug for CryptoHash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CryptoHash(0x{})", hex::encode(&self.0))
-    }
-}
-
-/// A cryptographic hash for content of type `T`
-pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 
 /// Signed contains the signed content and its signature.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]

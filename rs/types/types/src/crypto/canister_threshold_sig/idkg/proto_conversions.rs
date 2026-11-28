@@ -181,7 +181,7 @@ impl From<IDkgDealingSupport> for IDkgDealingSupportProto {
         Self {
             transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
-            dealing_hash: value.dealing_hash.get().0,
+            dealing_hash: value.dealing_hash.get().into_vec(),
             sig_share: Some(BasicSignatureProto::from(value.sig_share)),
         }
     }
@@ -197,7 +197,7 @@ impl TryFrom<IDkgDealingSupportProto> for IDkgDealingSupport {
                 "IDkgDealingSupport::transcript_id",
             )?,
             dealer_id: node_id_try_from_option(proto.dealer)?,
-            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash(proto.dealing_hash)),
+            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash::from(proto.dealing_hash)),
             sig_share: try_from_option_field(proto.sig_share, "IDkgDealingSupport::sig_share")?,
         })
     }

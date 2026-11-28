@@ -564,7 +564,7 @@ mod tests {
     fn metadata(content_size: u32) -> CanisterHttpResponseMetadata {
         CanisterHttpResponseMetadata {
             id: CallbackId::from(1),
-            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+            content_hash: CryptoHashOf::new(CryptoHash::for_test()),
             content_size,
             is_reject: false,
             replica_version: test_replica_version(),

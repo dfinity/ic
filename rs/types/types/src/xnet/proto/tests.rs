@@ -154,7 +154,7 @@ fn certification_for_test() -> Certification {
 }
 
 fn certification_content_for_test() -> CertificationContent {
-    CertificationContent::new(CryptoHashOfPartialState::new(CryptoHash(vec![1, 2, 3])))
+    CertificationContent::new(CryptoHashOfPartialState::new(CryptoHash::for_test()))
 }
 
 fn threshold_signature_for_test() -> ThresholdSignature<CertificationContent> {

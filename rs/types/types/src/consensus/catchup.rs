@@ -110,9 +110,9 @@ impl From<CatchUpContent> for pb::CatchUpContent {
         Self {
             block: Some(pb::Block::from(&block)),
             random_beacon: Some(pb::RandomBeacon::from(beacon)),
-            block_hash: block_hash.get().0,
-            random_beacon_hash: beacon_hash.get().0,
-            state_hash: content.state_hash.get().0,
+            block_hash: block_hash.get().into_vec(),
+            random_beacon_hash: beacon_hash.get().into_vec(),
+            state_hash: content.state_hash.get().into_vec(),
             oldest_registry_version_in_use_by_replicated_state: content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(|v| v.get()),
@@ -131,14 +131,14 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
 
         Ok(Self::new(
             HashedBlock {
-                hash: CryptoHashOf::from(CryptoHash(content.block_hash)),
+                hash: CryptoHashOf::from(CryptoHash::from(content.block_hash)),
                 value: block,
             },
             HashedRandomBeacon {
-                hash: CryptoHashOf::from(CryptoHash(content.random_beacon_hash)),
+                hash: CryptoHashOf::from(CryptoHash::from(content.random_beacon_hash)),
                 value: random_beacon,
             },
-            CryptoHashOf::from(CryptoHash(content.state_hash)),
+            CryptoHashOf::from(CryptoHash::from(content.state_hash)),
             content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(RegistryVersion::from),
@@ -282,9 +282,9 @@ impl From<CatchUpPackageShare> for pb::CatchUpPackageShare {
         Self {
             version: cup_share.content.version.to_string(),
             random_beacon: Some(beacon.into()),
-            state_hash: cup_share.content.state_hash.get().0,
-            block_hash: cup_share.content.block.get().0,
-            random_beacon_hash: beacon_hash.get().0,
+            state_hash: cup_share.content.state_hash.get().into_vec(),
+            block_hash: cup_share.content.block.get().into_vec(),
+            random_beacon_hash: beacon_hash.get().into_vec(),
             signature: cup_share.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(cup_share.signature.signer)),
             oldest_registry_version_in_use_by_replicated_state: cup_share
@@ -301,15 +301,15 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
         Ok(Signed {
             content: CatchUpShareContent {
                 version: ReplicaVersion::try_from(cup_share.version.as_str())?,
-                block: CryptoHashOf::new(CryptoHash(cup_share.block_hash)),
+                block: CryptoHashOf::new(CryptoHash::from(cup_share.block_hash)),
                 random_beacon: HashedRandomBeacon::recompose(
-                    CryptoHashOf::from(CryptoHash(cup_share.random_beacon_hash)),
+                    CryptoHashOf::from(CryptoHash::from(cup_share.random_beacon_hash)),
                     try_from_option_field(
                         cup_share.random_beacon,
                         "CatchUpPackageShare::random_beacon",
                     )?,
                 ),
-                state_hash: CryptoHashOf::from(CryptoHash(cup_share.state_hash)),
+                state_hash: CryptoHashOf::from(CryptoHash::from(cup_share.state_hash)),
                 oldest_registry_version_in_use_by_replicated_state: cup_share
                     .oldest_registry_version_in_use_by_replicated_state
                     .map(RegistryVersion::from),
@@ -442,7 +442,7 @@ impl TryFrom<subnet_pb::catch_up_package_contents::CupType> for CupType {
             }) => CupType::Recovery {
                 height: Height::new(height),
                 time: Time::from_nanos_since_unix_epoch(time),
-                state_hash: CryptoHashOfState::from(CryptoHash(state_hash)),
+                state_hash: CryptoHashOfState::from(CryptoHash::from(state_hash)),
             },
             CupTypePb::SubnetSplitting(subnet_splitting_args) => CupType::SubnetSplitting {
                 destination_subnet_id: subnet_id_try_from_option(
@@ -528,12 +528,12 @@ mod tests {
         CupTypePb::Recovery(subnet_pb::RecoveryArgs {
             height: 54321,
             time: 1_000,
-            state_hash: vec![1, 2, 3],
+            state_hash: vec![1; 32],
         }),
         CupType::Recovery {
             height: Height::new(54321),
             time: Time::from_nanos_since_unix_epoch(1_000),
-            state_hash: CryptoHashOfState::from(CryptoHash(vec![1, 2, 3])),
+            state_hash: CryptoHashOfState::from(CryptoHash::from([1; 32])),
         },
     )]
     #[case::subnet_splitting(

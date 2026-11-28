@@ -138,7 +138,7 @@ mod crypto_hash_stability {
 
     /// Helper to create a deterministic CryptoHashOf from a byte
     fn test_crypto_hash_of<T>(byte: u8) -> CryptoHashOf<T> {
-        CryptoHashOf::new(CryptoHash(vec![byte; 32]))
+        CryptoHashOf::new(CryptoHash::from([byte; 32]))
     }
 
     fn replica_version_for_stability() -> ReplicaVersion {
@@ -497,7 +497,7 @@ mod crypto_hash_stability {
     /// Test stability of CertificationContent hash output
     #[test]
     fn certification_content_stability() {
-        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let data = CertificationContent::new(state_hash);
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -520,7 +520,7 @@ mod crypto_hash_stability {
     /// Test stability of Certification hash output
     #[test]
     fn certification_stability() {
-        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let content = CertificationContent::new(state_hash);
         let data = Certification {
             height: Height::from(42),
@@ -544,7 +544,7 @@ mod crypto_hash_stability {
     /// Test stability of CertificationShare hash output
     #[test]
     fn certification_share_stability() {
-        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let content = CertificationContent::new(state_hash);
         let data = CertificationShare {
             height: Height::from(42),
@@ -588,7 +588,7 @@ mod crypto_hash_stability {
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
-        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let data = CatchUpContent::new(hashed_block, hashed_beacon, state_hash, None);
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -605,7 +605,7 @@ mod crypto_hash_stability {
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
-        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let cup_content = CatchUpContent::new(hashed_block, hashed_beacon, state_hash, None);
         let data = CatchUpShareContent::from(&cup_content);
         let hash = crypto_hash(&data);
@@ -647,7 +647,7 @@ mod crypto_hash_stability {
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
-        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let content = CatchUpContent::new(hashed_block, hashed_beacon, state_hash, None);
         let data: CatchUpPackage = Signed {
             content,
@@ -671,7 +671,7 @@ mod crypto_hash_stability {
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
-        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let cup_content = CatchUpContent::new(
             hashed_block,
             hashed_beacon,
@@ -710,7 +710,7 @@ mod crypto_hash_stability {
     /// Test stability of CertificationMessage hash output
     #[test]
     fn certification_message_stability() {
-        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
+        let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash::from([0x42; 32]));
         let content = CertificationContent::new(state_hash);
         let cert = Certification {
             height: Height::from(42),
