@@ -42,10 +42,15 @@ use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-/// When computing a manifest, we recompute the hash of every
-/// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
-/// have a hash computed earlier by this replica process.
-const REHASH_EVERY_NTH_CHUNK: u64 = 10;
+/// The rehash after each manifest computed from the previous one (see
+/// `rehash_window`) recomputes the hashes of 1 / `REHASH_FRACTION` of the
+/// state's bytes, but at most `MAX_REHASH_BYTES`: below that cap, each byte's
+/// hash is checked at least every `REHASH_FRACTION` checkpoints on average.
+const REHASH_FRACTION: u64 = 10;
+
+/// The most bytes the rehash reads, bounding its time for large states: about
+/// 25 s of reads at the 6 GB/s measured on a node under heavy load.
+const MAX_REHASH_BYTES: u64 = 150_000_000_000;
 
 /// Chunks of a file are hashed in spans of up to this many consecutive chunks
 /// (256 MiB at the default chunk size): the units of work the threads take,
@@ -887,28 +892,42 @@ fn hash_plan(
     chunks
 }
 
-/// Turns the `UseHash` actions of every `rehash_every_nth` chunk into
+/// Turns the `UseHash` actions of a window of consecutive chunks into
 /// `RecomputeAndCompare`, so that errors in reused hashes don't propagate
-/// indefinitely.
+/// indefinitely. The window holds the chunks overlapping a range of 1 /
+/// `REHASH_FRACTION` of the chunks' bytes, but at most `MAX_REHASH_BYTES`, from
+/// a byte offset drawn with `seed`, wrapping around after the last chunk.
 ///
-/// We choose a uniformly random offset in [0, rehash_every_nth - 1] and
-/// recompute any chunks with ((chunk_index + offset) % rehash_every_nth) == 0.
-/// The sampling is done using an rng so that it's not always the same chunks but
-/// seeded deterministically. We want to ensure that all replicas have the same
-/// hash plan, as otherwise a replica that detects an error might not be able to
-/// sway consensus. At the same time, we do not require unpredictability here, as
-/// long as we can guarantee that we find faulty chunks within rehash_every_nth
-/// checkpoints in expectation.
-fn sample_rehash(chunks: &mut [ChunkToHash], seed: u64, rehash_every_nth: u64) {
-    let mut rng = ChaChaRng::seed_from_u64(seed);
-    let rehash_every_nth = rehash_every_nth.max(1); // 0 will behave like 1
-    let offset = rng.gen_range(0..rehash_every_nth);
+/// The offset is random, so that every byte is equally likely to be in the
+/// range, however the files' sizes change (rounding the range out to whole
+/// chunks only adds checks). And it is seeded deterministically (with the
+/// checkpoint height), so that all replicas check the same chunks: a replica
+/// that finds a deterministic error computes its next manifest from scratch, and
+/// if the others didn't find the same error they would outvote it.
+fn rehash_window(chunks: &mut [ChunkToHash], seed: u64) {
+    let total: u64 = chunks
+        .iter()
+        .map(|chunk| chunk.info.size_bytes as u64)
+        .sum();
+    if total == 0 {
+        return;
+    }
+    let budget = total.div_ceil(REHASH_FRACTION).min(MAX_REHASH_BYTES);
+    let range_begin = ChaChaRng::seed_from_u64(seed).gen_range(0..total);
+    let range_end = range_begin + budget;
+    // Any part of the range past the last chunk wraps around to the first chunk,
+    // up to `wrapped_end`.
+    let wrapped_end = range_end.saturating_sub(total);
+
+    let mut chunk_begin = 0;
     for chunk in chunks {
-        if (chunk.index as u64).wrapping_add(offset) % rehash_every_nth == 0
-            && let ChunkAction::UseHash(hash) = chunk.action
-        {
+        let chunk_end = chunk_begin + chunk.info.size_bytes as u64;
+        let in_window =
+            (chunk_begin < range_end && chunk_end > range_begin) || chunk_begin < wrapped_end;
+        if in_window && let ChunkAction::UseHash(hash) = chunk.action {
             chunk.action = ChunkAction::RecomputeAndCompare(hash);
         }
+        chunk_begin = chunk_end;
     }
 }
 
@@ -1032,11 +1051,7 @@ pub fn compute_manifest(
                     Some((&base_manifest_info.base_manifest, &files_with_same_inodes)),
                 );
                 if rehash == RehashManifest::Yes {
-                    sample_rehash(
-                        &mut chunks,
-                        base_manifest_info.target_height.get(),
-                        REHASH_EVERY_NTH_CHUNK,
-                    );
+                    rehash_window(&mut chunks, base_manifest_info.target_height.get());
                 }
                 chunks
             } else {

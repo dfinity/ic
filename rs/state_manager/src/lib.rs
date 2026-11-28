@@ -51,7 +51,7 @@
 //! | Manifest thread | After H | The checkpoint's files, in chunks, except files hard-linked from the previous checkpoint, whose hashes it reuses | — |
 //! | Tip thread: validate | After H, while the manifest is computed | The checkpoint's protobufs, loaded and compared with the state | Marks the files read-only, `syncfs`es and removes the unverified marker |
 //! | Tip thread: publish | Once validated and the manifest is ready | — | The manifest, into the states' metadata: only now can Consensus make the CUP |
-//! | Manifest thread: rehash | After handing over a manifest computed from the previous one | One in 10 (`REHASH_EVERY_NTH_CHUNK`) of all the checkpoint's chunks, compared with the manifest just computed; on a mismatch, the next manifest is computed from scratch | — |
+//! | Manifest thread: rehash | After handing over a manifest computed from the previous one | Consecutive chunks covering a tenth of the checkpoint's bytes (at most 150 GB) from an offset drawn with the height as seed (`rehash_window`), compared with the manifest just computed; on a mismatch, the next manifest is computed from scratch | — |
 //! | Tip thread: reset tip, merge | After publishing | The files being merged | In `tip/`: hard links to the checkpoint's files (except protobufs), then the merged files |
 //! | Checkpoint removal thread | Once Consensus no longer needs the previous checkpoint ([`StateManager::remove_states_below`]) | — | Deletes it, after renaming it into `fs_tmp/` |
 //! | `syncfs` thread | After the tip thread's larger writes | — | Starts writeback early, so the `syncfs` before verification has less left to do |
