@@ -14,6 +14,7 @@ pub use self::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        MIN_STRIPPED_CONTENT_BYTES, stripping_savings,
     },
     chain_key::{
         ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, bytes_to_chain_key_payload,

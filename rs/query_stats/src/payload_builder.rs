@@ -122,7 +122,7 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
         proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-    ) -> Result<(), PayloadValidationError> {
+    ) -> Result<NumBytes, PayloadValidationError> {
         let _time = self
             .metrics
             .query_stats_payload_builder_duration
@@ -131,7 +131,7 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
 
         // Empty payloads are always valid
         if payload.is_empty() {
-            return Ok(());
+            return Ok(NumBytes::new(0));
         }
 
         // Check whether feature is enabled and reject if it isn't.
@@ -142,7 +142,8 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             ));
         }
 
-        self.validate_payload_impl(height, proposal_context, payload, past_payloads)
+        self.validate_payload_impl(height, proposal_context, payload, past_payloads)?;
+        Ok(NumBytes::new(payload.len() as u64))
     }
 }
 

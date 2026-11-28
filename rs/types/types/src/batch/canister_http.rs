@@ -30,6 +30,18 @@ pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 pub const MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE: usize =
     MAX_CANISTER_HTTP_PAYLOAD_SIZE - 64 * 1024;
 
+/// The smallest response content that P2P strips from block proposals sent to peers.
+pub const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
+
+/// The bytes that stripping saves on a response with the given content, estimated by the
+/// content's [`CountBytes`]: everything above the largest content that is not stripped, so
+/// that a larger content never counts for less on the wire.
+pub fn stripping_savings(content: &CanisterHttpResponseContent) -> usize {
+    content
+        .count_bytes()
+        .saturating_sub(MIN_STRIPPED_CONTENT_BYTES - 1)
+}
+
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
@@ -293,30 +305,6 @@ impl CanisterHttpPayload {
             + flexible_responses.len()
             + flexible_errors.len()
             + async_receipts.len()
-    }
-
-    /// Returns the number of responses that count towards
-    /// [`CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`](crate::canister_http::CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK),
-    /// i.e. all of them except timeouts, which are cheap to validate, and asynchronous
-    /// receipts, as the response they belong to already counted towards it.
-    pub fn num_limited_responses(&self) -> usize {
-        let CanisterHttpPayload {
-            responses,
-            timeouts: _,
-            divergence_responses,
-            out_of_cycles,
-            flexible_responses,
-            flexible_errors,
-            async_receipts: _,
-        } = self;
-        responses.len()
-            + divergence_responses.len()
-            + out_of_cycles.len()
-            + flexible_responses.len()
-            + flexible_errors
-                .iter()
-                .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
-                .count()
     }
 
     /// Returns true, if this is an empty payload
@@ -841,6 +829,28 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_types_cycles::Cycles;
     use std::collections::BTreeMap;
+
+    /// A larger content never counts for less on the wire, also not across the threshold
+    /// for stripping it.
+    #[test]
+    fn wire_size_of_content_never_shrinks() {
+        let wire_size = |size: usize| {
+            let content = CanisterHttpResponseContent::Success(vec![0; size]);
+            content.count_bytes() - stripping_savings(&content)
+        };
+        for size in 0..2 * MIN_STRIPPED_CONTENT_BYTES {
+            assert!(wire_size(size) <= wire_size(size + 1), "size {size}");
+        }
+        // Stripping still saves bytes on contents above the threshold.
+        assert_eq!(
+            wire_size(MIN_STRIPPED_CONTENT_BYTES),
+            MIN_STRIPPED_CONTENT_BYTES - 1
+        );
+        assert_eq!(
+            wire_size(10 * MIN_STRIPPED_CONTENT_BYTES),
+            MIN_STRIPPED_CONTENT_BYTES - 1
+        );
+    }
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.

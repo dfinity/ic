@@ -2,7 +2,6 @@ use ic_base_types::NumBytes;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
-    validation::ValidationResult,
 };
 use ic_types::{
     Height,
@@ -28,7 +27,7 @@ mock! {
             proposal_context: &ProposalContext<'a>,
             payload: &[u8],
             past_payloads: &[PastPayload<'a>],
-        ) -> ValidationResult<PayloadValidationError>;
+        ) -> Result<NumBytes, PayloadValidationError>;
     }
 }
 
@@ -37,7 +36,7 @@ impl MockBatchPayloadBuilder {
     pub fn expect_noop(mut self) -> Self {
         self.expect_build_payload().return_const(vec![]);
         self.expect_validate_payload()
-            .returning(|_, _, _, _| Ok(()));
+            .returning(|_, _, payload, _| Ok(NumBytes::new(payload.len() as u64)));
 
         self
     }
@@ -57,7 +56,7 @@ impl MockBatchPayloadBuilder {
         );
         self.expect_build_payload().return_const(response);
         self.expect_validate_payload()
-            .returning(|_, _, _, _| Ok(()));
+            .returning(|_, _, payload, _| Ok(NumBytes::new(payload.len() as u64)));
 
         self
     }
@@ -78,7 +77,7 @@ impl MockBatchPayloadBuilder {
             )
             .return_const(response);
         self.expect_validate_payload()
-            .returning(|_, _, _, _| Ok(()));
+            .returning(|_, _, payload, _| Ok(NumBytes::new(payload.len() as u64)));
 
         self
     }

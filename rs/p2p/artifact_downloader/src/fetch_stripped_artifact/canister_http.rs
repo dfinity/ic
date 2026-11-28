@@ -40,8 +40,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     CountBytes, NumBytes,
     batch::{
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages,
-        slice_to_messages_iter,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, MIN_STRIPPED_CONTENT_BYTES, iterator_to_bytes,
+        slice_to_messages, slice_to_messages_iter,
     },
     canister_http::{CanisterHttpReject, CanisterHttpResponse},
     crypto::{CryptoHash, CryptoHashOf},
@@ -118,9 +118,6 @@ pub(crate) fn strip_responses(
 
     Some((encode(messages), stripped))
 }
-
-/// The smallest response content that is worth stripping.
-pub const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
 
 /// Whether a slot holds a response whose content is worth stripping.
 fn is_worth_stripping(response: &Option<pb::CanisterHttpResponse>) -> bool {
@@ -445,7 +442,8 @@ mod tests {
     }
 
     /// The threshold applies to the very quantity that a response's metadata reports
-    /// as its `content_size`.
+    /// as its `content_size`, and that the payload builder estimates the savings of
+    /// stripping with (see [`ic_types::batch::stripping_savings`]).
     #[test]
     fn content_size_is_the_metadata_content_size_test() {
         for response in [

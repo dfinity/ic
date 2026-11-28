@@ -10464,6 +10464,7 @@ dependencies = [
  "hex",
  "ic-artifact-pool",
  "ic-config",
+ "ic-consensus-features",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-sha2",

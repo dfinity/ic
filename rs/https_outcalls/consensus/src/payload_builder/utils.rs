@@ -1,3 +1,4 @@
+use ic_consensus_features::HASHES_IN_BLOCKS_ENABLED;
 use ic_crypto_sha2::Sha256;
 use ic_https_outcalls_pricing::fees::{
     flexible_initial_spent, min_flexible_consensus_cost, min_non_flexible_consensus_cost,
@@ -10,11 +11,13 @@ use ic_types::{
     batch::{
         CanisterHttpOutOfCycles, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_FLEXIBLE_CANISTER_HTTP_RESPONSES_SIZE,
+        stripping_savings,
     },
     canister_http::{
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseMetadata,
-        CanisterHttpResponseProof, CanisterHttpResponseReceipt, CanisterHttpResponseShare,
-        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus, PricingVersion,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
+        CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus, PricingVersion,
     },
     crypto::{Signed, crypto_hash},
     messages::CallbackId,
@@ -23,7 +26,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::metrics::CanisterHttpPayloadBuilderMetrics;
+use crate::{metrics::CanisterHttpPayloadBuilderMetrics, payload_builder::parse::PayloadMessage};
 
 /// Checks whether the response is consistent
 ///
@@ -668,6 +671,12 @@ impl NonFlexibleCandidate<'_> {
         proof.count_bytes() + content.count_bytes() + size_of_val(initial_spent)
     }
 
+    /// The [`PayloadSize`] of the response returned by [`Self::into_response`], without
+    /// cloning its content.
+    pub(crate) fn payload_size(&self) -> PayloadSize {
+        PayloadSize::response(self.count_bytes(), wire_savings([&self.content.content]))
+    }
+
     /// Clones the borrowed content into an owned [`CanisterHttpResponseWithConsensus`].
     pub(crate) fn into_response(self) -> CanisterHttpResponseWithConsensus {
         let size = self.count_bytes();
@@ -708,24 +717,164 @@ fn assemble_non_flexible_response<'a>(
     })
 }
 
+/// The estimated size of a part of the payload, in memory and in a block proposal
+/// sent to peers, from which response contents are stripped, and how many responses
+/// it counts as towards the limit on responses per block.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PayloadSize {
+    memory: usize,
+    wire: usize,
+    responses: usize,
+}
+
+impl PayloadSize {
+    /// The size of a response of `memory` bytes, on which stripping saves `savings`.
+    pub(crate) fn response(memory: usize, savings: usize) -> Self {
+        Self {
+            memory,
+            wire: memory.saturating_sub(savings),
+            responses: 1,
+        }
+    }
+
+    /// The size of a part that is sent as it is and does not count as a response.
+    fn not_a_response(memory: usize) -> Self {
+        Self {
+            memory,
+            wire: memory,
+            responses: 0,
+        }
+    }
+
+    /// The size of the message, both as the payload builder takes it up and as
+    /// validators count it towards the block's limits. Timeouts are cheap to validate
+    /// and an asynchronous receipt's response already counted, so neither counts as a
+    /// response.
+    pub(crate) fn of(message: &PayloadMessage) -> Self {
+        match message {
+            PayloadMessage::Response(response) => Self::response(
+                response.count_bytes(),
+                wire_savings([&response.content.content]),
+            ),
+            PayloadMessage::FlexibleResponses(group) => Self::response(
+                group.count_bytes(),
+                wire_savings(group.responses.iter().map(|entry| &entry.response.content)),
+            ),
+            PayloadMessage::FlexibleError(
+                error @ FlexibleCanisterHttpError::TooManyRejects {
+                    reject_responses, ..
+                },
+            ) => Self::response(
+                error.count_bytes(),
+                wire_savings(reject_responses.iter().map(|entry| &entry.response.content)),
+            ),
+            PayloadMessage::FlexibleError(
+                error @ (FlexibleCanisterHttpError::ResponsesTooLarge { .. }
+                | FlexibleCanisterHttpError::OutOfCycles { .. }),
+            ) => Self::response(error.count_bytes(), 0),
+            PayloadMessage::FlexibleError(error @ FlexibleCanisterHttpError::Timeout { .. }) => {
+                Self::not_a_response(error.count_bytes())
+            }
+            PayloadMessage::Timeout(callback_id) => Self::not_a_response(callback_id.count_bytes()),
+            PayloadMessage::Divergence(divergence) => Self::response(divergence.count_bytes(), 0),
+            PayloadMessage::OutOfCycles(error) => Self::response(error.count_bytes(), 0),
+            PayloadMessage::AsyncReceipt(share) => Self::not_a_response(share.count_bytes()),
+        }
+    }
+
+    /// The size in a block proposal sent to peers.
+    pub(crate) fn wire(&self) -> usize {
+        self.wire
+    }
+
+    /// How many responses the part counts as.
+    pub(crate) fn responses(&self) -> usize {
+        self.responses
+    }
+}
+
+/// The bytes that stripping saves on responses with the given contents, if block
+/// proposals are stripped at all.
+fn wire_savings<'a>(contents: impl IntoIterator<Item = &'a CanisterHttpResponseContent>) -> usize {
+    if HASHES_IN_BLOCKS_ENABLED {
+        contents.into_iter().map(stripping_savings).sum()
+    } else {
+        0
+    }
+}
+
+/// The messages of a payload, its limits in memory, on the wire and on its responses,
+/// and how much of them its parts take up so far.
+pub(crate) struct PayloadBudget {
+    messages: Vec<PayloadMessage>,
+    taken: PayloadSize,
+    limits: PayloadSize,
+}
+
+impl PayloadBudget {
+    pub(crate) fn new(memory_limit: NumBytes, wire_limit: NumBytes, max_responses: usize) -> Self {
+        Self {
+            messages: vec![],
+            taken: PayloadSize::default(),
+            limits: PayloadSize {
+                memory: memory_limit.get() as usize,
+                wire: wire_limit.get() as usize,
+                responses: max_responses,
+            },
+        }
+    }
+
+    /// Whether no further response fits into the payload.
+    pub(crate) fn responses_full(&self) -> bool {
+        self.taken.responses >= self.limits.responses
+    }
+
+    /// Whether a part of the given size still fits into the payload. The limit on
+    /// responses is inclusive, unlike the ones on bytes.
+    pub(crate) fn fits(&self, size: PayloadSize) -> bool {
+        self.taken.memory + size.memory < self.limits.memory
+            && self.taken.wire + size.wire < self.limits.wire
+            && self.taken.responses + size.responses <= self.limits.responses
+    }
+
+    /// Adds the message to the payload if it still fits, and returns whether it did.
+    pub(crate) fn try_push(&mut self, message: PayloadMessage) -> bool {
+        let size = PayloadSize::of(&message);
+        let fits = self.fits(size);
+        if fits {
+            self.taken.memory += size.memory;
+            self.taken.wire += size.wire;
+            self.taken.responses += size.responses;
+            self.messages.push(message);
+        }
+        fits
+    }
+
+    /// The messages added, in the order they were added.
+    pub(crate) fn into_messages(self) -> Vec<PayloadMessage> {
+        self.messages
+    }
+}
+
 /// Result of scanning flexible HTTP outcall shares for a single callback.
 pub(crate) enum FlexibleFindResult {
     /// Collected enough OK responses for consensus.
-    OkResponses(FlexibleCanisterHttpResponses, usize),
+    OkResponses(FlexibleCanisterHttpResponses),
     /// Detected an error condition (too many rejects, responses too large, or out
     /// of cycles).
-    Error(FlexibleCanisterHttpError, usize),
+    Error(FlexibleCanisterHttpError),
     /// Not enough data to decide yet; more shares may arrive.
     Pending,
 }
 
 /// A committee member's contribution to a flexible HTTP outcall: the response it
-/// produced, its signed receipt, and the number of payload bytes that delivering
-/// that response takes.
+/// produced, its signed receipt, the number of payload bytes that delivering that
+/// response takes, and how many of them stripping saves.
 struct FlexibleCandidate<'a> {
     response: &'a CanisterHttpResponse,
     share: &'a CanisterHttpResponseShare,
     size: usize,
+    savings: usize,
 }
 
 /// Scans grouped shares for a flexible HTTP outcall and determines the result.
@@ -756,8 +905,7 @@ pub(crate) fn find_flexible_result(
     committee: &BTreeSet<NodeId>,
     min_responses: u32,
     max_responses: u32,
-    accumulated_size: usize,
-    max_payload_size: NumBytes,
+    budget: &PayloadBudget,
     context: &CanisterHttpRequestContext,
     pool_access: &dyn CanisterHttpPool,
 ) -> FlexibleFindResult {
@@ -780,6 +928,7 @@ pub(crate) fn find_flexible_result(
             all_shares.push(share);
             let candidate = FlexibleCandidate {
                 size: FlexibleCanisterHttpResponseWithProof::count_bytes(response, share),
+                savings: wire_savings([&response.content]),
                 response,
                 share,
             };
@@ -815,8 +964,7 @@ pub(crate) fn find_flexible_result(
             /* min_to_select = */ min_responses,
             /* max_to_select = */ max_responses as usize,
             /* min_responses = */ min_responses as u32,
-            accumulated_size,
-            max_payload_size,
+            budget,
             context,
         ) {
             let group = FlexibleCanisterHttpResponses {
@@ -825,8 +973,7 @@ pub(crate) fn find_flexible_result(
                 extra_shares: selection.extra_shares.into_iter().cloned().collect(),
                 initial_spent: selection.initial_spent,
             };
-            let group_size = group.count_bytes();
-            return FlexibleFindResult::OkResponses(group, group_size);
+            return FlexibleFindResult::OkResponses(group);
         }
     }
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
@@ -841,8 +988,7 @@ pub(crate) fn find_flexible_result(
             /* min_to_select = */ min_rejects,
             /* max_to_select = */ reject_candidates.len(),
             /* min_responses = */ min_responses as u32,
-            accumulated_size,
-            max_payload_size,
+            budget,
             context,
         ) {
             let error = FlexibleCanisterHttpError::TooManyRejects {
@@ -851,8 +997,7 @@ pub(crate) fn find_flexible_result(
                 extra_shares: selection.extra_shares.into_iter().cloned().collect(),
                 initial_spent: selection.initial_spent,
             };
-            let error_size = error.count_bytes();
-            return FlexibleFindResult::Error(error, error_size);
+            return FlexibleFindResult::Error(error);
         }
     }
 
@@ -879,8 +1024,7 @@ pub(crate) fn find_flexible_result(
                 total_requests: committee.len() as u32,
                 min_responses: min_responses as u32,
             };
-            let error_size = error.count_bytes();
-            return FlexibleFindResult::Error(error, error_size);
+            return FlexibleFindResult::Error(error);
         }
     }
 
@@ -898,8 +1042,7 @@ pub(crate) fn find_flexible_result(
             min_cost: proof.min_cost,
             unspent_allowance: proof.unspent_allowance,
         };
-        let error_size = error.count_bytes();
-        return FlexibleFindResult::Error(error, error_size);
+        return FlexibleFindResult::Error(error);
     }
 
     // 5. Not enough data yet
@@ -947,8 +1090,7 @@ fn select_flexible_responses<'a>(
     min_to_select: usize,
     max_to_select: usize,
     min_responses: u32,
-    accumulated_size: usize,
-    max_payload_size: NumBytes,
+    budget: &PayloadBudget,
     context: &CanisterHttpRequestContext,
 ) -> Option<FlexibleSelection<'a>> {
     let max_to_select = max_to_select.min(candidates.len());
@@ -992,8 +1134,9 @@ fn select_flexible_responses<'a>(
                 .iter()
                 .map(|share| share.count_bytes())
                 .sum::<usize>();
+        let savings = selected.iter().map(|candidate| candidate.savings).sum();
         // Return the selection if it also fits into the block.
-        if NumBytes::new((accumulated_size + size) as u64) < max_payload_size {
+        if budget.fits(PayloadSize::response(size, savings)) {
             return Some(FlexibleSelection {
                 count: selected.len(),
                 extra_shares,

@@ -1,4 +1,4 @@
-use crate::{consensus::PayloadValidationError, validation::ValidationResult};
+use crate::consensus::PayloadValidationError;
 use ic_base_types::NumBytes;
 use ic_types::{
     Height, NodeId, Time, batch::ValidationContext, consensus::BlockPayload, crypto::CryptoHashOf,
@@ -53,7 +53,8 @@ pub trait BatchPayloadBuilder: Send + Sync {
     /// Builds a payload and returns it in serialized form.
     ///
     /// # Arguments
-    /// - `max_size`: The maximum size the payload is supposed to have
+    /// - `max_size`: The maximum size the payload is supposed to have on the wire, as
+    ///   [`Self::validate_payload`] returns it
     /// - `past_payloads`: A collection of past payloads. Allows the payload builder
     ///   to deduplicate messages.
     /// - `context`: [`ValidationContext`] under which the payload is supposed to be validated
@@ -79,7 +80,9 @@ pub trait BatchPayloadBuilder: Send + Sync {
     ///
     /// # Returns
     ///
-    /// - `Ok(())` on success
+    /// - On success, the size of the payload on the wire, i.e. in a block proposal sent to
+    ///   peers, which is what counts against the block's payload size limit. It may be an
+    ///   estimate, as long as every node computes the same one.
     /// - A [`BatchPayloadValidationError`] describing the problem otherwise
     fn validate_payload(
         &self,
@@ -87,7 +90,7 @@ pub trait BatchPayloadBuilder: Send + Sync {
         proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-    ) -> ValidationResult<PayloadValidationError>;
+    ) -> Result<NumBytes, PayloadValidationError>;
 }
 
 /// Indicates that a payload can be transformed into a set of messages, which
@@ -98,6 +101,6 @@ pub trait IntoMessages<M> {
     /// # Guarantees
     ///
     /// This function must be infallible if the corresponding [`BatchPayloadBuilder::validate_payload`]
-    /// returns `Ok(())` on the same payload.
+    /// returns `Ok` on the same payload.
     fn into_messages(payload: &[u8]) -> M;
 }
